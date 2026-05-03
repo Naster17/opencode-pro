@@ -108,6 +108,7 @@ const STREAM_RATE_RISE_SMOOTHING = 0.35
 const STREAM_RATE_FALL_SMOOTHING = 0.08
 const STREAM_RATE_MAX_RISE = 6
 const STREAM_RATE_MAX_FALL = 1.2
+const PROMPT_RATE_SMOOTHING = 0.2
 
 const context = createContext<{
   width: number
@@ -1373,7 +1374,13 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const [streamSamples, setStreamSamples] = createSignal<{ time: number; chars: number }[]>([])
   const [smoothedLiveTokensPerSecond, setSmoothedLiveTokensPerSecond] = createSignal(0)
   const [latestLiveTokensPerSecond, setLatestLiveTokensPerSecond] = createSignal(0)
+  const [smoothedPromptTokensPerSecond, setSmoothedPromptTokensPerSecond] = createSignal(0)
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
+  const contextMessages = createMemo(() => {
+    const index = messages().findIndex((message) => message.id === props.message.parentID)
+    if (index < 0) return []
+    return messages().slice(0, index + 1)
+  })
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
 
   const final = createMemo(() => {
@@ -1405,6 +1412,13 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       .reduce((total, part) => total + Token.estimate(part.text), 0),
   )
 
+  const estimatedPromptTokens = createMemo(() =>
+    contextMessages()
+      .flatMap((message) => sync.data.part[message.id] ?? [])
+      .map((part) => estimatePromptPartTokens(part))
+      .reduce((total, value) => total + value, 0),
+  )
+
   event.on("message.part.delta", (evt) => {
     if (evt.properties.messageID !== props.message.id) return
     if (evt.properties.field !== "text") return
@@ -1422,6 +1436,20 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     const end = final() ? props.message.time.completed : now()
     if (!end) return 0
     return Math.max(0, end - firstTokenAt()!)
+  })
+
+  const promptProcessingDuration = createMemo(() => {
+    if (!startedAt()) return 0
+    const end = firstTokenAt() ?? now()
+    return Math.max(0, end - startedAt()!)
+  })
+
+  const promptTokensPerSecond = createMemo(() => {
+    if (final()) return 0
+    if (firstTokenAt()) return 0
+    if (estimatedPromptTokens() <= 0) return 0
+    const seconds = Math.max(promptProcessingDuration() / 1000, 0.1)
+    return estimatedPromptTokens() / seconds
   })
 
   const rateForWindow = (window: number) => {
@@ -1447,6 +1475,24 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   createEffect(() => {
     setLatestLiveTokensPerSecond(liveTokensPerSecond())
+  })
+
+  createEffect(() => {
+    if (firstTokenAt()) {
+      setSmoothedPromptTokensPerSecond(0)
+      return
+    }
+    const next = promptTokensPerSecond()
+    const prev = smoothedPromptTokensPerSecond()
+    if (next <= 0) {
+      setSmoothedPromptTokensPerSecond(0)
+      return
+    }
+    if (prev <= 0) {
+      setSmoothedPromptTokensPerSecond(next)
+      return
+    }
+    setSmoothedPromptTokensPerSecond(prev + (next - prev) * PROMPT_RATE_SMOOTHING)
   })
 
   createEffect(() => {
@@ -1498,8 +1544,15 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       ].filter(Boolean)
     }
 
+    if (!firstTokenAt()) {
+      return [
+        `↓ ${formatTokensPerSecond(smoothedPromptTokensPerSecond())}`,
+        duration() > 0 ? Locale.duration(duration()) : "",
+      ].filter(Boolean)
+    }
+
     return [
-      formatTokensPerSecond(smoothedLiveTokensPerSecond()),
+      `↑ ${formatTokensPerSecond(smoothedLiveTokensPerSecond())}`,
       duration() > 0 ? Locale.duration(duration()) : "",
     ].filter(Boolean)
   })
@@ -1578,6 +1631,24 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 function formatTokensPerSecond(value: number) {
   if (value >= 100) return `${value.toFixed(1)} t/s`
   return `${value.toFixed(2)} t/s`
+}
+
+function estimatePromptPartTokens(part: Part) {
+  if (part.type === "text") return part.synthetic ? 0 : Token.estimate(part.text)
+  if (part.type === "reasoning") return Token.estimate(part.text)
+  if (part.type === "file") return Token.estimate(part.filename ?? part.mime ?? "file")
+  if (part.type === "agent") return Token.estimate(part.name)
+  if (part.type === "subtask") {
+    return Token.estimate([part.prompt, part.description, part.command].filter(Boolean).join("\n"))
+  }
+  if (part.type === "tool") {
+    const input = part.state.input ? Token.estimate(JSON.stringify(part.state.input)) : 0
+    const content =
+      part.state.status === "completed" || part.state.status === "error" ? Token.estimate(JSON.stringify(part.state)) : 0
+    return input + content
+  }
+  if (part.type === "retry") return Token.estimate(JSON.stringify(part.error))
+  return 0
 }
 
 const PART_MAPPING = {
