@@ -6,6 +6,7 @@ import {
   createSignal,
   For,
   Match,
+  onCleanup,
   on,
   onMount,
   Show,
@@ -90,12 +91,14 @@ import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
+import { Token } from "@/util/token"
 
 addDefaultParsers(parsers.parsers)
 
 const GO_UPSELL_LAST_SEEN_AT = "go_upsell_last_seen_at"
 const GO_UPSELL_DONT_SHOW = "go_upsell_dont_show"
 const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
+const STREAM_RATE_WINDOW = 1500
 
 const context = createContext<{
   width: number
@@ -1355,6 +1358,10 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
+  const event = useEvent()
+  const [now, setNow] = createSignal(Date.now())
+  const [firstTokenAt, setFirstTokenAt] = createSignal<number>()
+  const [streamSamples, setStreamSamples] = createSignal<{ time: number; chars: number }[]>([])
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
 
@@ -1362,12 +1369,83 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
   })
 
-  const duration = createMemo(() => {
-    if (!final()) return 0
-    if (!props.message.time.completed) return 0
+  createEffect(() => {
+    if (final()) return
+    if (!props.last) return
+    const timer = setInterval(() => setNow(Date.now()), 200)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  const startedAt = createMemo(() => {
     const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
-    if (!user || !user.time) return 0
-    return props.message.time.completed - user.time.created
+    return user?.time?.created
+  })
+
+  const duration = createMemo(() => {
+    if (!startedAt()) return 0
+    const end = final() ? props.message.time.completed : now()
+    if (!end) return 0
+    return Math.max(0, end - startedAt()!)
+  })
+
+  const estimatedOutputTokens = createMemo(() =>
+    props.parts
+      .filter((part): part is TextPart => part.type === "text")
+      .reduce((total, part) => total + Token.estimate(part.text), 0),
+  )
+
+  event.on("message.part.delta", (evt) => {
+    if (evt.properties.messageID !== props.message.id) return
+    if (evt.properties.field !== "text") return
+    const time = Date.now()
+    setNow(time)
+    if (!firstTokenAt()) setFirstTokenAt(time)
+    setStreamSamples((samples) => [
+      ...samples.filter((sample) => time - sample.time <= STREAM_RATE_WINDOW),
+      { time, chars: evt.properties.delta.length },
+    ])
+  })
+
+  const generationDuration = createMemo(() => {
+    if (!firstTokenAt()) return 0
+    const end = final() ? props.message.time.completed : now()
+    if (!end) return 0
+    return Math.max(0, end - firstTokenAt()!)
+  })
+
+  const liveTokensPerSecond = createMemo(() => {
+    if (final()) return 0
+    const current = now()
+    const recent = streamSamples().filter((sample) => current - sample.time <= STREAM_RATE_WINDOW)
+    if (recent.length === 0) return 0
+    const chars = recent.reduce((total, sample) => total + sample.chars, 0)
+    const started = recent[0]?.time
+    if (!started) return 0
+    const seconds = Math.max((current - started) / 1000, 0.1)
+    return (chars / 4) / seconds
+  })
+
+  const finalTokensPerSecond = createMemo(() => {
+    if (!final()) return 0
+    if (generationDuration() <= 0) return 0
+    if (props.message.tokens.output <= 0) return 0
+    return props.message.tokens.output / (generationDuration() / 1000)
+  })
+
+  const metrics = createMemo(() => {
+    if (final()) {
+      return [
+        props.message.tokens.input > 0 ? `${Locale.number(props.message.tokens.input)} in` : "",
+        props.message.tokens.output > 0 ? `${Locale.number(props.message.tokens.output)} out` : "",
+        finalTokensPerSecond() > 0 ? formatTokensPerSecond(finalTokensPerSecond()) : "",
+        duration() > 0 ? Locale.duration(duration()) : "",
+      ].filter(Boolean)
+    }
+
+    return [
+      `${formatTokensPerSecond(liveTokensPerSecond())} est`,
+      duration() > 0 ? Locale.duration(duration()) : "",
+    ].filter(Boolean)
   })
 
   const keybind = useKeybind()
@@ -1427,8 +1505,8 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               </span>{" "}
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
               <span style={{ fg: theme.textMuted }}> · {model()}</span>
-              <Show when={duration()}>
-                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+              <Show when={metrics().length > 0}>
+                <span style={{ fg: theme.textMuted }}> · {metrics().join(" · ")}</span>
               </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
@@ -1439,6 +1517,11 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       </Switch>
     </>
   )
+}
+
+function formatTokensPerSecond(value: number) {
+  if (value >= 100) return `${Math.round(value)} t/s`
+  return `${value.toFixed(1)} t/s`
 }
 
 const PART_MAPPING = {
