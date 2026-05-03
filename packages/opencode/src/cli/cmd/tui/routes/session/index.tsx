@@ -98,7 +98,10 @@ addDefaultParsers(parsers.parsers)
 const GO_UPSELL_LAST_SEEN_AT = "go_upsell_last_seen_at"
 const GO_UPSELL_DONT_SHOW = "go_upsell_dont_show"
 const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
-const STREAM_RATE_WINDOW = 1500
+const STREAM_RATE_WINDOW = 3000
+const STREAM_RATE_SMOOTHING = 0.08
+const STREAM_RATE_UPDATE_INTERVAL = 500
+const STREAM_RATE_MAX_DELTA = 2
 
 const context = createContext<{
   width: number
@@ -1362,6 +1365,8 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const [now, setNow] = createSignal(Date.now())
   const [firstTokenAt, setFirstTokenAt] = createSignal<number>()
   const [streamSamples, setStreamSamples] = createSignal<{ time: number; chars: number }[]>([])
+  const [smoothedLiveTokensPerSecond, setSmoothedLiveTokensPerSecond] = createSignal(0)
+  const [latestLiveTokensPerSecond, setLatestLiveTokensPerSecond] = createSignal(0)
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
 
@@ -1372,7 +1377,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   createEffect(() => {
     if (final()) return
     if (!props.last) return
-    const timer = setInterval(() => setNow(Date.now()), 200)
+    const timer = setInterval(() => setNow(Date.now()), STREAM_RATE_UPDATE_INTERVAL)
     onCleanup(() => clearInterval(timer))
   })
 
@@ -1425,6 +1430,37 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return (chars / 4) / seconds
   })
 
+  createEffect(() => {
+    setLatestLiveTokensPerSecond(liveTokensPerSecond())
+  })
+
+  createEffect(() => {
+    if (final()) return
+    if (!props.last) return
+    const timer = setInterval(() => {
+      const next = latestLiveTokensPerSecond()
+      const prev = smoothedLiveTokensPerSecond()
+      if (next <= 0) {
+        setSmoothedLiveTokensPerSecond(0)
+        return
+      }
+      if (prev <= 0) {
+        setSmoothedLiveTokensPerSecond(next)
+        return
+      }
+      const smoothed = prev + (next - prev) * STREAM_RATE_SMOOTHING
+      const delta = smoothed - prev
+      const limited =
+        delta > STREAM_RATE_MAX_DELTA
+          ? prev + STREAM_RATE_MAX_DELTA
+          : delta < -STREAM_RATE_MAX_DELTA
+            ? prev - STREAM_RATE_MAX_DELTA
+            : smoothed
+      setSmoothedLiveTokensPerSecond(limited)
+    }, STREAM_RATE_UPDATE_INTERVAL)
+    onCleanup(() => clearInterval(timer))
+  })
+
   const finalTokensPerSecond = createMemo(() => {
     if (!final()) return 0
     if (generationDuration() <= 0) return 0
@@ -1443,7 +1479,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     }
 
     return [
-      `${formatTokensPerSecond(liveTokensPerSecond())} est`,
+      formatTokensPerSecond(smoothedLiveTokensPerSecond()),
       duration() > 0 ? Locale.duration(duration()) : "",
     ].filter(Boolean)
   })
@@ -1520,8 +1556,8 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 }
 
 function formatTokensPerSecond(value: number) {
-  if (value >= 100) return `${Math.round(value)} t/s`
-  return `${value.toFixed(1)} t/s`
+  if (value >= 100) return `${value.toFixed(1)} t/s`
+  return `${value.toFixed(2)} t/s`
 }
 
 const PART_MAPPING = {
