@@ -94,7 +94,9 @@ export const Flag = {
   OPENCODE_EXPERIMENTAL_HTTPAPI:
     truthy("OPENCODE_EXPERIMENTAL_HTTPAPI") ||
     (!falsy("OPENCODE_EXPERIMENTAL_HTTPAPI") && HTTPAPI_DEFAULT_ON_CHANNELS.has(InstallationChannel)),
-  OPENCODE_EXPERIMENTAL_WORKSPACES: OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_WORKSPACES"),
+  // Hard-disabled locally to prevent remote workspace sync from being enabled
+  // by any environment or experimental umbrella flag.
+  OPENCODE_EXPERIMENTAL_WORKSPACES: false,
   OPENCODE_EXPERIMENTAL_EVENT_SYSTEM: OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_EVENT_SYSTEM"),
 
   // Evaluated at access time (not module load) because tests, the CLI, and
