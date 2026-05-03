@@ -98,10 +98,16 @@ addDefaultParsers(parsers.parsers)
 const GO_UPSELL_LAST_SEEN_AT = "go_upsell_last_seen_at"
 const GO_UPSELL_DONT_SHOW = "go_upsell_dont_show"
 const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
-const STREAM_RATE_WINDOW = 3000
-const STREAM_RATE_SMOOTHING = 0.08
-const STREAM_RATE_UPDATE_INTERVAL = 500
-const STREAM_RATE_MAX_DELTA = 2
+const STREAM_RATE_WINDOW = 5000
+const STREAM_RATE_SHORT_WINDOW = 1200
+const STREAM_RATE_MEDIUM_WINDOW = 2500
+const STREAM_RATE_LONG_WINDOW = 5000
+const STREAM_RATE_UPDATE_INTERVAL = 250
+const STREAM_RATE_LOCK_THRESHOLD = 6
+const STREAM_RATE_RISE_SMOOTHING = 0.35
+const STREAM_RATE_FALL_SMOOTHING = 0.08
+const STREAM_RATE_MAX_RISE = 6
+const STREAM_RATE_MAX_FALL = 1.2
 
 const context = createContext<{
   width: number
@@ -1418,16 +1424,25 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return Math.max(0, end - firstTokenAt()!)
   })
 
-  const liveTokensPerSecond = createMemo(() => {
-    if (final()) return 0
+  const rateForWindow = (window: number) => {
     const current = now()
-    const recent = streamSamples().filter((sample) => current - sample.time <= STREAM_RATE_WINDOW)
+    const recent = streamSamples().filter((sample) => current - sample.time <= window)
     if (recent.length === 0) return 0
     const chars = recent.reduce((total, sample) => total + sample.chars, 0)
     const started = recent[0]?.time
     if (!started) return 0
     const seconds = Math.max((current - started) / 1000, 0.1)
     return (chars / 4) / seconds
+  }
+
+  const liveTokensPerSecond = createMemo(() => {
+    if (final()) return 0
+    const short = rateForWindow(STREAM_RATE_SHORT_WINDOW)
+    const medium = rateForWindow(STREAM_RATE_MEDIUM_WINDOW)
+    const long = rateForWindow(STREAM_RATE_LONG_WINDOW)
+    const weighted = short * 0.25 + medium * 0.35 + long * 0.4
+    const floor = Math.max(long, medium * 0.9)
+    return Math.max(weighted, floor)
   })
 
   createEffect(() => {
@@ -1448,13 +1463,18 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         setSmoothedLiveTokensPerSecond(next)
         return
       }
-      const smoothed = prev + (next - prev) * STREAM_RATE_SMOOTHING
+      if (Math.abs(next - prev) >= STREAM_RATE_LOCK_THRESHOLD) {
+        setSmoothedLiveTokensPerSecond(next)
+        return
+      }
+      const rising = next > prev
+      const smoothed = prev + (next - prev) * (rising ? STREAM_RATE_RISE_SMOOTHING : STREAM_RATE_FALL_SMOOTHING)
       const delta = smoothed - prev
       const limited =
-        delta > STREAM_RATE_MAX_DELTA
-          ? prev + STREAM_RATE_MAX_DELTA
-          : delta < -STREAM_RATE_MAX_DELTA
-            ? prev - STREAM_RATE_MAX_DELTA
+        delta > STREAM_RATE_MAX_RISE
+          ? prev + STREAM_RATE_MAX_RISE
+          : delta < -STREAM_RATE_MAX_FALL
+            ? prev - STREAM_RATE_MAX_FALL
             : smoothed
       setSmoothedLiveTokensPerSecond(limited)
     }, STREAM_RATE_UPDATE_INTERVAL)
