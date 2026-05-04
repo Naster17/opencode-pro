@@ -54,7 +54,12 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
         message: store,
       },
     )
-    process.on("SIGHUP", () => exit())
+    const handleSignal = () => {
+      void exit()
+    }
+    process.on("SIGHUP", handleSignal)
+    process.on("SIGINT", handleSignal)
+    process.on("SIGTERM", handleSignal)
     return exit
   },
 })
