@@ -1,0 +1,3657 @@
+diff --git a/README.ar.md b/README.ar.md
+deleted file mode 100644
+index beb44589e6202adfdd5bab45793e2266eabd32c5..0000000000000000000000000000000000000000
+--- a/README.ar.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="شعار OpenCode">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">وكيل برمجة بالذكاء الاصطناعي مفتوح المصدر.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### التثبيت
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# مديري الحزم
+-npm i -g opencode-ai@latest        # او bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS و Linux (موصى به، دائما محدث)
+-brew install opencode              # macOS و Linux (صيغة brew الرسمية، تحديث اقل)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # اي نظام
+-nix run nixpkgs#opencode           # او github:anomalyco/opencode لاحدث فرع dev
+-```
+-
+-> [!TIP]
+-> احذف الاصدارات الاقدم من 0.1.x قبل التثبيت.
+-
+-### تطبيق سطح المكتب (BETA)
+-
+-يتوفر OpenCode ايضا كتطبيق سطح مكتب. قم بالتنزيل مباشرة من [صفحة الاصدارات](https://github.com/anomalyco/opencode/releases) او من [opencode.ai/download](https://opencode.ai/download).
+-
+-| المنصة                | التنزيل                               |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb` او `.rpm` او AppImage          |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### مجلد التثبيت
+-
+-يحترم سكربت التثبيت ترتيب الاولوية التالي لمسار التثبيت:
+-
+-1. `$OPENCODE_INSTALL_DIR` - مجلد تثبيت مخصص
+-2. `$XDG_BIN_DIR` - مسار متوافق مع مواصفات XDG Base Directory
+-3. `$HOME/bin` - مجلد الثنائيات القياسي للمستخدم (ان وجد او امكن انشاؤه)
+-4. `$HOME/.opencode/bin` - المسار الافتراضي الاحتياطي
+-
+-```bash
+-# امثلة
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agents
+-
+-يتضمن OpenCode وكيليْن (Agents) مدمجين يمكنك التبديل بينهما باستخدام زر `Tab`.
+-
+-- **build** - الافتراضي، وكيل بصلاحيات كاملة لاعمال التطوير
+-- **plan** - وكيل للقراءة فقط للتحليل واستكشاف الكود
+-  - يرفض تعديل الملفات افتراضيا
+-  - يطلب الاذن قبل تشغيل اوامر bash
+-  - مثالي لاستكشاف قواعد كود غير مألوفة او لتخطيط التغييرات
+-
+-بالاضافة الى ذلك يوجد وكيل فرعي **general** للبحث المعقد والمهام متعددة الخطوات.
+-يستخدم داخليا ويمكن استدعاؤه بكتابة `@general` في الرسائل.
+-
+-تعرف على المزيد حول [agents](https://opencode.ai/docs/agents).
+-
+-### التوثيق
+-
+-لمزيد من المعلومات حول كيفية ضبط OpenCode، [**راجع التوثيق**](https://opencode.ai/docs).
+-
+-### المساهمة
+-
+-اذا كنت مهتما بالمساهمة في OpenCode، يرجى قراءة [contributing docs](./CONTRIBUTING.md) قبل ارسال pull request.
+-
+-### البناء فوق OpenCode
+-
+-اذا كنت تعمل على مشروع مرتبط بـ OpenCode ويستخدم "opencode" كجزء من اسمه (مثل "opencode-dashboard" او "opencode-mobile")، يرجى اضافة ملاحظة في README توضح انه ليس مبنيا بواسطة فريق OpenCode ولا يرتبط بنا بأي شكل.
+-
+-### FAQ
+-
+-#### ما الفرق عن Claude Code؟
+-
+-هو مشابه جدا لـ Claude Code من حيث القدرات. هذه هي الفروقات الاساسية:
+-
+-- 100% مفتوح المصدر
+-- غير مقترن بمزود معين. نوصي بالنماذج التي نوفرها عبر [OpenCode Zen](https://opencode.ai/zen)؛ لكن يمكن استخدام OpenCode مع Claude او OpenAI او Google او حتى نماذج محلية. مع تطور النماذج ستتقلص الفجوات وستنخفض الاسعار، لذا من المهم ان يكون مستقلا عن المزود.
+-- دعم LSP جاهز للاستخدام
+-- تركيز على TUI. تم بناء OpenCode بواسطة مستخدمي neovim ومنشئي [terminal.shop](https://terminal.shop)؛ وسندفع حدود ما هو ممكن داخل الطرفية.
+-- معمارية عميل/خادم. على سبيل المثال، يمكن تشغيل OpenCode على جهازك بينما تقوده عن بعد من تطبيق جوال. هذا يعني ان واجهة TUI هي واحدة فقط من العملاء الممكنين.
+-
+----
+-
+-**انضم الى مجتمعنا** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.bn.md b/README.bn.md
+deleted file mode 100644
+index c7abc7346a2f5a88523942914fa8baf115af0c62..0000000000000000000000000000000000000000
+--- a/README.bn.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">ওপেন সোর্স এআই কোডিং এজেন্ট।</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### ইনস্টলেশন (Installation)
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# Package managers
+-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
+-brew install opencode              # macOS and Linux (official brew formula, updated less)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # Any OS
+-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
+-```
+-
+-> [!TIP]
+-> ইনস্টল করার আগে ০.১.x এর চেয়ে পুরোনো ভার্সনগুলো মুছে ফেলুন।
+-
+-### ডেস্কটপ অ্যাপ (BETA)
+-
+-OpenCode ডেস্কটপ অ্যাপ্লিকেশন হিসেবেও উপলব্ধ। সরাসরি [রিলিজ পেজ](https://github.com/anomalyco/opencode/releases) অথবা [opencode.ai/download](https://opencode.ai/download) থেকে ডাউনলোড করুন।
+-
+-| প্ল্যাটফর্ম           | ডাউনলোড                               |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm`, or AppImage           |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### ইনস্টলেশন ডিরেক্টরি (Installation Directory)
+-
+-ইনস্টল স্ক্রিপ্টটি ইনস্টলেশন পাতের জন্য নিম্নলিখিত অগ্রাধিকার ক্রম মেনে চলে:
+-
+-1. `$OPENCODE_INSTALL_DIR` - কাস্টম ইনস্টলেশন ডিরেক্টরি
+-2. `$XDG_BIN_DIR` - XDG বেস ডিরেক্টরি স্পেসিফিকেশন সমর্থিত পাথ
+-3. `$HOME/bin` - সাধারণ ব্যবহারকারী বাইনারি ডিরেক্টরি (যদি বিদ্যমান থাকে বা তৈরি করা যায়)
+-4. `$HOME/.opencode/bin` - ডিফল্ট ফলব্যাক
+-
+-```bash
+-# উদাহরণ
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### এজেন্টস (Agents)
+-
+-OpenCode এ দুটি বিল্ট-ইন এজেন্ট রয়েছে যা আপনি `Tab` কি(key) দিয়ে পরিবর্তন করতে পারবেন।
+-
+-- **build** - ডিফল্ট, ডেভেলপমেন্টের কাজের জন্য সম্পূর্ণ অ্যাক্সেসযুক্ত এজেন্ট
+-- **plan** - বিশ্লেষণ এবং কোড এক্সপ্লোরেশনের জন্য রিড-ওনলি এজেন্ট
+-  - ডিফল্টভাবে ফাইল এডিট করতে দেয় না
+-  - ব্যাশ কমান্ড চালানোর আগে অনুমতি চায়
+-  - অপরিচিত কোডবেস এক্সপ্লোর করা বা পরিবর্তনের পরিকল্পনা করার জন্য আদর্শ
+-
+-এছাড়াও জটিল অনুসন্ধান এবং মাল্টিস্টেপ টাস্কের জন্য একটি **general** সাবএজেন্ট অন্তর্ভুক্ত রয়েছে।
+-এটি অভ্যন্তরীণভাবে ব্যবহৃত হয় এবং মেসেজে `@general` লিখে ব্যবহার করা যেতে পারে।
+-
+-এজেন্টদের সম্পর্কে আরও জানুন: [docs](https://opencode.ai/docs/agents)।
+-
+-### ডকুমেন্টেশন (Documentation)
+-
+-কিভাবে OpenCode কনফিগার করবেন সে সম্পর্কে আরও তথ্যের জন্য, [**আমাদের ডকস দেখুন**](https://opencode.ai/docs)।
+-
+-### অবদান (Contributing)
+-
+-আপনি যদি OpenCode এ অবদান রাখতে চান, অনুগ্রহ করে একটি পুল রিকোয়েস্ট সাবমিট করার আগে আমাদের [কন্ট্রিবিউটিং ডকস](./CONTRIBUTING.md) পড়ে নিন।
+-
+-### OpenCode এর উপর বিল্ডিং (Building on OpenCode)
+-
+-আপনি যদি এমন প্রজেক্টে কাজ করেন যা OpenCode এর সাথে সম্পর্কিত এবং প্রজেক্টের নামের অংশ হিসেবে "opencode" ব্যবহার করেন, উদাহরণস্বরূপ "opencode-dashboard" বা "opencode-mobile", তবে দয়া করে আপনার README তে একটি নোট যোগ করে স্পষ্ট করুন যে এই প্রজেক্টটি OpenCode দল দ্বারা তৈরি হয়নি এবং আমাদের সাথে এর কোনো সরাসরি সম্পর্ক নেই।
+-
+-### সচরাচর জিজ্ঞাসিত প্রশ্নাবলী (FAQ)
+-
+-#### এটি ক্লড কোড (Claude Code) থেকে কীভাবে আলাদা?
+-
+-ক্যাপাবিলিটির দিক থেকে এটি ক্লড কোডের (Claude Code) মতই। এখানে মূল পার্থক্যগুলো দেওয়া হলো:
+-
+-- ১০০% ওপেন সোর্স
+-- কোনো প্রোভাইডারের সাথে আবদ্ধ নয়। যদিও আমরা [OpenCode Zen](https://opencode.ai/zen) এর মাধ্যমে মডেলসমূহ ব্যবহারের পরামর্শ দিই, OpenCode ক্লড (Claude), ওপেনএআই (OpenAI), গুগল (Google), অথবা লোকাল মডেলগুলোর সাথেও ব্যবহার করা যেতে পারে। যেমন যেমন মডেলগুলো উন্নত হবে, তাদের মধ্যকার পার্থক্য কমে আসবে এবং দামও কমবে, তাই প্রোভাইডার-অজ্ঞাস্টিক হওয়া খুবই গুরুত্বপূর্ণ।
+-- আউট-অফ-দ্য-বক্স LSP সাপোর্ট
+-- TUI এর উপর ফোকাস। OpenCode নিওভিম (neovim) ব্যবহারকারী এবং [terminal.shop](https://terminal.shop) এর নির্মাতাদের দ্বারা তৈরি; আমরা টার্মিনালে কী কী সম্ভব তার সীমাবদ্ধতা ছাড়িয়ে যাওয়ার চেষ্টা করছি।
+-- ক্লায়েন্ট/সার্ভার আর্কিটেকচার। এটি যেমন OpenCode কে আপনার কম্পিউটারে চালানোর সুযোগ দেয়, তেমনি আপনি মোবাইল অ্যাপ থেকে রিমোটলি এটি নিয়ন্ত্রণ করতে পারবেন, অর্থাৎ TUI ফ্রন্টএন্ড কেবল সম্ভাব্য ক্লায়েন্টগুলোর মধ্যে একটি।
+-
+----
+-
+-**আমাদের কমিউনিটিতে যুক্ত হোন** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.br.md b/README.br.md
+deleted file mode 100644
+index 6d1de21562c108cf5c75758401d771034297f3ae..0000000000000000000000000000000000000000
+--- a/README.br.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="Logo do OpenCode">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">O agente de programação com IA de código aberto.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### Instalação
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# Gerenciadores de pacotes
+-npm i -g opencode-ai@latest        # ou bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS e Linux (recomendado, sempre atualizado)
+-brew install opencode              # macOS e Linux (fórmula oficial do brew, atualiza menos)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # qualquer sistema
+-nix run nixpkgs#opencode           # ou github:anomalyco/opencode para a branch dev mais recente
+-```
+-
+-> [!TIP]
+-> Remova versões anteriores a 0.1.x antes de instalar.
+-
+-### App desktop (BETA)
+-
+-O OpenCode também está disponível como aplicativo desktop. Baixe diretamente pela [página de releases](https://github.com/anomalyco/opencode/releases) ou em [opencode.ai/download](https://opencode.ai/download).
+-
+-| Plataforma            | Download                              |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm` ou AppImage            |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### Diretório de instalação
+-
+-O script de instalação respeita a seguinte ordem de prioridade para o caminho de instalação:
+-
+-1. `$OPENCODE_INSTALL_DIR` - Diretório de instalação personalizado
+-2. `$XDG_BIN_DIR` - Caminho compatível com a especificação XDG Base Directory
+-3. `$HOME/bin` - Diretório binário padrão do usuário (se existir ou puder ser criado)
+-4. `$HOME/.opencode/bin` - Fallback padrão
+-
+-```bash
+-# Exemplos
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agents
+-
+-O OpenCode inclui dois agents integrados, que você pode alternar com a tecla `Tab`.
+-
+-- **build** - Padrão, agent com acesso total para trabalho de desenvolvimento
+-- **plan** - Agent somente leitura para análise e exploração de código
+-  - Nega edições de arquivos por padrão
+-  - Pede permissão antes de executar comandos bash
+-  - Ideal para explorar codebases desconhecidas ou planejar mudanças
+-
+-Também há um subagent **general** para buscas complexas e tarefas em várias etapas.
+-Ele é usado internamente e pode ser invocado com `@general` nas mensagens.
+-
+-Saiba mais sobre [agents](https://opencode.ai/docs/agents).
+-
+-### Documentação
+-
+-Para mais informações sobre como configurar o OpenCode, [**veja nossa documentação**](https://opencode.ai/docs).
+-
+-### Contribuir
+-
+-Se você tem interesse em contribuir com o OpenCode, leia os [contributing docs](./CONTRIBUTING.md) antes de enviar um pull request.
+-
+-### Construindo com OpenCode
+-
+-Se você estiver trabalhando em um projeto relacionado ao OpenCode e estiver usando "opencode" como parte do nome (por exemplo, "opencode-dashboard" ou "opencode-mobile"), adicione uma nota no README para deixar claro que não foi construído pela equipe do OpenCode e não é afiliado a nós de nenhuma forma.
+-
+-### FAQ
+-
+-#### Como isso é diferente do Claude Code?
+-
+-É muito parecido com o Claude Code em termos de capacidade. Aqui estão as principais diferenças:
+-
+-- 100% open source
+-- Não está acoplado a nenhum provedor. Embora recomendemos os modelos que oferecemos pelo [OpenCode Zen](https://opencode.ai/zen); o OpenCode pode ser usado com Claude, OpenAI, Google ou até modelos locais. À medida que os modelos evoluem, as diferenças diminuem e os preços caem, então ser provider-agnostic é importante.
+-- Suporte a LSP pronto para uso
+-- Foco em TUI. O OpenCode é construído por usuários de neovim e pelos criadores do [terminal.shop](https://terminal.shop); vamos levar ao limite o que é possível no terminal.
+-- Arquitetura cliente/servidor. Isso, por exemplo, permite executar o OpenCode no seu computador enquanto você o controla remotamente por um aplicativo mobile. Isso significa que o frontend TUI é apenas um dos possíveis clientes.
+-
+----
+-
+-**Junte-se à nossa comunidade** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.bs.md b/README.bs.md
+deleted file mode 100644
+index 2cff8e0279c52babd78ddbe196882ecb1b38f005..0000000000000000000000000000000000000000
+--- a/README.bs.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">OpenCode je open source AI agent za programiranje.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### Instalacija
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# Package manageri
+-npm i -g opencode-ai@latest        # ili bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS i Linux (preporučeno, uvijek ažurno)
+-brew install opencode              # macOS i Linux (zvanična brew formula, rjeđe se ažurira)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # Bilo koji OS
+-nix run nixpkgs#opencode           # ili github:anomalyco/opencode za najnoviji dev branch
+-```
+-
+-> [!TIP]
+-> Ukloni verzije starije od 0.1.x prije instalacije.
+-
+-### Desktop aplikacija (BETA)
+-
+-OpenCode je dostupan i kao desktop aplikacija. Preuzmi je direktno sa [stranice izdanja](https://github.com/anomalyco/opencode/releases) ili sa [opencode.ai/download](https://opencode.ai/download).
+-
+-| Platforma             | Preuzimanje                           |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm`, ili AppImage          |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### Instalacijski direktorij
+-
+-Instalacijska skripta koristi sljedeći redoslijed prioriteta za putanju instalacije:
+-
+-1. `$OPENCODE_INSTALL_DIR` - Prilagođeni instalacijski direktorij
+-2. `$XDG_BIN_DIR` - Putanja usklađena sa XDG Base Directory specifikacijom
+-3. `$HOME/bin` - Standardni korisnički bin direktorij (ako postoji ili se može kreirati)
+-4. `$HOME/.opencode/bin` - Podrazumijevana rezervna lokacija
+-
+-```bash
+-# Primjeri
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agenti
+-
+-OpenCode uključuje dva ugrađena agenta između kojih možeš prebacivati tasterom `Tab`.
+-
+-- **build** - Podrazumijevani agent sa punim pristupom za razvoj
+-- **plan** - Agent samo za čitanje za analizu i istraživanje koda
+-  - Podrazumijevano zabranjuje izmjene datoteka
+-  - Traži dozvolu prije pokretanja bash komandi
+-  - Idealan za istraživanje nepoznatih codebase-ova ili planiranje izmjena
+-
+-Uključen je i **general** pod-agent za složene pretrage i višekoračne zadatke.
+-Koristi se interno i može se pozvati pomoću `@general` u porukama.
+-
+-Saznaj više o [agentima](https://opencode.ai/docs/agents).
+-
+-### Dokumentacija
+-
+-Za više informacija o konfiguraciji OpenCode-a, [**pogledaj dokumentaciju**](https://opencode.ai/docs).
+-
+-### Doprinosi
+-
+-Ako želiš doprinositi OpenCode-u, pročitaj [upute za doprinošenje](./CONTRIBUTING.md) prije slanja pull requesta.
+-
+-### Gradnja na OpenCode-u
+-
+-Ako radiš na projektu koji je povezan s OpenCode-om i koristi "opencode" kao dio naziva, npr. "opencode-dashboard" ili "opencode-mobile", dodaj napomenu u svoj README da projekat nije napravio OpenCode tim i da nije povezan s nama.
+-
+-### FAQ
+-
+-#### Po čemu se razlikuje od Claude Code-a?
+-
+-Po mogućnostima je vrlo sličan Claude Code-u. Ključne razlike su:
+-
+-- 100% open source
+-- Nije vezan za jednog provajdera. Iako preporučujemo modele koje nudimo kroz [OpenCode Zen](https://opencode.ai/zen), OpenCode možeš koristiti s Claude, OpenAI, Google ili čak lokalnim modelima. Kako modeli napreduju, razlike među njima će se smanjivati, a cijene padati, zato je nezavisnost od provajdera važna.
+-- LSP podrška odmah po instalaciji
+-- Fokus na TUI. OpenCode grade neovim korisnici i kreatori [terminal.shop](https://terminal.shop); pomjeraćemo granice onoga što je moguće u terminalu.
+-- Klijent/server arhitektura. To, recimo, omogućava da OpenCode radi na tvom računaru dok ga daljinski koristiš iz mobilne aplikacije, što znači da je TUI frontend samo jedan od mogućih klijenata.
+-
+----
+-
+-**Pridruži se našoj zajednici** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.da.md b/README.da.md
+deleted file mode 100644
+index ac522f29c49e58c28fbd602c79aef71bebb44535..0000000000000000000000000000000000000000
+--- a/README.da.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">Den open source AI-kodeagent.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### Installation
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# Pakkehåndteringer
+-npm i -g opencode-ai@latest        # eller bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS og Linux (anbefalet, altid up to date)
+-brew install opencode              # macOS og Linux (officiel brew formula, opdateres sjældnere)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # alle OS
+-nix run nixpkgs#opencode           # eller github:anomalyco/opencode for nyeste dev-branch
+-```
+-
+-> [!TIP]
+-> Fjern versioner ældre end 0.1.x før installation.
+-
+-### Desktop-app (BETA)
+-
+-OpenCode findes også som desktop-app. Download direkte fra [releases-siden](https://github.com/anomalyco/opencode/releases) eller [opencode.ai/download](https://opencode.ai/download).
+-
+-| Platform              | Download                              |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm`, eller AppImage        |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### Installationsmappe
+-
+-Installationsscriptet bruger følgende prioriteringsrækkefølge for installationsstien:
+-
+-1. `$OPENCODE_INSTALL_DIR` - Tilpasset installationsmappe
+-2. `$XDG_BIN_DIR` - Sti der følger XDG Base Directory Specification
+-3. `$HOME/bin` - Standard bruger-bin-mappe (hvis den findes eller kan oprettes)
+-4. `$HOME/.opencode/bin` - Standard fallback
+-
+-```bash
+-# Eksempler
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agents
+-
+-OpenCode har to indbyggede agents, som du kan skifte mellem med `Tab`-tasten.
+-
+-- **build** - Standard, agent med fuld adgang til udviklingsarbejde
+-- **plan** - Skrivebeskyttet agent til analyse og kodeudforskning
+-  - Afviser filredigering som standard
+-  - Spørger om tilladelse før bash-kommandoer
+-  - Ideel til at udforske ukendte kodebaser eller planlægge ændringer
+-
+-Derudover findes der en **general**-subagent til komplekse søgninger og flertrinsopgaver.
+-Den bruges internt og kan kaldes via `@general` i beskeder.
+-
+-Læs mere om [agents](https://opencode.ai/docs/agents).
+-
+-### Dokumentation
+-
+-For mere info om konfiguration af OpenCode, [**se vores docs**](https://opencode.ai/docs).
+-
+-### Bidrag
+-
+-Hvis du vil bidrage til OpenCode, så læs vores [contributing docs](./CONTRIBUTING.md) før du sender en pull request.
+-
+-### Bygget på OpenCode
+-
+-Hvis du arbejder på et projekt der er relateret til OpenCode og bruger "opencode" som en del af navnet; f.eks. "opencode-dashboard" eller "opencode-mobile", så tilføj en note i din README, der tydeliggør at projektet ikke er bygget af OpenCode-teamet og ikke er tilknyttet os på nogen måde.
+-
+-### FAQ
+-
+-#### Hvordan adskiller dette sig fra Claude Code?
+-
+-Det minder meget om Claude Code i forhold til funktionalitet. Her er de vigtigste forskelle:
+-
+-- 100% open source
+-- Ikke låst til en udbyder. Selvom vi anbefaler modellerne via [OpenCode Zen](https://opencode.ai/zen); kan OpenCode bruges med Claude, OpenAI, Google eller endda lokale modeller. Efterhånden som modeller udvikler sig vil forskellene mindskes og priserne falde, så det er vigtigt at være provider-agnostic.
+-- LSP-support out of the box
+-- Fokus på TUI. OpenCode er bygget af neovim-brugere og skaberne af [terminal.shop](https://terminal.shop); vi vil skubbe grænserne for hvad der er muligt i terminalen.
+-- Klient/server-arkitektur. Det kan f.eks. lade OpenCode køre på din computer, mens du styrer den eksternt fra en mobilapp. Det betyder at TUI-frontend'en kun er en af de mulige clients.
+-
+----
+-
+-**Bliv en del af vores community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.de.md b/README.de.md
+deleted file mode 100644
+index 87a670f3fce78ef987b0b5ceb772fa5faad87f15..0000000000000000000000000000000000000000
+--- a/README.de.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">Der Open-Source KI-Coding-Agent.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### Installation
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# Paketmanager
+-npm i -g opencode-ai@latest        # oder bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS und Linux (empfohlen, immer aktuell)
+-brew install opencode              # macOS und Linux (offizielle Brew-Formula, seltener aktualisiert)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # jedes Betriebssystem
+-nix run nixpkgs#opencode           # oder github:anomalyco/opencode für den neuesten dev-Branch
+-```
+-
+-> [!TIP]
+-> Entferne Versionen älter als 0.1.x vor der Installation.
+-
+-### Desktop-App (BETA)
+-
+-OpenCode ist auch als Desktop-Anwendung verfügbar. Lade sie direkt von der [Releases-Seite](https://github.com/anomalyco/opencode/releases) oder [opencode.ai/download](https://opencode.ai/download) herunter.
+-
+-| Plattform             | Download                              |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm` oder AppImage          |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### Installationsverzeichnis
+-
+-Das Installationsskript beachtet die folgende Prioritätsreihenfolge für den Installationspfad:
+-
+-1. `$OPENCODE_INSTALL_DIR` - Benutzerdefiniertes Installationsverzeichnis
+-2. `$XDG_BIN_DIR` - XDG Base Directory Specification-konformer Pfad
+-3. `$HOME/bin` - Standard-Binärverzeichnis des Users (falls vorhanden oder erstellbar)
+-4. `$HOME/.opencode/bin` - Standard-Fallback
+-
+-```bash
+-# Beispiele
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agents
+-
+-OpenCode enthält zwei eingebaute Agents, zwischen denen du mit der `Tab`-Taste wechseln kannst.
+-
+-- **build** - Standard-Agent mit vollem Zugriff für Entwicklungsarbeit
+-- **plan** - Nur-Lese-Agent für Analyse und Code-Exploration
+-  - Verweigert Datei-Edits standardmäßig
+-  - Fragt vor dem Ausführen von bash-Befehlen nach
+-  - Ideal zum Erkunden unbekannter Codebases oder zum Planen von Änderungen
+-
+-Außerdem ist ein **general**-Subagent für komplexe Suchen und mehrstufige Aufgaben enthalten.
+-Dieser wird intern genutzt und kann in Nachrichten mit `@general` aufgerufen werden.
+-
+-Mehr dazu unter [Agents](https://opencode.ai/docs/agents).
+-
+-### Dokumentation
+-
+-Mehr Infos zur Konfiguration von OpenCode findest du in unseren [**Docs**](https://opencode.ai/docs).
+-
+-### Beitragen
+-
+-Wenn du zu OpenCode beitragen möchtest, lies bitte unsere [Contributing Docs](./CONTRIBUTING.md), bevor du einen Pull Request einreichst.
+-
+-### Auf OpenCode aufbauen
+-
+-Wenn du an einem Projekt arbeitest, das mit OpenCode zusammenhängt und "opencode" als Teil seines Namens verwendet (z.B. "opencode-dashboard" oder "opencode-mobile"), füge bitte einen Hinweis in deine README ein, dass es nicht vom OpenCode-Team gebaut wird und nicht in irgendeiner Weise mit uns verbunden ist.
+-
+-### FAQ
+-
+-#### Worin unterscheidet sich das von Claude Code?
+-
+-In Bezug auf die Fähigkeiten ist es Claude Code sehr ähnlich. Hier sind die wichtigsten Unterschiede:
+-
+-- 100% open source
+-- Nicht an einen Anbieter gekoppelt. Wir empfehlen die Modelle aus [OpenCode Zen](https://opencode.ai/zen); OpenCode kann aber auch mit Claude, OpenAI, Google oder sogar lokalen Modellen genutzt werden. Mit der Weiterentwicklung der Modelle werden die Unterschiede kleiner und die Preise sinken, deshalb ist Provider-Unabhängigkeit wichtig.
+-- LSP-Unterstützung direkt nach dem Start
+-- Fokus auf TUI. OpenCode wird von Neovim-Nutzern und den Machern von [terminal.shop](https://terminal.shop) gebaut; wir treiben die Grenzen dessen, was im Terminal möglich ist.
+-- Client/Server-Architektur. Das ermöglicht z.B., OpenCode auf deinem Computer laufen zu lassen, während du es von einer mobilen App aus fernsteuerst. Das TUI-Frontend ist nur einer der möglichen Clients.
+-
+----
+-
+-**Tritt unserer Community bei** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.es.md b/README.es.md
+deleted file mode 100644
+index 9e456af1c0b9f084f7c4d4838c7313e94de02dc5..0000000000000000000000000000000000000000
+--- a/README.es.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">El agente de programación con IA de código abierto.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### Instalación
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# Gestores de paquetes
+-npm i -g opencode-ai@latest        # o bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS y Linux (recomendado, siempre al día)
+-brew install opencode              # macOS y Linux (fórmula oficial de brew, se actualiza menos)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # cualquier sistema
+-nix run nixpkgs#opencode           # o github:anomalyco/opencode para la rama dev más reciente
+-```
+-
+-> [!TIP]
+-> Elimina versiones anteriores a 0.1.x antes de instalar.
+-
+-### App de escritorio (BETA)
+-
+-OpenCode también está disponible como aplicación de escritorio. Descárgala directamente desde la [página de releases](https://github.com/anomalyco/opencode/releases) o desde [opencode.ai/download](https://opencode.ai/download).
+-
+-| Plataforma            | Descarga                              |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm`, o AppImage            |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### Directorio de instalación
+-
+-El script de instalación respeta el siguiente orden de prioridad para la ruta de instalación:
+-
+-1. `$OPENCODE_INSTALL_DIR` - Directorio de instalación personalizado
+-2. `$XDG_BIN_DIR` - Ruta compatible con la especificación XDG Base Directory
+-3. `$HOME/bin` - Directorio binario estándar del usuario (si existe o se puede crear)
+-4. `$HOME/.opencode/bin` - Alternativa por defecto
+-
+-```bash
+-# Ejemplos
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agents
+-
+-OpenCode incluye dos agents integrados que puedes alternar con la tecla `Tab`.
+-
+-- **build** - Por defecto, agent con acceso completo para trabajo de desarrollo
+-- **plan** - Agent de solo lectura para análisis y exploración de código
+-  - Niega ediciones de archivos por defecto
+-  - Pide permiso antes de ejecutar comandos bash
+-  - Ideal para explorar codebases desconocidas o planificar cambios
+-
+-Además, incluye un subagent **general** para búsquedas complejas y tareas de varios pasos.
+-Se usa internamente y se puede invocar con `@general` en los mensajes.
+-
+-Más información sobre [agents](https://opencode.ai/docs/agents).
+-
+-### Documentación
+-
+-Para más información sobre cómo configurar OpenCode, [**ve a nuestra documentación**](https://opencode.ai/docs).
+-
+-### Contribuir
+-
+-Si te interesa contribuir a OpenCode, lee nuestras [docs de contribución](./CONTRIBUTING.md) antes de enviar un pull request.
+-
+-### Construyendo sobre OpenCode
+-
+-Si estás trabajando en un proyecto relacionado con OpenCode y usas "opencode" como parte del nombre; por ejemplo, "opencode-dashboard" u "opencode-mobile", agrega una nota en tu README para aclarar que no está construido por el equipo de OpenCode y que no está afiliado con nosotros de ninguna manera.
+-
+-### FAQ
+-
+-#### ¿En qué se diferencia de Claude Code?
+-
+-Es muy similar a Claude Code en cuanto a capacidades. Estas son las diferencias clave:
+-
+-- 100% open source
+-- No está acoplado a ningún proveedor. Aunque recomendamos los modelos que ofrecemos a través de [OpenCode Zen](https://opencode.ai/zen); OpenCode se puede usar con Claude, OpenAI, Google o incluso modelos locales. A medida que evolucionan los modelos, las brechas se cerrarán y los precios bajarán, por lo que ser agnóstico al proveedor es importante.
+-- Soporte LSP listo para usar
+-- Un enfoque en la TUI. OpenCode está construido por usuarios de neovim y los creadores de [terminal.shop](https://terminal.shop); vamos a empujar los límites de lo que es posible en la terminal.
+-- Arquitectura cliente/servidor. Esto, por ejemplo, permite ejecutar OpenCode en tu computadora mientras lo controlas de forma remota desde una app móvil. Esto significa que el frontend TUI es solo uno de los posibles clientes.
+-
+----
+-
+-**Únete a nuestra comunidad** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.fr.md b/README.fr.md
+deleted file mode 100644
+index c1fca23376d754170572ee3353e830e476e4b6c0..0000000000000000000000000000000000000000
+--- a/README.fr.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="Logo OpenCode">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">L'agent de codage IA open source.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### Installation
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# Gestionnaires de paquets
+-npm i -g opencode-ai@latest        # ou bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS et Linux (recommandé, toujours à jour)
+-brew install opencode              # macOS et Linux (formule officielle brew, mise à jour moins fréquente)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # n'importe quel OS
+-nix run nixpkgs#opencode           # ou github:anomalyco/opencode pour la branche dev la plus récente
+-```
+-
+-> [!TIP]
+-> Supprimez les versions antérieures à 0.1.x avant d'installer.
+-
+-### Application de bureau (BETA)
+-
+-OpenCode est aussi disponible en application de bureau. Téléchargez-la directement depuis la [page des releases](https://github.com/anomalyco/opencode/releases) ou [opencode.ai/download](https://opencode.ai/download).
+-
+-| Plateforme            | Téléchargement                        |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm`, ou AppImage           |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### Répertoire d'installation
+-
+-Le script d'installation respecte l'ordre de priorité suivant pour le chemin d'installation :
+-
+-1. `$OPENCODE_INSTALL_DIR` - Répertoire d'installation personnalisé
+-2. `$XDG_BIN_DIR` - Chemin conforme à la spécification XDG Base Directory
+-3. `$HOME/bin` - Répertoire binaire utilisateur standard (s'il existe ou peut être créé)
+-4. `$HOME/.opencode/bin` - Repli par défaut
+-
+-```bash
+-# Exemples
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agents
+-
+-OpenCode inclut deux agents intégrés que vous pouvez basculer avec la touche `Tab`.
+-
+-- **build** - Par défaut, agent avec accès complet pour le travail de développement
+-- **plan** - Agent en lecture seule pour l'analyse et l'exploration du code
+-  - Refuse les modifications de fichiers par défaut
+-  - Demande l'autorisation avant d'exécuter des commandes bash
+-  - Idéal pour explorer une base de code inconnue ou planifier des changements
+-
+-Un sous-agent **general** est aussi inclus pour les recherches complexes et les tâches en plusieurs étapes.
+-Il est utilisé en interne et peut être invoqué via `@general` dans les messages.
+-
+-En savoir plus sur les [agents](https://opencode.ai/docs/agents).
+-
+-### Documentation
+-
+-Pour plus d'informations sur la configuration d'OpenCode, [**consultez notre documentation**](https://opencode.ai/docs).
+-
+-### Contribuer
+-
+-Si vous souhaitez contribuer à OpenCode, lisez nos [docs de contribution](./CONTRIBUTING.md) avant de soumettre une pull request.
+-
+-### Construire avec OpenCode
+-
+-Si vous travaillez sur un projet lié à OpenCode et que vous utilisez "opencode" dans le nom du projet (par exemple, "opencode-dashboard" ou "opencode-mobile"), ajoutez une note dans votre README pour préciser qu'il n'est pas construit par l'équipe OpenCode et qu'il n'est pas affilié à nous.
+-
+-### FAQ
+-
+-#### En quoi est-ce différent de Claude Code ?
+-
+-C'est très similaire à Claude Code en termes de capacités. Voici les principales différences :
+-
+-- 100% open source
+-- Pas couplé à un fournisseur. Nous recommandons les modèles proposés via [OpenCode Zen](https://opencode.ai/zen) ; OpenCode peut être utilisé avec Claude, OpenAI, Google ou même des modèles locaux. Au fur et à mesure que les modèles évoluent, les écarts se réduiront et les prix baisseront, donc être agnostique au fournisseur est important.
+-- Support LSP prêt à l'emploi
+-- Un focus sur la TUI. OpenCode est construit par des utilisateurs de neovim et les créateurs de [terminal.shop](https://terminal.shop) ; nous allons repousser les limites de ce qui est possible dans le terminal.
+-- Architecture client/serveur. Cela permet par exemple de faire tourner OpenCode sur votre ordinateur tout en le pilotant à distance depuis une application mobile. Cela signifie que la TUI n'est qu'un des clients possibles.
+-
+----
+-
+-**Rejoignez notre communauté** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.gr.md b/README.gr.md
+deleted file mode 100644
+index 2b2c2679d8ebd05ba1608df184f0b0883db3a608..0000000000000000000000000000000000000000
+--- a/README.gr.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">Ο πράκτορας τεχνητής νοημοσύνης ανοικτού κώδικα για προγραμματισμό.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### Εγκατάσταση
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# Διαχειριστές πακέτων
+-npm i -g opencode-ai@latest        # ή bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS και Linux (προτείνεται, πάντα ενημερωμένο)
+-brew install opencode              # macOS και Linux (επίσημος τύπος brew, λιγότερο συχνές ενημερώσεις)
+-sudo pacman -S opencode            # Arch Linux (Σταθερό)
+-paru -S opencode-bin               # Arch Linux (Τελευταία έκδοση από AUR)
+-mise use -g opencode               # Οποιοδήποτε λειτουργικό σύστημα
+-nix run nixpkgs#opencode           # ή github:anomalyco/opencode με βάση την πιο πρόσφατη αλλαγή από το dev branch
+-```
+-
+-> [!TIP]
+-> Αφαίρεσε παλαιότερες εκδόσεις από τη 0.1.x πριν από την εγκατάσταση.
+-
+-### Εφαρμογή Desktop (BETA)
+-
+-Το OpenCode είναι επίσης διαθέσιμο ως εφαρμογή. Κατέβασε το απευθείας από τη [σελίδα εκδόσεων](https://github.com/anomalyco/opencode/releases) ή το [opencode.ai/download](https://opencode.ai/download).
+-
+-| Πλατφόρμα             | Λήψη                                  |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm`, ή AppImage            |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### Κατάλογος Εγκατάστασης
+-
+-Το script εγκατάστασης τηρεί την ακόλουθη σειρά προτεραιότητας για τη διαδρομή εγκατάστασης:
+-
+-1. `$OPENCODE_INSTALL_DIR` - Προσαρμοσμένος κατάλογος εγκατάστασης
+-2. `$XDG_BIN_DIR` - Διαδρομή συμβατή με τις προδιαγραφές XDG Base Directory
+-3. `$HOME/bin` - Τυπικός κατάλογος εκτελέσιμων αρχείων χρήστη (εάν υπάρχει ή μπορεί να δημιουργηθεί)
+-4. `$HOME/.opencode/bin` - Προεπιλεγμένη εφεδρική διαδρομή
+-
+-```bash
+-# Παραδείγματα
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Πράκτορες
+-
+-Το OpenCode περιλαμβάνει δύο ενσωματωμένους πράκτορες μεταξύ των οποίων μπορείτε να εναλλάσσεστε με το πλήκτρο `Tab`.
+-
+-- **build** - Προεπιλεγμένος πράκτορας με πλήρη πρόσβαση για εργασία πάνω σε κώδικα
+-- **plan** - Πράκτορας μόνο ανάγνωσης για ανάλυση και εξερεύνηση κώδικα
+-  - Αρνείται την επεξεργασία αρχείων από προεπιλογή
+-  - Ζητά άδεια πριν εκτελέσει εντολές bash
+-  - Ιδανικός για εξερεύνηση άγνωστων αρχείων πηγαίου κώδικα ή σχεδιασμό αλλαγών
+-
+-Περιλαμβάνεται επίσης ένας **general** υποπράκτορας για σύνθετες αναζητήσεις και πολυβηματικές διεργασίες.
+-Χρησιμοποιείται εσωτερικά και μπορεί να κληθεί χρησιμοποιώντας `@general` στα μηνύματα.
+-
+-Μάθετε περισσότερα για τους [πράκτορες](https://opencode.ai/docs/agents).
+-
+-### Οδηγός Χρήσης
+-
+-Για περισσότερες πληροφορίες σχετικά με τη ρύθμιση του OpenCode, [**πλοηγήσου στον οδηγό χρήσης μας**](https://opencode.ai/docs).
+-
+-### Συνεισφορά
+-
+-Εάν ενδιαφέρεσαι να συνεισφέρεις στο OpenCode, διαβάστε τα [οδηγό χρήσης συνεισφοράς](./CONTRIBUTING.md) πριν υποβάλεις ένα pull request.
+-
+-### Δημιουργία πάνω στο OpenCode
+-
+-Εάν εργάζεσαι σε ένα έργο σχετικό με το OpenCode και χρησιμοποιείτε το "opencode" ως μέρος του ονόματός του, για παράδειγμα "opencode-dashboard" ή "opencode-mobile", πρόσθεσε μια σημείωση στο README σας για να διευκρινίσεις ότι δεν είναι κατασκευασμένο από την ομάδα του OpenCode και δεν έχει καμία σχέση με εμάς.
+-
+-### Συχνές Ερωτήσεις
+-
+-#### Πώς διαφέρει αυτό από το Claude Code;
+-
+-Είναι πολύ παρόμοιο με το Claude Code ως προς τις δυνατότητες. Ακολουθούν οι βασικές διαφορές:
+-
+-- 100% ανοιχτού κώδικα
+-- Δεν είναι συνδεδεμένο με κανέναν πάροχο. Αν και συνιστούμε τα μοντέλα που παρέχουμε μέσω του [OpenCode Zen](https://opencode.ai/zen), το OpenCode μπορεί να χρησιμοποιηθεί με Claude, OpenAI, Google, ή ακόμα και τοπικά μοντέλα. Καθώς τα μοντέλα εξελίσσονται, τα κενά μεταξύ τους θα κλείσουν και οι τιμές θα μειωθούν, οπότε είναι σημαντικό να είσαι ανεξάρτητος από τον πάροχο.
+-- Out-of-the-box υποστήριξη LSP
+-- Εστίαση στο TUI. Το OpenCode είναι κατασκευασμένο από χρήστες που χρησιμοποιούν neovim και τους δημιουργούς του [terminal.shop](https://terminal.shop)· θα εξαντλήσουμε τα όρια του τι είναι δυνατό στο terminal.
+-- Αρχιτεκτονική client/server. Αυτό, για παράδειγμα, μπορεί να επιτρέψει στο OpenCode να τρέχει στον υπολογιστή σου ενώ το χειρίζεσαι εξ αποστάσεως από μια εφαρμογή κινητού, που σημαίνει ότι το TUI frontend είναι μόνο ένας από τους πιθανούς clients.
+-
+----
+-
+-**Γίνε μέλος της κοινότητάς μας** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.it.md b/README.it.md
+deleted file mode 100644
+index 3e516a90270dbf7adf3ba5495fe354f0c6406087..0000000000000000000000000000000000000000
+--- a/README.it.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="Logo OpenCode">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">L’agente di coding AI open source.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### Installazione
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# Package manager
+-npm i -g opencode-ai@latest        # oppure bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS e Linux (consigliato, sempre aggiornato)
+-brew install opencode              # macOS e Linux (formula brew ufficiale, aggiornata meno spesso)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # Qualsiasi OS
+-nix run nixpkgs#opencode           # oppure github:anomalyco/opencode per l’ultima branch di sviluppo
+-```
+-
+-> [!TIP]
+-> Rimuovi le versioni precedenti alla 0.1.x prima di installare.
+-
+-### App Desktop (BETA)
+-
+-OpenCode è disponibile anche come applicazione desktop. Puoi scaricarla direttamente dalla [pagina delle release](https://github.com/anomalyco/opencode/releases) oppure da [opencode.ai/download](https://opencode.ai/download).
+-
+-| Piattaforma           | Download                              |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm`, oppure AppImage       |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### Directory di installazione
+-
+-Lo script di installazione rispetta il seguente ordine di priorità per il percorso di installazione:
+-
+-1. `$OPENCODE_INSTALL_DIR` – Directory di installazione personalizzata
+-2. `$XDG_BIN_DIR` – Percorso conforme alla XDG Base Directory Specification
+-3. `$HOME/bin` – Directory binaria standard dell’utente (se esiste o può essere creata)
+-4. `$HOME/.opencode/bin` – Fallback predefinito
+-
+-```bash
+-# Esempi
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agenti
+-
+-OpenCode include due agenti integrati tra cui puoi passare usando il tasto `Tab`.
+-
+-- **build** – Predefinito, agente con accesso completo per il lavoro di sviluppo
+-- **plan** – Agente in sola lettura per analisi ed esplorazione del codice
+-  - Nega le modifiche ai file per impostazione predefinita
+-  - Chiede il permesso prima di eseguire comandi bash
+-  - Ideale per esplorare codebase sconosciute o pianificare modifiche
+-
+-È inoltre incluso un sotto-agente **general** per ricerche complesse e attività multi-step.
+-Viene utilizzato internamente e può essere invocato usando `@general` nei messaggi.
+-
+-Scopri di più sugli [agenti](https://opencode.ai/docs/agents).
+-
+-### Documentazione
+-
+-Per maggiori informazioni su come configurare OpenCode, [**consulta la nostra documentazione**](https://opencode.ai/docs).
+-
+-### Contribuire
+-
+-Se sei interessato a contribuire a OpenCode, leggi la nostra [guida alla contribuzione](./CONTRIBUTING.md) prima di inviare una pull request.
+-
+-### Costruire su OpenCode
+-
+-Se stai lavorando a un progetto correlato a OpenCode e che utilizza “opencode” come parte del nome (ad esempio “opencode-dashboard” o “opencode-mobile”), aggiungi una nota nel tuo README per chiarire che non è sviluppato dal team OpenCode e che non è affiliato in alcun modo con noi.
+-
+-### FAQ
+-
+-#### In cosa è diverso da Claude Code?
+-
+-È molto simile a Claude Code in termini di funzionalità. Ecco le principali differenze:
+-
+-- 100% open source
+-- Non è legato a nessun provider. Anche se consigliamo i modelli forniti tramite [OpenCode Zen](https://opencode.ai/zen), OpenCode può essere utilizzato con Claude, OpenAI, Google o persino modelli locali. Con l’evoluzione dei modelli, le differenze tra di essi si ridurranno e i prezzi scenderanno, quindi essere indipendenti dal provider è importante.
+-- Supporto LSP pronto all’uso
+-- Forte attenzione alla TUI. OpenCode è sviluppato da utenti neovim e dai creatori di [terminal.shop](https://terminal.shop); spingeremo al limite ciò che è possibile fare nel terminale.
+-- Architettura client/server. Questo, ad esempio, permette a OpenCode di girare sul tuo computer mentre lo controlli da remoto tramite un’app mobile. La frontend TUI è quindi solo uno dei possibili client.
+-
+----
+-
+-**Unisciti alla nostra community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.ja.md b/README.ja.md
+deleted file mode 100644
+index 144dc7b6f8a66f7b5743c411c2be1a6566d1d998..0000000000000000000000000000000000000000
+--- a/README.ja.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">オープンソースのAIコーディングエージェント。</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### インストール
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# パッケージマネージャー
+-npm i -g opencode-ai@latest        # bun/pnpm/yarn でもOK
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS と Linux（推奨。常に最新）
+-brew install opencode              # macOS と Linux（公式 brew formula。更新頻度は低め）
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # どのOSでも
+-nix run nixpkgs#opencode           # または github:anomalyco/opencode で最新 dev ブランチ
+-```
+-
+-> [!TIP]
+-> インストール前に 0.1.x より古いバージョンを削除してください。
+-
+-### デスクトップアプリ (BETA)
+-
+-OpenCode はデスクトップアプリとしても利用できます。[releases page](https://github.com/anomalyco/opencode/releases) から直接ダウンロードするか、[opencode.ai/download](https://opencode.ai/download) を利用してください。
+-
+-| プラットフォーム      | ダウンロード                          |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`、`.rpm`、または AppImage       |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### インストールディレクトリ
+-
+-インストールスクリプトは、インストール先パスを次の優先順位で決定します。
+-
+-1. `$OPENCODE_INSTALL_DIR` - カスタムのインストールディレクトリ
+-2. `$XDG_BIN_DIR` - XDG Base Directory Specification に準拠したパス
+-3. `$HOME/bin` - 標準のユーザー用バイナリディレクトリ（存在する場合、または作成できる場合）
+-4. `$HOME/.opencode/bin` - デフォルトのフォールバック
+-
+-```bash
+-# 例
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agents
+-
+-OpenCode には組み込みの Agent が2つあり、`Tab` キーで切り替えられます。
+-
+-- **build** - デフォルト。開発向けのフルアクセス Agent
+-- **plan** - 分析とコード探索向けの読み取り専用 Agent
+-  - デフォルトでファイル編集を拒否
+-  - bash コマンド実行前に確認
+-  - 未知のコードベース探索や変更計画に最適
+-
+-また、複雑な検索やマルチステップのタスク向けに **general** サブ Agent も含まれています。
+-内部的に使用されており、メッセージで `@general` と入力して呼び出せます。
+-
+-[agents](https://opencode.ai/docs/agents) の詳細はこちら。
+-
+-### ドキュメント
+-
+-OpenCode の設定については [**ドキュメント**](https://opencode.ai/docs) を参照してください。
+-
+-### コントリビュート
+-
+-OpenCode に貢献したい場合は、Pull Request を送る前に [contributing docs](./CONTRIBUTING.md) を読んでください。
+-
+-### OpenCode の上に構築する
+-
+-OpenCode に関連するプロジェクトで、名前に "opencode"（例: "opencode-dashboard" や "opencode-mobile"）を含める場合は、そのプロジェクトが OpenCode チームによって作られたものではなく、いかなる形でも関係がないことを README に明記してください。
+-
+-### FAQ
+-
+-#### Claude Code との違いは？
+-
+-機能面では Claude Code と非常に似ています。主な違いは次のとおりです。
+-
+-- 100% オープンソース
+-- 特定のプロバイダーに依存しません。[OpenCode Zen](https://opencode.ai/zen) で提供しているモデルを推奨しますが、OpenCode は Claude、OpenAI、Google、またはローカルモデルでも利用できます。モデルが進化すると差は縮まり価格も下がるため、provider-agnostic であることが重要です。
+-- そのまま使える LSP サポート
+-- TUI にフォーカス。OpenCode は neovim ユーザーと [terminal.shop](https://terminal.shop) の制作者によって作られており、ターミナルで可能なことの限界を押し広げます。
+-- クライアント/サーバー構成。例えば OpenCode をあなたのPCで動かし、モバイルアプリからリモート操作できます。TUI フロントエンドは複数あるクライアントの1つにすぎません。
+-
+----
+-
+-**コミュニティに参加** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.ko.md b/README.ko.md
+deleted file mode 100644
+index 32defc0a5e023032e04cde25fa2222bc96a50592..0000000000000000000000000000000000000000
+--- a/README.ko.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">오픈 소스 AI 코딩 에이전트.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### 설치
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# 패키지 매니저
+-npm i -g opencode-ai@latest        # bun/pnpm/yarn 도 가능
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS 및 Linux (권장, 항상 최신)
+-brew install opencode              # macOS 및 Linux (공식 brew formula, 업데이트 빈도 낮음)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # 어떤 OS든
+-nix run nixpkgs#opencode           # 또는 github:anomalyco/opencode 로 최신 dev 브랜치
+-```
+-
+-> [!TIP]
+-> 설치 전에 0.1.x 보다 오래된 버전을 제거하세요.
+-
+-### 데스크톱 앱 (BETA)
+-
+-OpenCode 는 데스크톱 앱으로도 제공됩니다. [releases page](https://github.com/anomalyco/opencode/releases) 에서 직접 다운로드하거나 [opencode.ai/download](https://opencode.ai/download) 를 이용하세요.
+-
+-| 플랫폼                | 다운로드                              |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm`, 또는 AppImage         |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### 설치 디렉터리
+-
+-설치 스크립트는 설치 경로를 다음 우선순위로 결정합니다.
+-
+-1. `$OPENCODE_INSTALL_DIR` - 사용자 지정 설치 디렉터리
+-2. `$XDG_BIN_DIR` - XDG Base Directory Specification 준수 경로
+-3. `$HOME/bin` - 표준 사용자 바이너리 디렉터리 (존재하거나 생성 가능할 경우)
+-4. `$HOME/.opencode/bin` - 기본 폴백
+-
+-```bash
+-# 예시
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agents
+-
+-OpenCode 에는 내장 에이전트 2개가 있으며 `Tab` 키로 전환할 수 있습니다.
+-
+-- **build** - 기본값, 개발 작업을 위한 전체 권한 에이전트
+-- **plan** - 분석 및 코드 탐색을 위한 읽기 전용 에이전트
+-  - 기본적으로 파일 편집을 거부
+-  - bash 명령 실행 전에 권한을 요청
+-  - 낯선 코드베이스를 탐색하거나 변경을 계획할 때 적합
+-
+-또한 복잡한 검색과 여러 단계 작업을 위한 **general** 서브 에이전트가 포함되어 있습니다.
+-내부적으로 사용되며, 메시지에서 `@general` 로 호출할 수 있습니다.
+-
+-[agents](https://opencode.ai/docs/agents) 에 대해 더 알아보세요.
+-
+-### 문서
+-
+-OpenCode 설정에 대한 자세한 내용은 [**문서**](https://opencode.ai/docs) 를 참고하세요.
+-
+-### 기여하기
+-
+-OpenCode 에 기여하고 싶다면, Pull Request 를 제출하기 전에 [contributing docs](./CONTRIBUTING.md) 를 읽어주세요.
+-
+-### OpenCode 기반으로 만들기
+-
+-OpenCode 와 관련된 프로젝트를 진행하면서 이름에 "opencode"(예: "opencode-dashboard" 또는 "opencode-mobile") 를 포함한다면, README 에 해당 프로젝트가 OpenCode 팀이 만든 것이 아니며 어떤 방식으로도 우리와 제휴되어 있지 않다는 점을 명시해 주세요.
+-
+-### FAQ
+-
+-#### Claude Code 와는 무엇이 다른가요?
+-
+-기능 면에서는 Claude Code 와 매우 유사합니다. 주요 차이점은 다음과 같습니다.
+-
+-- 100% 오픈 소스
+-- 특정 제공자에 묶여 있지 않습니다. [OpenCode Zen](https://opencode.ai/zen) 을 통해 제공하는 모델을 권장하지만, OpenCode 는 Claude, OpenAI, Google 또는 로컬 모델과도 사용할 수 있습니다. 모델이 발전하면서 격차는 줄고 가격은 내려가므로 provider-agnostic 인 것이 중요합니다.
+-- 기본으로 제공되는 LSP 지원
+-- TUI 에 집중. OpenCode 는 neovim 사용자와 [terminal.shop](https://terminal.shop) 제작자가 만들었으며, 터미널에서 가능한 것의 한계를 밀어붙입니다.
+-- 클라이언트/서버 아키텍처. 예를 들어 OpenCode 를 내 컴퓨터에서 실행하면서 모바일 앱으로 원격 조작할 수 있습니다. 즉, TUI 프런트엔드는 가능한 여러 클라이언트 중 하나일 뿐입니다.
+-
+----
+-
+-**커뮤니티에 참여하기** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.no.md b/README.no.md
+deleted file mode 100644
+index c3348286b29c3f9ece33b931dbf6a3cc2a13d6d7..0000000000000000000000000000000000000000
+--- a/README.no.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">AI-kodeagent med åpen kildekode.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### Installasjon
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# Pakkehåndterere
+-npm i -g opencode-ai@latest        # eller bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS og Linux (anbefalt, alltid oppdatert)
+-brew install opencode              # macOS og Linux (offisiell brew-formel, oppdateres sjeldnere)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # alle OS
+-nix run nixpkgs#opencode           # eller github:anomalyco/opencode for nyeste dev-branch
+-```
+-
+-> [!TIP]
+-> Fjern versjoner eldre enn 0.1.x før du installerer.
+-
+-### Desktop-app (BETA)
+-
+-OpenCode er også tilgjengelig som en desktop-app. Last ned direkte fra [releases-siden](https://github.com/anomalyco/opencode/releases) eller [opencode.ai/download](https://opencode.ai/download).
+-
+-| Plattform             | Nedlasting                            |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm` eller AppImage         |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### Installasjonsmappe
+-
+-Installasjonsskriptet bruker følgende prioritet for installasjonsstien:
+-
+-1. `$OPENCODE_INSTALL_DIR` - Egendefinert installasjonsmappe
+-2. `$XDG_BIN_DIR` - Sti som følger XDG Base Directory Specification
+-3. `$HOME/bin` - Standard brukerbinar-mappe (hvis den finnes eller kan opprettes)
+-4. `$HOME/.opencode/bin` - Standard fallback
+-
+-```bash
+-# Eksempler
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agents
+-
+-OpenCode har to innebygde agents du kan bytte mellom med `Tab`-tasten.
+-
+-- **build** - Standard, agent med full tilgang for utviklingsarbeid
+-- **plan** - Skrivebeskyttet agent for analyse og kodeutforsking
+-  - Nekter filendringer som standard
+-  - Spør om tillatelse før bash-kommandoer
+-  - Ideell for å utforske ukjente kodebaser eller planlegge endringer
+-
+-Det finnes også en **general**-subagent for komplekse søk og flertrinnsoppgaver.
+-Den brukes internt og kan kalles via `@general` i meldinger.
+-
+-Les mer om [agents](https://opencode.ai/docs/agents).
+-
+-### Dokumentasjon
+-
+-For mer info om hvordan du konfigurerer OpenCode, [**se dokumentasjonen**](https://opencode.ai/docs).
+-
+-### Bidra
+-
+-Hvis du vil bidra til OpenCode, les [contributing docs](./CONTRIBUTING.md) før du sender en pull request.
+-
+-### Bygge på OpenCode
+-
+-Hvis du jobber med et prosjekt som er relatert til OpenCode og bruker "opencode" som en del av navnet; for eksempel "opencode-dashboard" eller "opencode-mobile", legg inn en merknad i README som presiserer at det ikke er bygget av OpenCode-teamet og ikke er tilknyttet oss på noen måte.
+-
+-### FAQ
+-
+-#### Hvordan er dette forskjellig fra Claude Code?
+-
+-Det er veldig likt Claude Code når det gjelder funksjonalitet. Her er de viktigste forskjellene:
+-
+-- 100% open source
+-- Ikke knyttet til en bestemt leverandør. Selv om vi anbefaler modellene vi tilbyr gjennom [OpenCode Zen](https://opencode.ai/zen); kan OpenCode brukes med Claude, OpenAI, Google eller til og med lokale modeller. Etter hvert som modellene utvikler seg vil gapene lukkes og prisene gå ned, så det er viktig å være provider-agnostic.
+-- LSP-støtte rett ut av boksen
+-- Fokus på TUI. OpenCode er bygget av neovim-brukere og skaperne av [terminal.shop](https://terminal.shop); vi kommer til å presse grensene for hva som er mulig i terminalen.
+-- Klient/server-arkitektur. Dette kan for eksempel la OpenCode kjøre på maskinen din, mens du styrer den eksternt fra en mobilapp. Det betyr at TUI-frontend'en bare er en av de mulige klientene.
+-
+----
+-
+-**Bli med i fellesskapet** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.pl.md b/README.pl.md
+deleted file mode 100644
+index 4c5a07665619bbaefc520e9dc3fbeed760a7e711..0000000000000000000000000000000000000000
+--- a/README.pl.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">Otwartoźródłowy agent kodujący AI.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### Instalacja
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# Menedżery pakietów
+-npm i -g opencode-ai@latest        # albo bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS i Linux (polecane, zawsze aktualne)
+-brew install opencode              # macOS i Linux (oficjalna formuła brew, rzadziej aktualizowana)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # dowolny system
+-nix run nixpkgs#opencode           # lub github:anomalyco/opencode dla najnowszej gałęzi dev
+-```
+-
+-> [!TIP]
+-> Przed instalacją usuń wersje starsze niż 0.1.x.
+-
+-### Aplikacja desktopowa (BETA)
+-
+-OpenCode jest także dostępny jako aplikacja desktopowa. Pobierz ją bezpośrednio ze strony [releases](https://github.com/anomalyco/opencode/releases) lub z [opencode.ai/download](https://opencode.ai/download).
+-
+-| Platforma             | Pobieranie                            |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm` lub AppImage           |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### Katalog instalacji
+-
+-Skrypt instalacyjny stosuje następujący priorytet wyboru ścieżki instalacji:
+-
+-1. `$OPENCODE_INSTALL_DIR` - Własny katalog instalacji
+-2. `$XDG_BIN_DIR` - Ścieżka zgodna ze specyfikacją XDG Base Directory
+-3. `$HOME/bin` - Standardowy katalog binarny użytkownika (jeśli istnieje lub można go utworzyć)
+-4. `$HOME/.opencode/bin` - Domyślny fallback
+-
+-```bash
+-# Przykłady
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agents
+-
+-OpenCode zawiera dwóch wbudowanych agentów, między którymi możesz przełączać się klawiszem `Tab`.
+-
+-- **build** - Domyślny agent z pełnym dostępem do pracy developerskiej
+-- **plan** - Agent tylko do odczytu do analizy i eksploracji kodu
+-  - Domyślnie odmawia edycji plików
+-  - Pyta o zgodę przed uruchomieniem komend bash
+-  - Idealny do poznawania nieznanych baz kodu lub planowania zmian
+-
+-Dodatkowo jest subagent **general** do złożonych wyszukiwań i wieloetapowych zadań.
+-Jest używany wewnętrznie i można go wywołać w wiadomościach przez `@general`.
+-
+-Dowiedz się więcej o [agents](https://opencode.ai/docs/agents).
+-
+-### Dokumentacja
+-
+-Więcej informacji o konfiguracji OpenCode znajdziesz w [**dokumentacji**](https://opencode.ai/docs).
+-
+-### Współtworzenie
+-
+-Jeśli chcesz współtworzyć OpenCode, przeczytaj [contributing docs](./CONTRIBUTING.md) przed wysłaniem pull requesta.
+-
+-### Budowanie na OpenCode
+-
+-Jeśli pracujesz nad projektem związanym z OpenCode i używasz "opencode" jako części nazwy (na przykład "opencode-dashboard" lub "opencode-mobile"), dodaj proszę notatkę do swojego README, aby wyjaśnić, że projekt nie jest tworzony przez zespół OpenCode i nie jest z nami w żaden sposób powiązany.
+-
+-### FAQ
+-
+-#### Czym to się różni od Claude Code?
+-
+-Jest bardzo podobne do Claude Code pod względem możliwości. Oto kluczowe różnice:
+-
+-- 100% open source
+-- Niezależne od dostawcy. Chociaż polecamy modele oferowane przez [OpenCode Zen](https://opencode.ai/zen); OpenCode może być używany z Claude, OpenAI, Google, a nawet z modelami lokalnymi. W miarę jak modele ewoluują, różnice będą się zmniejszać, a ceny spadać, więc ważna jest niezależność od dostawcy.
+-- Wbudowane wsparcie LSP
+-- Skupienie na TUI. OpenCode jest budowany przez użytkowników neovim i twórców [terminal.shop](https://terminal.shop); przesuwamy granice tego, co jest możliwe w terminalu.
+-- Architektura klient/serwer. Pozwala np. uruchomić OpenCode na twoim komputerze, a sterować nim zdalnie z aplikacji mobilnej. To znaczy, że frontend TUI jest tylko jednym z możliwych klientów.
+-
+----
+-
+-**Dołącz do naszej społeczności** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.ru.md b/README.ru.md
+deleted file mode 100644
+index e507be70e65815eb9d9ec4e6746aa34c2eb4f345..0000000000000000000000000000000000000000
+--- a/README.ru.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">Открытый AI-агент для программирования.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### Установка
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# Менеджеры пакетов
+-npm i -g opencode-ai@latest        # или bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS и Linux (рекомендуем, всегда актуально)
+-brew install opencode              # macOS и Linux (официальная формула brew, обновляется реже)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # любая ОС
+-nix run nixpkgs#opencode           # или github:anomalyco/opencode для самой свежей ветки dev
+-```
+-
+-> [!TIP]
+-> Перед установкой удалите версии старше 0.1.x.
+-
+-### Десктопное приложение (BETA)
+-
+-OpenCode также доступен как десктопное приложение. Скачайте его со [страницы релизов](https://github.com/anomalyco/opencode/releases) или с [opencode.ai/download](https://opencode.ai/download).
+-
+-| Платформа             | Загрузка                              |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm` или AppImage           |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### Каталог установки
+-
+-Скрипт установки выбирает путь установки в следующем порядке приоритета:
+-
+-1. `$OPENCODE_INSTALL_DIR` - Пользовательский каталог установки
+-2. `$XDG_BIN_DIR` - Путь, совместимый со спецификацией XDG Base Directory
+-3. `$HOME/bin` - Стандартный каталог пользовательских бинарников (если существует или можно создать)
+-4. `$HOME/.opencode/bin` - Fallback по умолчанию
+-
+-```bash
+-# Примеры
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agents
+-
+-В OpenCode есть два встроенных агента, между которыми можно переключаться клавишей `Tab`.
+-
+-- **build** - По умолчанию, агент с полным доступом для разработки
+-- **plan** - Агент только для чтения для анализа и изучения кода
+-  - По умолчанию запрещает редактирование файлов
+-  - Запрашивает разрешение перед выполнением bash-команд
+-  - Идеален для изучения незнакомых кодовых баз или планирования изменений
+-
+-Также включен сабагент **general** для сложных поисков и многошаговых задач.
+-Он используется внутренне и может быть вызван в сообщениях через `@general`.
+-
+-Подробнее об [agents](https://opencode.ai/docs/agents).
+-
+-### Документация
+-
+-Больше информации о том, как настроить OpenCode: [**наши docs**](https://opencode.ai/docs).
+-
+-### Вклад
+-
+-Если вы хотите внести вклад в OpenCode, прочитайте [contributing docs](./CONTRIBUTING.md) перед тем, как отправлять pull request.
+-
+-### Разработка на базе OpenCode
+-
+-Если вы делаете проект, связанный с OpenCode, и используете "opencode" как часть имени (например, "opencode-dashboard" или "opencode-mobile"), добавьте примечание в README, чтобы уточнить, что проект не создан командой OpenCode и не аффилирован с нами.
+-
+-### FAQ
+-
+-#### Чем это отличается от Claude Code?
+-
+-По возможностям это очень похоже на Claude Code. Вот ключевые отличия:
+-
+-- 100% open source
+-- Не привязано к одному провайдеру. Мы рекомендуем модели из [OpenCode Zen](https://opencode.ai/zen); но OpenCode можно использовать с Claude, OpenAI, Google или даже локальными моделями. По мере развития моделей разрыв будет сокращаться, а цены падать, поэтому важна независимость от провайдера.
+-- Поддержка LSP из коробки
+-- Фокус на TUI. OpenCode построен пользователями neovim и создателями [terminal.shop](https://terminal.shop); мы будем раздвигать границы того, что возможно в терминале.
+-- Архитектура клиент/сервер. Например, это позволяет запускать OpenCode на вашем компьютере, а управлять им удаленно из мобильного приложения. Это значит, что TUI-фронтенд - лишь один из возможных клиентов.
+-
+----
+-
+-**Присоединяйтесь к нашему сообществу** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.th.md b/README.th.md
+deleted file mode 100644
+index 4a4ea62c957cb0f33e57ce86ff7d77c16e166f8a..0000000000000000000000000000000000000000
+--- a/README.th.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">เอเจนต์การเขียนโค้ดด้วย AI แบบโอเพนซอร์ส</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="สถานะการสร้าง" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### การติดตั้ง
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# ตัวจัดการแพ็กเกจ
+-npm i -g opencode-ai@latest        # หรือ bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS และ Linux (แนะนำ อัปเดตเสมอ)
+-brew install opencode              # macOS และ Linux (brew formula อย่างเป็นทางการ อัปเดตน้อยกว่า)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # ระบบปฏิบัติการใดก็ได้
+-nix run nixpkgs#opencode           # หรือ github:anomalyco/opencode สำหรับสาขาพัฒนาล่าสุด
+-```
+-
+-> [!TIP]
+-> ลบเวอร์ชันที่เก่ากว่า 0.1.x ก่อนติดตั้ง
+-
+-### แอปพลิเคชันเดสก์ท็อป (เบต้า)
+-
+-OpenCode มีให้ใช้งานเป็นแอปพลิเคชันเดสก์ท็อป ดาวน์โหลดโดยตรงจาก [หน้ารุ่น](https://github.com/anomalyco/opencode/releases) หรือ [opencode.ai/download](https://opencode.ai/download)
+-
+-| แพลตฟอร์ม             | ดาวน์โหลด                             |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm`, หรือ AppImage         |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### ไดเรกทอรีการติดตั้ง
+-
+-สคริปต์การติดตั้งจะใช้ลำดับความสำคัญตามเส้นทางการติดตั้ง:
+-
+-1. `$OPENCODE_INSTALL_DIR` - ไดเรกทอรีการติดตั้งที่กำหนดเอง
+-2. `$XDG_BIN_DIR` - เส้นทางที่สอดคล้องกับ XDG Base Directory Specification
+-3. `$HOME/bin` - ไดเรกทอรีไบนารีผู้ใช้มาตรฐาน (หากมีอยู่หรือสามารถสร้างได้)
+-4. `$HOME/.opencode/bin` - ค่าสำรองเริ่มต้น
+-
+-```bash
+-# ตัวอย่าง
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### เอเจนต์
+-
+-OpenCode รวมเอเจนต์ในตัวสองตัวที่คุณสามารถสลับได้ด้วยปุ่ม `Tab`
+-
+-- **build** - เอเจนต์เริ่มต้น มีสิทธิ์เข้าถึงแบบเต็มสำหรับงานพัฒนา
+-- **plan** - เอเจนต์อ่านอย่างเดียวสำหรับการวิเคราะห์และการสำรวจโค้ด
+-  - ปฏิเสธการแก้ไขไฟล์โดยค่าเริ่มต้น
+-  - ขอสิทธิ์ก่อนเรียกใช้คำสั่ง bash
+-  - เหมาะสำหรับสำรวจโค้ดเบสที่ไม่คุ้นเคยหรือวางแผนการเปลี่ยนแปลง
+-
+-นอกจากนี้ยังมีเอเจนต์ย่อย **general** สำหรับการค้นหาที่ซับซ้อนและงานหลายขั้นตอน
+-ใช้ภายในและสามารถเรียกใช้ได้โดยใช้ `@general` ในข้อความ
+-
+-เรียนรู้เพิ่มเติมเกี่ยวกับ [เอเจนต์](https://opencode.ai/docs/agents)
+-
+-### เอกสารประกอบ
+-
+-สำหรับข้อมูลเพิ่มเติมเกี่ยวกับวิธีกำหนดค่า OpenCode [**ไปที่เอกสารของเรา**](https://opencode.ai/docs)
+-
+-### การมีส่วนร่วม
+-
+-หากคุณสนใจที่จะมีส่วนร่วมใน OpenCode โปรดอ่าน [เอกสารการมีส่วนร่วม](./CONTRIBUTING.md) ก่อนส่ง Pull Request
+-
+-### การสร้างบน OpenCode
+-
+-หากคุณทำงานในโปรเจกต์ที่เกี่ยวข้องกับ OpenCode และใช้ "opencode" เป็นส่วนหนึ่งของชื่อ เช่น "opencode-dashboard" หรือ "opencode-mobile" โปรดเพิ่มหมายเหตุใน README ของคุณเพื่อชี้แจงว่าไม่ได้สร้างโดยทีม OpenCode และไม่ได้เกี่ยวข้องกับเราในทางใด
+-
+-### คำถามที่พบบ่อย
+-
+-#### ต่างจาก Claude Code อย่างไร?
+-
+-คล้ายกับ Claude Code มากในแง่ความสามารถ นี่คือความแตกต่างหลัก:
+-
+-- โอเพนซอร์ส 100%
+-- ไม่ผูกมัดกับผู้ให้บริการใดๆ แม้ว่าเราจะแนะนำโมเดลที่เราจัดหาให้ผ่าน [OpenCode Zen](https://opencode.ai/zen) OpenCode สามารถใช้กับ Claude, OpenAI, Google หรือแม้กระทั่งโมเดลในเครื่องได้ เมื่อโมเดลพัฒนาช่องว่างระหว่างพวกมันจะปิดลงและราคาจะลดลง ดังนั้นการไม่ผูกมัดกับผู้ให้บริการจึงสำคัญ
+-- รองรับ LSP ใช้งานได้ทันทีหลังการติดตั้งโดยไม่ต้องปรับแต่งหรือเปลี่ยนแปลงฟังก์ชันการทำงานใด ๆ
+-- เน้นที่ TUI OpenCode สร้างโดยผู้ใช้ neovim และผู้สร้าง [terminal.shop](https://terminal.shop) เราจะผลักดันขีดจำกัดของสิ่งที่เป็นไปได้ในเทอร์มินัล
+-- สถาปัตยกรรมไคลเอนต์/เซิร์ฟเวอร์ ตัวอย่างเช่น อาจอนุญาตให้ OpenCode ทำงานบนคอมพิวเตอร์ของคุณ ในขณะที่คุณสามารถขับเคลื่อนจากระยะไกลผ่านแอปมือถือ หมายความว่า TUI frontend เป็นหนึ่งในไคลเอนต์ที่เป็นไปได้เท่านั้น
+-
+----
+-
+-**ร่วมชุมชนของเรา** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.tr.md b/README.tr.md
+deleted file mode 100644
+index e88b40f875120601599359f92eab67a00fe812e4..0000000000000000000000000000000000000000
+--- a/README.tr.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">Açık kaynaklı yapay zeka kodlama asistanı.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### Kurulum
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# Paket yöneticileri
+-npm i -g opencode-ai@latest        # veya bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS ve Linux (önerilir, her zaman güncel)
+-brew install opencode              # macOS ve Linux (resmi brew formülü, daha az güncellenir)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # Tüm işletim sistemleri
+-nix run nixpkgs#opencode           # veya en güncel geliştirme dalı için github:anomalyco/opencode
+-```
+-
+-> [!TIP]
+-> Kurulumdan önce 0.1.x'ten eski sürümleri kaldırın.
+-
+-### Masaüstü Uygulaması (BETA)
+-
+-OpenCode ayrıca masaüstü uygulaması olarak da mevcuttur. Doğrudan [sürüm sayfasından](https://github.com/anomalyco/opencode/releases) veya [opencode.ai/download](https://opencode.ai/download) adresinden indirebilirsiniz.
+-
+-| Platform              | İndirme                               |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm` veya AppImage          |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### Kurulum Dizini (Installation Directory)
+-
+-Kurulum betiği (install script), kurulum yolu (installation path) için aşağıdaki öncelik sırasını takip eder:
+-
+-1. `$OPENCODE_INSTALL_DIR` - Özel kurulum dizini
+-2. `$XDG_BIN_DIR` - XDG Base Directory Specification uyumlu yol
+-3. `$HOME/bin` - Standart kullanıcı binary dizini (varsa veya oluşturulabiliyorsa)
+-4. `$HOME/.opencode/bin` - Varsayılan yedek konum
+-
+-```bash
+-# Örnekler
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Ajanlar
+-
+-OpenCode, `Tab` tuşuyla aralarında geçiş yapabileceğiniz iki yerleşik (built-in) ajan içerir.
+-
+-- **build** - Varsayılan, geliştirme çalışmaları için tam erişimli ajan
+-- **plan** - Analiz ve kod keşfi için salt okunur ajan
+-  - Varsayılan olarak dosya düzenlemelerini reddeder
+-  - Bash komutlarını çalıştırmadan önce izin ister
+-  - Tanımadığınız kod tabanlarını keşfetmek veya değişiklikleri planlamak için ideal
+-
+-Ayrıca, karmaşık aramalar ve çok adımlı görevler için bir **genel** alt ajan bulunmaktadır.
+-Bu dahili olarak kullanılır ve mesajlarda `@general` ile çağrılabilir.
+-
+-[Ajanlar](https://opencode.ai/docs/agents) hakkında daha fazla bilgi edinin.
+-
+-### Dokümantasyon
+-
+-OpenCode'u nasıl yapılandıracağınız hakkında daha fazla bilgi için [**dokümantasyonumuza göz atın**](https://opencode.ai/docs).
+-
+-### Katkıda Bulunma
+-
+-OpenCode'a katkıda bulunmak istiyorsanız, lütfen bir pull request göndermeden önce [katkıda bulunma dokümanlarımızı](./CONTRIBUTING.md) okuyun.
+-
+-### OpenCode Üzerine Geliştirme
+-
+-OpenCode ile ilgili bir proje üzerinde çalışıyorsanız ve projenizin adının bir parçası olarak "opencode" kullanıyorsanız (örneğin, "opencode-dashboard" veya "opencode-mobile"), lütfen README dosyanıza projenin OpenCode ekibi tarafından geliştirilmediğini ve bizimle hiçbir şekilde bağlantılı olmadığını belirten bir not ekleyin.
+-
+-### SSS
+-
+-#### Bu Claude Code'dan nasıl farklı?
+-
+-Yetenekler açısından Claude Code'a çok benzer. İşte temel farklar:
+-
+-- %100 açık kaynak
+-- Herhangi bir sağlayıcıya bağlı değil. [OpenCode Zen](https://opencode.ai/zen) üzerinden sunduğumuz modelleri önermekle birlikte; OpenCode, Claude, OpenAI, Google veya hatta yerel modellerle kullanılabilir. Modeller geliştikçe aralarındaki farklar kapanacak ve fiyatlar düşecek, bu nedenle sağlayıcıdan bağımsız olmak önemlidir.
+-- Kurulum gerektirmeyen hazır LSP desteği
+-- TUI odaklı yaklaşım. OpenCode, neovim kullanıcıları ve [terminal.shop](https://terminal.shop)'un geliştiricileri tarafından geliştirilmektedir; terminalde olabileceklerin sınırlarını zorlayacağız.
+-- İstemci/sunucu (client/server) mimarisi. Bu, örneğin OpenCode'un bilgisayarınızda çalışması ve siz onu bir mobil uygulamadan uzaktan yönetmenizi sağlar. TUI arayüzü olası istemcilerden sadece biridir.
+-
+----
+-
+-**Topluluğumuza katılın** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.uk.md b/README.uk.md
+deleted file mode 100644
+index a1a0259b6d0887e45b9489df19704b31f8a8d708..0000000000000000000000000000000000000000
+--- a/README.uk.md
++++ /dev/null
+@@ -1,142 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">AI-агент для програмування з відкритим кодом.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### Встановлення
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# Менеджери пакетів
+-npm i -g opencode-ai@latest        # або bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS і Linux (рекомендовано, завжди актуально)
+-brew install opencode              # macOS і Linux (офіційна формула Homebrew, оновлюється рідше)
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # Будь-яка ОС
+-nix run nixpkgs#opencode           # або github:anomalyco/opencode для найновішої dev-гілки
+-```
+-
+-> [!TIP]
+-> Перед встановленням видаліть версії старші за 0.1.x.
+-
+-### Десктопний застосунок (BETA)
+-
+-OpenCode також доступний як десктопний застосунок. Завантажуйте напряму зі [сторінки релізів](https://github.com/anomalyco/opencode/releases) або [opencode.ai/download](https://opencode.ai/download).
+-
+-| Платформа             | Завантаження                          |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm` або AppImage           |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### Каталог встановлення
+-
+-Скрипт встановлення дотримується такого порядку пріоритету для шляху встановлення:
+-
+-1. `$OPENCODE_INSTALL_DIR` - Користувацький каталог встановлення
+-2. `$XDG_BIN_DIR` - Шлях, сумісний зі специфікацією XDG Base Directory
+-3. `$HOME/bin` - Стандартний каталог користувацьких бінарників (якщо існує або його можна створити)
+-4. `$HOME/.opencode/bin` - Резервний варіант за замовчуванням
+-
+-```bash
+-# Приклади
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Агенти
+-
+-OpenCode містить два вбудовані агенти, між якими можна перемикатися клавішею `Tab`.
+-
+-- **build** - Агент за замовчуванням із повним доступом для завдань розробки
+-- **plan** - Агент лише для читання для аналізу та дослідження коду
+-  - За замовчуванням забороняє редагування файлів
+-  - Запитує дозвіл перед запуском bash-команд
+-  - Ідеально підходить для дослідження незнайомих кодових баз або планування змін
+-
+-Також доступний допоміжний агент **general** для складного пошуку та багатокрокових завдань.
+-Він використовується всередині системи й може бути викликаний у повідомленнях через `@general`.
+-
+-Дізнайтеся більше про [agents](https://opencode.ai/docs/agents).
+-
+-### Документація
+-
+-Щоб дізнатися більше про налаштування OpenCode, [**перейдіть до нашої документації**](https://opencode.ai/docs).
+-
+-### Внесок
+-
+-Якщо ви хочете зробити внесок в OpenCode, будь ласка, прочитайте нашу [документацію для контриб'юторів](./CONTRIBUTING.md) перед надсиланням pull request.
+-
+-### Проєкти на базі OpenCode
+-
+-Якщо ви працюєте над проєктом, пов'язаним з OpenCode, і використовуєте "opencode" у назві, наприклад "opencode-dashboard" або "opencode-mobile", додайте примітку до свого README.
+-Уточніть, що цей проєкт не створений командою OpenCode і жодним чином не афілійований із нами.
+-
+-### FAQ
+-
+-#### Чим це відрізняється від Claude Code?
+-
+-За можливостями це дуже схоже на Claude Code. Ось ключові відмінності:
+-
+-- 100% open source
+-- Немає прив'язки до конкретного провайдера. Ми рекомендуємо моделі, які надаємо через [OpenCode Zen](https://opencode.ai/zen), але OpenCode також працює з Claude, OpenAI, Google і навіть локальними моделями. З розвитком моделей різниця між ними зменшуватиметься, а ціни падатимуть, тому незалежність від провайдера має значення.
+-- Підтримка LSP з коробки
+-- Фокус на TUI. OpenCode створено користувачами neovim та авторами [terminal.shop](https://terminal.shop); ми й надалі розширюватимемо межі можливого в терміналі.
+-- Клієнт-серверна архітектура. Наприклад, це дає змогу запускати OpenCode на вашому комп'ютері й керувати ним віддалено з мобільного застосунку, тобто TUI-фронтенд - лише один із можливих клієнтів.
+-
+----
+-
+-**Приєднуйтеся до нашої спільноти** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.vi.md b/README.vi.md
+deleted file mode 100644
+index 0932c50f78ab132d228e54b32803fad68cf40994..0000000000000000000000000000000000000000
+--- a/README.vi.md
++++ /dev/null
+@@ -1,141 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">Trợ lý lập trình AI mã nguồn mở.</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### Cài đặt
+-
+-```bash
+-# YOLO
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# Các trình quản lý gói (Package managers)
+-npm i -g opencode-ai@latest        # hoặc bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS và Linux (khuyên dùng, luôn cập nhật)
+-brew install opencode              # macOS và Linux (công thức brew chính thức, ít cập nhật hơn)
+-sudo pacman -S opencode            # Arch Linux (Bản ổn định)
+-paru -S opencode-bin               # Arch Linux (Bản mới nhất từ AUR)
+-mise use -g opencode               # Mọi hệ điều hành
+-nix run nixpkgs#opencode           # hoặc github:anomalyco/opencode cho nhánh dev mới nhất
+-```
+-
+-> [!TIP]
+-> Hãy xóa các phiên bản cũ hơn 0.1.x trước khi cài đặt.
+-
+-### Ứng dụng Desktop (BETA)
+-
+-OpenCode cũng có sẵn dưới dạng ứng dụng desktop. Tải trực tiếp từ [trang releases](https://github.com/anomalyco/opencode/releases) hoặc [opencode.ai/download](https://opencode.ai/download).
+-
+-| Nền tảng              | Tải xuống                             |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm`, hoặc AppImage         |
+-
+-```bash
+-# macOS (Homebrew)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### Thư mục cài đặt
+-
+-Tập lệnh cài đặt tuân theo thứ tự ưu tiên sau cho đường dẫn cài đặt:
+-
+-1. `$OPENCODE_INSTALL_DIR` - Thư mục cài đặt tùy chỉnh
+-2. `$XDG_BIN_DIR` - Đường dẫn tuân thủ XDG Base Directory Specification
+-3. `$HOME/bin` - Thư mục nhị phân tiêu chuẩn của người dùng (nếu tồn tại hoặc có thể tạo)
+-4. `$HOME/.opencode/bin` - Mặc định dự phòng
+-
+-```bash
+-# Ví dụ
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agents (Đại diện)
+-
+-OpenCode bao gồm hai agent được tích hợp sẵn mà bạn có thể chuyển đổi bằng phím `Tab`.
+-
+-- **build** - Agent mặc định, có toàn quyền truy cập cho công việc lập trình
+-- **plan** - Agent chỉ đọc dùng để phân tích và khám phá mã nguồn
+-  - Mặc định từ chối việc chỉnh sửa tệp
+-  - Hỏi quyền trước khi chạy các lệnh bash
+-  - Lý tưởng để khám phá các codebase lạ hoặc lên kế hoạch thay đổi
+-
+-Ngoài ra còn có một subagent **general** dùng cho các tìm kiếm phức tạp và tác vụ nhiều bước.
+-Agent này được sử dụng nội bộ và có thể gọi bằng cách dùng `@general` trong tin nhắn.
+-
+-Tìm hiểu thêm về [agents](https://opencode.ai/docs/agents).
+-
+-### Tài liệu
+-
+-Để biết thêm thông tin về cách cấu hình OpenCode, [**hãy truy cập tài liệu của chúng tôi**](https://opencode.ai/docs).
+-
+-### Đóng góp
+-
+-Nếu bạn muốn đóng góp cho OpenCode, vui lòng đọc [tài liệu hướng dẫn đóng góp](./CONTRIBUTING.md) trước khi gửi pull request.
+-
+-### Xây dựng trên nền tảng OpenCode
+-
+-Nếu bạn đang làm việc trên một dự án liên quan đến OpenCode và sử dụng "opencode" như một phần của tên dự án, ví dụ "opencode-dashboard" hoặc "opencode-mobile", vui lòng thêm một ghi chú vào README của bạn để làm rõ rằng dự án đó không được xây dựng bởi đội ngũ OpenCode và không liên kết với chúng tôi dưới bất kỳ hình thức nào.
+-
+-### Các câu hỏi thường gặp (FAQ)
+-
+-#### OpenCode khác biệt thế nào so với Claude Code?
+-
+-Về mặt tính năng, nó rất giống Claude Code. Dưới đây là những điểm khác biệt chính:
+-
+-- 100% mã nguồn mở
+-- Không bị ràng buộc với bất kỳ nhà cung cấp nào. Mặc dù chúng tôi khuyên dùng các mô hình được cung cấp qua [OpenCode Zen](https://opencode.ai/zen), OpenCode có thể được sử dụng với Claude, OpenAI, Google, hoặc thậm chí các mô hình chạy cục bộ. Khi các mô hình phát triển, khoảng cách giữa chúng sẽ thu hẹp lại và giá cả sẽ giảm, vì vậy việc không phụ thuộc vào nhà cung cấp là rất quan trọng.
+-- Hỗ trợ LSP ngay từ đầu
+-- Tập trung vào TUI (Giao diện người dùng dòng lệnh). OpenCode được xây dựng bởi những người dùng neovim và đội ngũ tạo ra [terminal.shop](https://terminal.shop); chúng tôi sẽ đẩy giới hạn của những gì có thể làm được trên terminal lên mức tối đa.
+-- Kiến trúc client/server. Chẳng hạn, điều này cho phép OpenCode chạy trên máy tính của bạn trong khi bạn điều khiển nó từ xa qua một ứng dụng di động, nghĩa là frontend TUI chỉ là một trong những client có thể dùng.
+-
+----
+-
+-**Tham gia cộng đồng của chúng tôi** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+diff --git a/README.zh.md b/README.zh.md
+deleted file mode 100644
+index 46d9f761cbd0b7a18afbcbf10da73025c40812aa..0000000000000000000000000000000000000000
+--- a/README.zh.md
++++ /dev/null
+@@ -1,140 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">开源的 AI Coding Agent。</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### 安装
+-
+-```bash
+-# 直接安装 (YOLO)
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# 软件包管理器
+-npm i -g opencode-ai@latest        # 也可使用 bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS 和 Linux（推荐，始终保持最新）
+-brew install opencode              # macOS 和 Linux（官方 brew formula，更新频率较低）
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # 任意系统
+-nix run nixpkgs#opencode           # 或用 github:anomalyco/opencode 获取最新 dev 分支
+-```
+-
+-> [!TIP]
+-> 安装前请先移除 0.1.x 之前的旧版本。
+-
+-### 桌面应用程序 (BETA)
+-
+-OpenCode 也提供桌面版应用。可直接从 [发布页 (releases page)](https://github.com/anomalyco/opencode/releases) 或 [opencode.ai/download](https://opencode.ai/download) 下载。
+-
+-| 平台                  | 下载文件                              |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`、`.rpm` 或 AppImage            |
+-
+-```bash
+-# macOS (Homebrew Cask)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### 安装目录
+-
+-安装脚本按照以下优先级决定安装路径：
+-
+-1. `$OPENCODE_INSTALL_DIR` - 自定义安装目录
+-2. `$XDG_BIN_DIR` - 符合 XDG 基础目录规范的路径
+-3. `$HOME/bin` - 如果存在或可创建的用户二进制目录
+-4. `$HOME/.opencode/bin` - 默认备用路径
+-
+-```bash
+-# 示例
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agents
+-
+-OpenCode 内置两种 Agent，可用 `Tab` 键快速切换：
+-
+-- **build** - 默认模式，具备完整权限，适合开发工作
+-- **plan** - 只读模式，适合代码分析与探索
+-  - 默认拒绝修改文件
+-  - 运行 bash 命令前会询问
+-  - 便于探索未知代码库或规划改动
+-
+-另外还包含一个 **general** 子 Agent，用于复杂搜索和多步任务，内部使用，也可在消息中输入 `@general` 调用。
+-
+-了解更多 [Agents](https://opencode.ai/docs/agents) 相关信息。
+-
+-### 文档
+-
+-更多配置说明请查看我们的 [**官方文档**](https://opencode.ai/docs)。
+-
+-### 参与贡献
+-
+-如有兴趣贡献代码，请在提交 PR 前阅读 [贡献指南 (Contributing Docs)](./CONTRIBUTING.md)。
+-
+-### 基于 OpenCode 进行开发
+-
+-如果你在项目名中使用了 “opencode”（如 “opencode-dashboard” 或 “opencode-mobile”），请在 README 里注明该项目不是 OpenCode 团队官方开发，且不存在隶属关系。
+-
+-### 常见问题 (FAQ)
+-
+-#### 这和 Claude Code 有什么不同？
+-
+-功能上很相似，关键差异：
+-
+-- 100% 开源。
+-- 不绑定特定提供商。推荐使用 [OpenCode Zen](https://opencode.ai/zen) 的模型，但也可搭配 Claude、OpenAI、Google 甚至本地模型。模型迭代会缩小差异、降低成本，因此保持 provider-agnostic 很重要。
+-- 内置 LSP 支持。
+-- 聚焦终端界面 (TUI)。OpenCode 由 Neovim 爱好者和 [terminal.shop](https://terminal.shop) 的创建者打造，会持续探索终端的极限。
+-- 客户端/服务器架构。可在本机运行，同时用移动设备远程驱动。TUI 只是众多潜在客户端之一。
+-
+----
+-
+-**加入我们的社区** [飞书](https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=738j8655-cd59-4633-a30a-1124e0096789&qr_code=true) | [X.com](https://x.com/opencode)
+diff --git a/README.zht.md b/README.zht.md
+deleted file mode 100644
+index 7ef51d8fdda1946e0992df83bab81ecd90dda223..0000000000000000000000000000000000000000
+--- a/README.zht.md
++++ /dev/null
+@@ -1,140 +0,0 @@
+-<p align="center">
+-  <a href="https://opencode.ai">
+-    <picture>
+-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+-    </picture>
+-  </a>
+-</p>
+-<p align="center">開源的 AI Coding Agent。</p>
+-<p align="center">
+-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+-</p>
+-
+-<p align="center">
+-  <a href="README.md">English</a> |
+-  <a href="README.zh.md">简体中文</a> |
+-  <a href="README.zht.md">繁體中文</a> |
+-  <a href="README.ko.md">한국어</a> |
+-  <a href="README.de.md">Deutsch</a> |
+-  <a href="README.es.md">Español</a> |
+-  <a href="README.fr.md">Français</a> |
+-  <a href="README.it.md">Italiano</a> |
+-  <a href="README.da.md">Dansk</a> |
+-  <a href="README.ja.md">日本語</a> |
+-  <a href="README.pl.md">Polski</a> |
+-  <a href="README.ru.md">Русский</a> |
+-  <a href="README.bs.md">Bosanski</a> |
+-  <a href="README.ar.md">العربية</a> |
+-  <a href="README.no.md">Norsk</a> |
+-  <a href="README.br.md">Português (Brasil)</a> |
+-  <a href="README.th.md">ไทย</a> |
+-  <a href="README.tr.md">Türkçe</a> |
+-  <a href="README.uk.md">Українська</a> |
+-  <a href="README.bn.md">বাংলা</a> |
+-  <a href="README.gr.md">Ελληνικά</a> |
+-  <a href="README.vi.md">Tiếng Việt</a>
+-</p>
+-
+-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+-
+----
+-
+-### 安裝
+-
+-```bash
+-# 直接安裝 (YOLO)
+-curl -fsSL https://opencode.ai/install | bash
+-
+-# 套件管理員
+-npm i -g opencode-ai@latest        # 也可使用 bun/pnpm/yarn
+-scoop install opencode             # Windows
+-choco install opencode             # Windows
+-brew install anomalyco/tap/opencode # macOS 與 Linux（推薦，始終保持最新）
+-brew install opencode              # macOS 與 Linux（官方 brew formula，更新頻率較低）
+-sudo pacman -S opencode            # Arch Linux (Stable)
+-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+-mise use -g opencode               # 任何作業系統
+-nix run nixpkgs#opencode           # 或使用 github:anomalyco/opencode 以取得最新開發分支
+-```
+-
+-> [!TIP]
+-> 安裝前請先移除 0.1.x 以前的舊版本。
+-
+-### 桌面應用程式 (BETA)
+-
+-OpenCode 也提供桌面版應用程式。您可以直接從 [發佈頁面 (releases page)](https://github.com/anomalyco/opencode/releases) 或 [opencode.ai/download](https://opencode.ai/download) 下載。
+-
+-| 平台                  | 下載連結                              |
+-| --------------------- | ------------------------------------- |
+-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+-| Windows               | `opencode-desktop-windows-x64.exe`    |
+-| Linux                 | `.deb`, `.rpm`, 或 AppImage           |
+-
+-```bash
+-# macOS (Homebrew Cask)
+-brew install --cask opencode-desktop
+-# Windows (Scoop)
+-scoop bucket add extras; scoop install extras/opencode-desktop
+-```
+-
+-#### 安裝目錄
+-
+-安裝腳本會依據以下優先順序決定安裝路徑：
+-
+-1. `$OPENCODE_INSTALL_DIR` - 自定義安裝目錄
+-2. `$XDG_BIN_DIR` - 符合 XDG 基礎目錄規範的路徑
+-3. `$HOME/bin` - 標準使用者執行檔目錄 (若存在或可建立)
+-4. `$HOME/.opencode/bin` - 預設備用路徑
+-
+-```bash
+-# 範例
+-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+-```
+-
+-### Agents
+-
+-OpenCode 內建了兩種 Agent，您可以使用 `Tab` 鍵快速切換。
+-
+-- **build** - 預設模式，具備完整權限的 Agent，適用於開發工作。
+-- **plan** - 唯讀模式，適用於程式碼分析與探索。
+-  - 預設禁止修改檔案。
+-  - 執行 bash 指令前會詢問權限。
+-  - 非常適合用來探索陌生的程式碼庫或規劃變更。
+-
+-此外，OpenCode 還包含一個 **general** 子 Agent，用於處理複雜搜尋與多步驟任務。此 Agent 供系統內部使用，亦可透過在訊息中輸入 `@general` 來呼叫。
+-
+-了解更多關於 [Agents](https://opencode.ai/docs/agents) 的資訊。
+-
+-### 線上文件
+-
+-關於如何設定 OpenCode 的詳細資訊，請參閱我們的 [**官方文件**](https://opencode.ai/docs)。
+-
+-### 參與貢獻
+-
+-如果您有興趣參與 OpenCode 的開發，請在提交 Pull Request 前先閱讀我們的 [貢獻指南 (Contributing Docs)](./CONTRIBUTING.md)。
+-
+-### 基於 OpenCode 進行開發
+-
+-如果您正在開發與 OpenCode 相關的專案，並在名稱中使用了 "opencode"（例如 "opencode-dashboard" 或 "opencode-mobile"），請在您的 README 中加入聲明，說明該專案並非由 OpenCode 團隊開發，且與我們沒有任何隸屬關係。
+-
+-### 常見問題 (FAQ)
+-
+-#### 這跟 Claude Code 有什麼不同？
+-
+-在功能面上與 Claude Code 非常相似。以下是關鍵差異：
+-
+-- 100% 開源。
+-- 不綁定特定的服務提供商。雖然我們推薦使用透過 [OpenCode Zen](https://opencode.ai/zen) 提供的模型，但 OpenCode 也可搭配 Claude, OpenAI, Google 甚至本地模型使用。隨著模型不斷演進，彼此間的差距會縮小且價格會下降，因此具備「不限廠商 (provider-agnostic)」的特性至關重要。
+-- 內建 LSP (語言伺服器協定) 支援。
+-- 專注於終端機介面 (TUI)。OpenCode 由 Neovim 愛好者與 [terminal.shop](https://terminal.shop) 的創作者打造。我們將不斷挑戰終端機介面的極限。
+-- 客戶端/伺服器架構 (Client/Server Architecture)。這讓 OpenCode 能夠在您的電腦上運行的同時，由行動裝置進行遠端操控。這意味著 TUI 前端只是眾多可能的客戶端之一。
+-
+----
+-
+-**加入我們的社群** [飞书](https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=738j8655-cd59-4633-a30a-1124e0096789&qr_code=true) | [X.com](https://x.com/opencode)
+diff --git a/packages/core/src/flag/flag.ts b/packages/core/src/flag/flag.ts
+index 0daae55800c16773ef70d2f1457018ea7b1c08d8..0ece8dafa5ace0a455fe164fd1d639e707af44ed 100644
+--- a/packages/core/src/flag/flag.ts
++++ b/packages/core/src/flag/flag.ts
+@@ -94,7 +94,9 @@ export const Flag = {
+   OPENCODE_EXPERIMENTAL_HTTPAPI:
+     truthy("OPENCODE_EXPERIMENTAL_HTTPAPI") ||
+     (!falsy("OPENCODE_EXPERIMENTAL_HTTPAPI") && HTTPAPI_DEFAULT_ON_CHANNELS.has(InstallationChannel)),
+-  OPENCODE_EXPERIMENTAL_WORKSPACES: OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_WORKSPACES"),
++  // Hard-disabled locally to prevent remote workspace sync from being enabled
++  // by any environment or experimental umbrella flag.
++  OPENCODE_EXPERIMENTAL_WORKSPACES: false,
+   OPENCODE_EXPERIMENTAL_EVENT_SYSTEM: OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_EVENT_SYSTEM"),
+ 
+   // Evaluated at access time (not module load) because tests, the CLI, and
+diff --git a/packages/opencode/src/cli/cmd/tui/context/exit.tsx b/packages/opencode/src/cli/cmd/tui/context/exit.tsx
+index 205025f867de8161736195c4b32c6266618c4314..53efa0a2e8c76af958c0566609ab0338ca09652f 100644
+--- a/packages/opencode/src/cli/cmd/tui/context/exit.tsx
++++ b/packages/opencode/src/cli/cmd/tui/context/exit.tsx
+@@ -54,7 +54,12 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
+         message: store,
+       },
+     )
+-    process.on("SIGHUP", () => exit())
++    const handleSignal = () => {
++      void exit()
++    }
++    process.on("SIGHUP", handleSignal)
++    process.on("SIGINT", handleSignal)
++    process.on("SIGTERM", handleSignal)
+     return exit
+   },
+ })
+diff --git a/packages/opencode/src/cli/cmd/tui/feature-plugins/sidebar/context.tsx b/packages/opencode/src/cli/cmd/tui/feature-plugins/sidebar/context.tsx
+index 9ffe77979150118963c67b5c25a7330f1a460724..048ba1c04b66965cc2f29d951364ed4cae0077cd 100644
+--- a/packages/opencode/src/cli/cmd/tui/feature-plugins/sidebar/context.tsx
++++ b/packages/opencode/src/cli/cmd/tui/feature-plugins/sidebar/context.tsx
+@@ -7,12 +7,93 @@ const id = "internal:sidebar-context"
+ const money = new Intl.NumberFormat("en-US", {
+   style: "currency",
+   currency: "USD",
++  minimumFractionDigits: 4,
++  maximumFractionDigits: 4,
+ })
+ 
++function formatCompactTokens(value: number) {
++  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(value >= 10_000_000_000 ? 0 : 1)}B`
++  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`
++  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`
++  return value.toString()
++}
++
++function formatAlignedRow(left: string, right: string, width: number) {
++  return `${left.padEnd(width, " ")} ${right}`
++}
++
++function formatTokensPerSecond(value: number) {
++  if (value >= 100) return `${value.toFixed(1)} t/s`
++  if (value >= 10) return `${value.toFixed(2)} t/s`
++  return `${value.toFixed(3)} t/s`
++}
++
+ function View(props: { api: TuiPluginApi; session_id: string }) {
+   const theme = () => props.api.theme.current
+   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
++  const parts = createMemo(() =>
++    msg().flatMap((item) =>
++      props.api.state.part(item.id).map((part) => ({
++        message: item,
++        part,
++      })),
++    ),
++  )
+   const cost = createMemo(() => msg().reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0))
++  const total = createMemo(() =>
++    msg()
++      .filter((item): item is AssistantMessage => item.role === "assistant")
++      .reduce(
++        (sum, item) => ({
++          input: sum.input + item.tokens.input,
++          output: sum.output + item.tokens.output,
++          reasoning: sum.reasoning + item.tokens.reasoning,
++          cache_read: sum.cache_read + item.tokens.cache.read,
++          cache_write: sum.cache_write + item.tokens.cache.write,
++        }),
++        {
++          input: 0,
++          output: 0,
++          reasoning: 0,
++          cache_read: 0,
++          cache_write: 0,
++        },
++      ),
++  )
++  const extras = createMemo(() => {
++    const toolCount = parts().filter(({ part }) => part.type === "tool").length
++    const compactionCount = parts().filter(({ part }) => part.type === "compaction").length
++    const generation = msg()
++      .filter((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0 && !!item.time.completed)
++      .reduce(
++        (sum, item) => {
++          const completedAt = item.time.completed
++          if (!completedAt) return sum
++          const startedAt = props.api.state
++            .part(item.id)
++            .flatMap((part) => {
++              if (part.type === "text" && part.time?.start) return [part.time.start]
++              if (part.type === "reasoning" && part.time?.start) return [part.time.start]
++              return []
++            })
++            .sort((a, b) => a - b)[0]
++          if (!startedAt) return sum
++          const duration = completedAt - startedAt
++          if (duration <= 0) return sum
++          return {
++            output: sum.output + item.tokens.output,
++            duration: sum.duration + duration,
++          }
++        },
++        { output: 0, duration: 0 },
++      )
++
++    return {
++      tools: `tools ${toolCount}`,
++      compact: `compact ${compactionCount}`,
++      avg: generation.output > 0 && generation.duration > 0 ? `avg ${formatTokensPerSecond(generation.output / (generation.duration / 1000))}` : "avg 0 t/s",
++    }
++  })
+ 
+   const state = createMemo(() => {
+     const last = msg().findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
+@@ -31,14 +112,44 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
+       percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null,
+     }
+   })
++  const totalStats = createMemo(() => {
++    const value = total()
++    const tokens = value.input + value.output + value.reasoning + value.cache_read + value.cache_write
++    const left = {
++      total: `total ${formatCompactTokens(tokens)}`,
++      input: value.input > 0 ? `in ${formatCompactTokens(value.input)}` : "in 0",
++    }
++    const width = Math.max(left.total.length, left.input.length) + 1
++    return {
++      total: left.total,
++      cached:
++        value.cache_read + value.cache_write > 0
++          ? `cached ${formatCompactTokens(value.cache_read + value.cache_write)}`
++          : "cached 0",
++      input: left.input,
++      output: value.output > 0 ? `out ${formatCompactTokens(value.output)}` : "out 0",
++      width,
++    }
++  })
+ 
+   return (
+     <box>
+       <text fg={theme().text}>
+-        <b>Context</b>
++        <b>Metrics</b>
++      </text>
++      <text fg={theme().textMuted}>
++        {formatCompactTokens(state().tokens)} tokens ({state().percent ?? 0}% used)
++      </text>
++      <text fg={theme().textMuted} wrapMode="none">
++        {formatAlignedRow(totalStats().input, totalStats().output, totalStats().width)}
++      </text>
++      <text fg={theme().textMuted} wrapMode="none">
++        {formatAlignedRow(totalStats().total, totalStats().cached, totalStats().width)}
++      </text>
++      <text fg={theme().textMuted} wrapMode="none">
++        {formatAlignedRow(extras().tools, extras().compact, totalStats().width)}
+       </text>
+-      <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
+-      <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
++      <text fg={theme().textMuted}>{extras().avg}</text>
+       <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+     </box>
+   )
+diff --git a/packages/opencode/src/cli/cmd/tui/routes/session/index.tsx b/packages/opencode/src/cli/cmd/tui/routes/session/index.tsx
+index d43edd2dd5d7f847add920130d25c17de7c6a9e3..41e29e0d94c13f347475c9a835ca4fbeace47ef9 100644
+--- a/packages/opencode/src/cli/cmd/tui/routes/session/index.tsx
++++ b/packages/opencode/src/cli/cmd/tui/routes/session/index.tsx
+@@ -6,6 +6,7 @@ import {
+   createSignal,
+   For,
+   Match,
++  onCleanup,
+   on,
+   onMount,
+   Show,
+@@ -90,12 +91,25 @@ import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
+ import { DialogGoUpsell } from "../../component/dialog-go-upsell"
+ import { SessionRetry } from "@/session/retry"
+ import { getRevertDiffFiles } from "../../util/revert-diff"
++import { Token } from "@/util/token"
++import * as SystemPrompt from "@/session/system"
+ 
+ addDefaultParsers(parsers.parsers)
+ 
+ const GO_UPSELL_LAST_SEEN_AT = "go_upsell_last_seen_at"
+ const GO_UPSELL_DONT_SHOW = "go_upsell_dont_show"
+ const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
++const STREAM_RATE_WINDOW = 5000
++const STREAM_RATE_SHORT_WINDOW = 1200
++const STREAM_RATE_MEDIUM_WINDOW = 2500
++const STREAM_RATE_LONG_WINDOW = 5000
++const STREAM_RATE_UPDATE_INTERVAL = 250
++const STREAM_RATE_LOCK_THRESHOLD = 6
++const STREAM_RATE_RISE_SMOOTHING = 0.35
++const STREAM_RATE_FALL_SMOOTHING = 0.08
++const STREAM_RATE_MAX_RISE = 6
++const STREAM_RATE_MAX_FALL = 1.2
++const PROMPT_RATE_SMOOTHING = 0.2
+ 
+ const context = createContext<{
+   width: number
+@@ -1355,19 +1369,253 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
+   const local = useLocal()
+   const { theme } = useTheme()
+   const sync = useSync()
++  const event = useEvent()
++  const [now, setNow] = createSignal(Date.now())
++  const [firstTokenAt, setFirstTokenAt] = createSignal<number>()
++  const [responseStartedAt, setResponseStartedAt] = createSignal<number>()
++  const [textStartedAt, setTextStartedAt] = createSignal<number>()
++  const [streamSamples, setStreamSamples] = createSignal<{ time: number; chars: number }[]>([])
++  const [smoothedLiveTokensPerSecond, setSmoothedLiveTokensPerSecond] = createSignal(0)
++  const [latestLiveTokensPerSecond, setLatestLiveTokensPerSecond] = createSignal(0)
++  const [smoothedPromptTokensPerSecond, setSmoothedPromptTokensPerSecond] = createSignal(0)
+   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
++  const contextMessages = createMemo(() => {
++    const index = messages().findIndex((message) => message.id === props.message.parentID)
++    if (index < 0) return []
++    return messages().slice(0, index + 1)
++  })
+   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
++  const providerModel = createMemo(() => sync.data.provider.find((item) => item.id === props.message.providerID)?.models[props.message.modelID])
++  const parentUserMessage = createMemo(() =>
++    messages().find((message): message is UserMessage => message.role === "user" && message.id === props.message.parentID),
++  )
+ 
+   const final = createMemo(() => {
+     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
+   })
+ 
++  createEffect(() => {
++    if (final()) return
++    if (!props.last) return
++    const timer = setInterval(() => setNow(Date.now()), STREAM_RATE_UPDATE_INTERVAL)
++    onCleanup(() => clearInterval(timer))
++  })
++
++  const startedAt = createMemo(() => {
++    const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
++    return user?.time?.created
++  })
++
+   const duration = createMemo(() => {
++    if (!startedAt()) return 0
++    const end = final() ? props.message.time.completed : now()
++    if (!end) return 0
++    return Math.max(0, end - startedAt()!)
++  })
++
++  const estimatedOutputTokens = createMemo(() =>
++    props.parts
++      .filter((part): part is TextPart => part.type === "text")
++      .reduce((total, part) => total + Token.estimate(part.text), 0),
++  )
++
++  const estimatedPromptTokens = createMemo(() =>
++    contextMessages()
++      .flatMap((message) => sync.data.part[message.id] ?? [])
++      .map((part) => estimatePromptPartTokens(part))
++      .reduce((total, value) => total + value, 0) +
++    Token.estimate(
++      [
++        ...(providerModel() ? SystemPrompt.provider(providerModel() as Parameters<typeof SystemPrompt.provider>[0]) : []),
++        parentUserMessage()?.system ?? "",
++      ]
++        .filter(Boolean)
++        .join("\n"),
++    ),
++  )
++
++  event.on("session.next.reasoning.started", (evt) => {
++    if (!props.last) return
++    if (final()) return
++    if (evt.properties.sessionID !== props.message.sessionID) return
++    if (responseStartedAt()) return
++    setResponseStartedAt(evt.properties.timestamp)
++    setNow(evt.properties.timestamp)
++  })
++
++  event.on("session.next.text.started", (evt) => {
++    if (!props.last) return
++    if (final()) return
++    if (evt.properties.sessionID !== props.message.sessionID) return
++    if (!responseStartedAt()) setResponseStartedAt(evt.properties.timestamp)
++    if (!textStartedAt()) setTextStartedAt(evt.properties.timestamp)
++    setNow(evt.properties.timestamp)
++  })
++
++  event.on("message.part.delta", (evt) => {
++    if (evt.properties.messageID !== props.message.id) return
++    if (evt.properties.field !== "text") return
++    const time = Date.now()
++    setNow(time)
++    if (!responseStartedAt()) setResponseStartedAt(time)
++    if (!textStartedAt()) setTextStartedAt(time)
++    if (!firstTokenAt()) setFirstTokenAt(time)
++    setStreamSamples((samples) => [
++      ...samples.filter((sample) => time - sample.time <= STREAM_RATE_WINDOW),
++      { time, chars: evt.properties.delta.length },
++    ])
++  })
++
++  const generationDuration = createMemo(() => {
++    const generationStartedAt =
++      textStartedAt() ??
++      firstTokenAt() ??
++      props.parts
++        .flatMap((part) => {
++          if (part.type === "text" && part.time?.start) return [part.time.start]
++          return []
++        })
++        .sort((a, b) => a - b)[0]
++    if (!generationStartedAt) return 0
++    const end = final() ? props.message.time.completed : now()
++    if (!end) return 0
++    return Math.max(0, end - generationStartedAt)
++  })
++
++  const promptProcessingDuration = createMemo(() => {
++    if (!startedAt()) return 0
++    const end =
++      responseStartedAt() ??
++      firstTokenAt() ??
++      props.parts
++        .flatMap((part) => {
++          if (part.type === "text" && part.time?.start) return [part.time.start]
++          if (part.type === "reasoning" && part.time?.start) return [part.time.start]
++          return []
++        })
++        .sort((a, b) => a - b)[0] ??
++      now()
++    return Math.max(0, end - startedAt()!)
++  })
++
++  const promptTokensPerSecond = createMemo(() => {
++    if (estimatedPromptTokens() <= 0) return 0
++    const seconds = Math.max(promptProcessingDuration() / 1000, 0.1)
++    return estimatedPromptTokens() / seconds
++  })
++
++  const rateForWindow = (window: number) => {
++    const current = now()
++    const recent = streamSamples().filter((sample) => current - sample.time <= window)
++    if (recent.length === 0) return 0
++    const chars = recent.reduce((total, sample) => total + sample.chars, 0)
++    const started = recent[0]?.time
++    const ended = recent[recent.length - 1]?.time
++    if (!started || !ended) return 0
++    const seconds = Math.max((ended - started) / 1000, 0.1)
++    return (chars / 4) / seconds
++  }
++
++  const averageLiveTokensPerSecond = createMemo(() => {
++    if (final()) return 0
++    if (estimatedOutputTokens() <= 0) return 0
++    if (generationDuration() <= 0) return 0
++    return estimatedOutputTokens() / (generationDuration() / 1000)
++  })
++
++  const liveTokensPerSecond = createMemo(() => {
++    if (final()) return 0
++    const short = rateForWindow(STREAM_RATE_SHORT_WINDOW)
++    const medium = rateForWindow(STREAM_RATE_MEDIUM_WINDOW)
++    const long = rateForWindow(STREAM_RATE_LONG_WINDOW)
++    const average = averageLiveTokensPerSecond()
++    const weighted = average * 0.45 + short * 0.15 + medium * 0.2 + long * 0.2
++    const floor = Math.max(average * 0.9, long, medium * 0.95)
++    return Math.max(weighted, floor)
++  })
++
++  createEffect(() => {
++    setLatestLiveTokensPerSecond(liveTokensPerSecond())
++  })
++
++  createEffect(() => {
++    if (responseStartedAt() || firstTokenAt()) {
++      setSmoothedPromptTokensPerSecond(0)
++      return
++    }
++    const next = promptTokensPerSecond()
++    const prev = smoothedPromptTokensPerSecond()
++    if (next <= 0) {
++      setSmoothedPromptTokensPerSecond(0)
++      return
++    }
++    if (prev <= 0) {
++      setSmoothedPromptTokensPerSecond(next)
++      return
++    }
++    setSmoothedPromptTokensPerSecond(prev + (next - prev) * PROMPT_RATE_SMOOTHING)
++  })
++
++  createEffect(() => {
++    if (final()) return
++    if (!props.last) return
++    const timer = setInterval(() => {
++      const next = latestLiveTokensPerSecond()
++      const prev = smoothedLiveTokensPerSecond()
++      if (next <= 0) {
++        setSmoothedLiveTokensPerSecond(0)
++        return
++      }
++      if (prev <= 0) {
++        setSmoothedLiveTokensPerSecond(next)
++        return
++      }
++      if (Math.abs(next - prev) >= STREAM_RATE_LOCK_THRESHOLD) {
++        setSmoothedLiveTokensPerSecond(next)
++        return
++      }
++      const rising = next > prev
++      const smoothed = prev + (next - prev) * (rising ? STREAM_RATE_RISE_SMOOTHING : STREAM_RATE_FALL_SMOOTHING)
++      const delta = smoothed - prev
++      const limited =
++        delta > STREAM_RATE_MAX_RISE
++          ? prev + STREAM_RATE_MAX_RISE
++          : delta < -STREAM_RATE_MAX_FALL
++            ? prev - STREAM_RATE_MAX_FALL
++            : smoothed
++      setSmoothedLiveTokensPerSecond(limited)
++    }, STREAM_RATE_UPDATE_INTERVAL)
++    onCleanup(() => clearInterval(timer))
++  })
++
++  const finalTokensPerSecond = createMemo(() => {
+     if (!final()) return 0
+-    if (!props.message.time.completed) return 0
+-    const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
+-    if (!user || !user.time) return 0
+-    return props.message.time.completed - user.time.created
++    if (generationDuration() <= 0) return 0
++    if (props.message.tokens.output <= 0) return 0
++    return props.message.tokens.output / (generationDuration() / 1000)
++  })
++
++  const metrics = createMemo(() => {
++    if (final()) {
++      return [
++        props.message.tokens.input > 0 ? `${Locale.number(props.message.tokens.input)} in` : "",
++        props.message.tokens.output > 0 ? `${Locale.number(props.message.tokens.output)} out` : "",
++        finalTokensPerSecond() > 0 ? formatTokensPerSecond(finalTokensPerSecond()) : "",
++        duration() > 0 ? Locale.duration(duration()) : "",
++      ].filter(Boolean)
++    }
++
++    if (!responseStartedAt()) {
++      return [
++        `↓ ${formatTokensPerSecond(smoothedPromptTokensPerSecond())}`,
++        duration() > 0 ? Locale.duration(duration()) : "",
++      ].filter(Boolean)
++    }
++
++    return [
++      `↑ ${formatTokensPerSecond(smoothedLiveTokensPerSecond())}`,
++      duration() > 0 ? Locale.duration(duration()) : "",
++    ].filter(Boolean)
+   })
+ 
+   const keybind = useKeybind()
+@@ -1427,8 +1675,8 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
+               </span>{" "}
+               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
+               <span style={{ fg: theme.textMuted }}> · {model()}</span>
+-              <Show when={duration()}>
+-                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
++              <Show when={metrics().length > 0}>
++                <span style={{ fg: theme.textMuted }}> · {metrics().join(" · ")}</span>
+               </Show>
+               <Show when={props.message.error?.name === "MessageAbortedError"}>
+                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
+@@ -1441,6 +1689,29 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
+   )
+ }
+ 
++function formatTokensPerSecond(value: number) {
++  if (value >= 100) return `${value.toFixed(1)} t/s`
++  return `${value.toFixed(2)} t/s`
++}
++
++function estimatePromptPartTokens(part: Part) {
++  if (part.type === "text") return part.synthetic ? 0 : Token.estimate(part.text)
++  if (part.type === "reasoning") return Token.estimate(part.text)
++  if (part.type === "file") return Token.estimate(part.filename ?? part.mime ?? "file")
++  if (part.type === "agent") return Token.estimate(part.name)
++  if (part.type === "subtask") {
++    return Token.estimate([part.prompt, part.description, part.command].filter(Boolean).join("\n"))
++  }
++  if (part.type === "tool") {
++    const input = part.state.input ? Token.estimate(JSON.stringify(part.state.input)) : 0
++    const content =
++      part.state.status === "completed" || part.state.status === "error" ? Token.estimate(JSON.stringify(part.state)) : 0
++    return input + content
++  }
++  if (part.type === "retry") return Token.estimate(JSON.stringify(part.error))
++  return 0
++}
++
+ const PART_MAPPING = {
+   text: TextPart,
+   tool: ToolPart,
+diff --git a/packages/opencode/src/share/session.ts b/packages/opencode/src/share/session.ts
+index 7e4de204edb7dcd2772a7f65fade4e6313926dab..0bbeaf0a982d8a28503dc931865d263ca6b03650 100644
+--- a/packages/opencode/src/share/session.ts
++++ b/packages/opencode/src/share/session.ts
+@@ -1,9 +1,7 @@
+ import { Session } from "@/session/session"
+ import { SessionID } from "@/session/schema"
+ import { SyncEvent } from "@/sync"
+-import { Effect, Layer, Scope, Context } from "effect"
+-import { Config } from "@/config/config"
+-import { Flag } from "@opencode-ai/core/flag/flag"
++import { Effect, Layer, Context } from "effect"
+ import * as ShareNext from "./share-next"
+ 
+ export interface Interface {
+@@ -17,18 +15,13 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
+ export const layer = Layer.effect(
+   Service,
+   Effect.gen(function* () {
+-    const cfg = yield* Config.Service
+     const session = yield* Session.Service
+     const shareNext = yield* ShareNext.Service
+-    const scope = yield* Scope.Scope
+     const sync = yield* SyncEvent.Service
+ 
+     const share = Effect.fn("SessionShare.share")(function* (sessionID: SessionID) {
+-      const conf = yield* cfg.get()
+-      if (conf.share === "disabled") throw new Error("Sharing is disabled in configuration")
+-      const result = yield* shareNext.create(sessionID)
+-      yield* sync.run(Session.Event.Updated, { sessionID, info: { share: { url: result.url } } })
+-      return result
++      void sessionID
++      throw new Error("Sharing is permanently disabled")
+     })
+ 
+     const unshare = Effect.fn("SessionShare.unshare")(function* (sessionID: SessionID) {
+@@ -38,10 +31,6 @@ export const layer = Layer.effect(
+ 
+     const create = Effect.fn("SessionShare.create")(function* (input?: Session.CreateInput) {
+       const result = yield* session.create(input)
+-      if (result.parentID) return result
+-      const conf = yield* cfg.get()
+-      if (!(Flag.OPENCODE_AUTO_SHARE || conf.share === "auto")) return result
+-      yield* share(result.id).pipe(Effect.ignore, Effect.forkIn(scope))
+       return result
+     })
+ 
+@@ -52,7 +41,6 @@ export const layer = Layer.effect(
+ export const defaultLayer = layer.pipe(
+   Layer.provide(ShareNext.defaultLayer),
+   Layer.provide(Session.defaultLayer),
+-  Layer.provide(Config.defaultLayer),
+   Layer.provide(SyncEvent.defaultLayer),
+ )
+ 
