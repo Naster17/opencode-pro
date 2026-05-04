@@ -1,4 +1,4 @@
-import type { AssistantMessage, Message, Part, Provider } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Message, Part, Provider, Session } from "@opencode-ai/sdk/v2"
 
 export const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -24,22 +24,56 @@ export function formatTokensPerSecond(value: number) {
   return `${value.toFixed(3)} t/s`
 }
 
+export function formatUsageDuration(value: number) {
+  const minutes = Math.round(value / 60000)
+  if (minutes < 1) return "<1m"
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) {
+    const remain = minutes % 60
+    if (remain === 0) return `${hours}h`
+    return `${hours}h ${remain}m`
+  }
+  const days = Math.round(hours / 24)
+  const remain = hours % 24
+  if (remain === 0) return `${days}d`
+  return `${days}d ${remain}h`
+}
+
+function clampDuration(start: number, end: number, rangeStart?: number) {
+  const from = rangeStart ? Math.max(start, rangeStart) : start
+  const to = Math.max(from, end)
+  return to - from
+}
+
+function modelLabel(providers: readonly Provider[], providerID: string, modelID: string) {
+  return providers.find((item) => item.id === providerID)?.models[modelID]?.name ?? modelID
+}
+
 export function summarizeUsage(
   sessions: {
+    session?: Session
     messages: readonly Message[]
     getParts: (messageID: string) => readonly Part[]
+    additions?: number
+    deletions?: number
   }[],
   providers: readonly Provider[],
+  options: {
+    start?: number
+  } = {},
 ) {
   const totals = sessions.reduce(
     (sum, session) => {
-      const parts = session.messages.flatMap((message) =>
+      const active = session.session ? (options.start ? session.session.time.updated >= options.start : true) : true
+      const messages = options.start ? session.messages.filter((item) => item.time.created >= options.start!) : session.messages
+      const parts = messages.flatMap((message) =>
         session.getParts(message.id).map((part) => ({
           message,
           part,
         })),
       )
-      const assistants = session.messages.filter((item): item is AssistantMessage => item.role === "assistant")
+      const assistants = messages.filter((item): item is AssistantMessage => item.role === "assistant")
       const generation = assistants
         .filter((item) => item.tokens.output > 0 && !!item.time.completed)
         .reduce(
@@ -64,6 +98,7 @@ export function summarizeUsage(
           },
           { output: 0, duration: 0 },
         )
+      const cost = assistants.reduce((acc, item) => acc + (item.cost ?? 0), 0)
       const last = assistants.findLast((item) => item.tokens.output > 0)
       const context_tokens = last
         ? last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
@@ -76,6 +111,39 @@ export function summarizeUsage(
               return Math.round((context_tokens / limit) * 100)
             })()
           : null
+      const model_usage = assistants.reduce(
+        (acc, item) => {
+          const key = `${item.providerID}:${item.modelID}`
+          const tokens =
+            item.tokens.input + item.tokens.output + item.tokens.reasoning + item.tokens.cache.read + item.tokens.cache.write
+          const prev = acc.get(key) ?? {
+            providerID: item.providerID,
+            modelID: item.modelID,
+            name: modelLabel(providers, item.providerID, item.modelID),
+            count: 0,
+            tokens: 0,
+            cost: 0,
+          }
+          acc.set(key, {
+            ...prev,
+            count: prev.count + 1,
+            tokens: prev.tokens + tokens,
+            cost: prev.cost + (item.cost ?? 0),
+          })
+          return acc
+        },
+        new Map<
+          string,
+          {
+            providerID: string
+            modelID: string
+            name: string
+            count: number
+            tokens: number
+            cost: number
+          }
+        >(),
+      )
 
       return {
         input: sum.input + assistants.reduce((acc, item) => acc + item.tokens.input, 0),
@@ -83,7 +151,7 @@ export function summarizeUsage(
         reasoning: sum.reasoning + assistants.reduce((acc, item) => acc + item.tokens.reasoning, 0),
         cache_read: sum.cache_read + assistants.reduce((acc, item) => acc + item.tokens.cache.read, 0),
         cache_write: sum.cache_write + assistants.reduce((acc, item) => acc + item.tokens.cache.write, 0),
-        cost: sum.cost + assistants.reduce((acc, item) => acc + item.cost, 0),
+        cost: sum.cost + cost,
         tools: sum.tools + parts.filter(({ part }) => part.type === "tool").length,
         compact: sum.compact + parts.filter(({ part }) => part.type === "compaction").length,
         generation_output: sum.generation_output + generation.output,
@@ -91,6 +159,15 @@ export function summarizeUsage(
         context_tokens: sum.context_tokens + context_tokens,
         context_percent_total: sum.context_percent_total + (context_percent ?? 0),
         context_percent_count: sum.context_percent_count + (context_percent === null ? 0 : 1),
+        sessions: sum.sessions + (active ? 1 : 0),
+        additions: sum.additions + (active ? (session.additions ?? session.session?.summary?.additions ?? 0) : 0),
+        deletions: sum.deletions + (active ? (session.deletions ?? session.session?.summary?.deletions ?? 0) : 0),
+        duration:
+          sum.duration +
+          (active && session.session
+            ? clampDuration(session.session.time.created, session.session.time.updated, options.start)
+            : 0),
+        model_usage: [...sum.model_usage, ...model_usage.values()],
       }
     },
     {
@@ -107,12 +184,56 @@ export function summarizeUsage(
       context_tokens: 0,
       context_percent_total: 0,
       context_percent_count: 0,
+      sessions: 0,
+      additions: 0,
+      deletions: 0,
+      duration: 0,
+      model_usage: [] as {
+        providerID: string
+        modelID: string
+        name: string
+        count: number
+        tokens: number
+        cost: number
+      }[],
     },
   )
   const tokens = totals.input + totals.output + totals.reasoning + totals.cache_read + totals.cache_write
   const average_context_percent = totals.context_percent_count
     ? Math.round(totals.context_percent_total / totals.context_percent_count)
     : null
+  const popular_models = [...totals.model_usage]
+    .reduce(
+      (acc, item) => {
+        const prev = acc.get(`${item.providerID}:${item.modelID}`)
+        if (!prev) {
+          acc.set(`${item.providerID}:${item.modelID}`, item)
+          return acc
+        }
+        acc.set(`${item.providerID}:${item.modelID}`, {
+          ...prev,
+          count: prev.count + item.count,
+          tokens: prev.tokens + item.tokens,
+          cost: prev.cost + item.cost,
+        })
+        return acc
+      },
+      new Map<
+        string,
+        {
+          providerID: string
+          modelID: string
+          name: string
+          count: number
+          tokens: number
+          cost: number
+        }
+      >(),
+    )
+    .values()
+    .toArray()
+    .toSorted((a, b) => b.count - a.count || b.tokens - a.tokens || b.cost - a.cost)
+    .slice(0, 3)
 
   return {
     tokens,
@@ -127,6 +248,12 @@ export function summarizeUsage(
     cached: totals.cache_read + totals.cache_write,
     context_tokens: totals.context_tokens,
     average_context_percent,
+    sessions: totals.sessions,
+    avg_spent_per_session: totals.sessions ? totals.cost / totals.sessions : 0,
+    duration: totals.duration,
+    additions: totals.additions,
+    deletions: totals.deletions,
+    popular_models,
     avg_tokens_per_second:
       totals.generation_output > 0 && totals.generation_duration > 0
         ? formatTokensPerSecond(totals.generation_output / (totals.generation_duration / 1000))
