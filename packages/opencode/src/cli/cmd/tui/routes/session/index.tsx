@@ -92,6 +92,7 @@ import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { Token } from "@/util/token"
+import * as SystemPrompt from "@/session/system"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1371,6 +1372,8 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const event = useEvent()
   const [now, setNow] = createSignal(Date.now())
   const [firstTokenAt, setFirstTokenAt] = createSignal<number>()
+  const [responseStartedAt, setResponseStartedAt] = createSignal<number>()
+  const [textStartedAt, setTextStartedAt] = createSignal<number>()
   const [streamSamples, setStreamSamples] = createSignal<{ time: number; chars: number }[]>([])
   const [smoothedLiveTokensPerSecond, setSmoothedLiveTokensPerSecond] = createSignal(0)
   const [latestLiveTokensPerSecond, setLatestLiveTokensPerSecond] = createSignal(0)
@@ -1382,6 +1385,10 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return messages().slice(0, index + 1)
   })
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
+  const providerModel = createMemo(() => sync.data.provider.find((item) => item.id === props.message.providerID)?.models[props.message.modelID])
+  const parentUserMessage = createMemo(() =>
+    messages().find((message): message is UserMessage => message.role === "user" && message.id === props.message.parentID),
+  )
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
@@ -1416,14 +1423,42 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     contextMessages()
       .flatMap((message) => sync.data.part[message.id] ?? [])
       .map((part) => estimatePromptPartTokens(part))
-      .reduce((total, value) => total + value, 0),
+      .reduce((total, value) => total + value, 0) +
+    Token.estimate(
+      [
+        ...(providerModel() ? SystemPrompt.provider(providerModel() as Parameters<typeof SystemPrompt.provider>[0]) : []),
+        parentUserMessage()?.system ?? "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    ),
   )
+
+  event.on("session.next.reasoning.started", (evt) => {
+    if (!props.last) return
+    if (final()) return
+    if (evt.properties.sessionID !== props.message.sessionID) return
+    if (responseStartedAt()) return
+    setResponseStartedAt(evt.properties.timestamp)
+    setNow(evt.properties.timestamp)
+  })
+
+  event.on("session.next.text.started", (evt) => {
+    if (!props.last) return
+    if (final()) return
+    if (evt.properties.sessionID !== props.message.sessionID) return
+    if (!responseStartedAt()) setResponseStartedAt(evt.properties.timestamp)
+    if (!textStartedAt()) setTextStartedAt(evt.properties.timestamp)
+    setNow(evt.properties.timestamp)
+  })
 
   event.on("message.part.delta", (evt) => {
     if (evt.properties.messageID !== props.message.id) return
     if (evt.properties.field !== "text") return
     const time = Date.now()
     setNow(time)
+    if (!responseStartedAt()) setResponseStartedAt(time)
+    if (!textStartedAt()) setTextStartedAt(time)
     if (!firstTokenAt()) setFirstTokenAt(time)
     setStreamSamples((samples) => [
       ...samples.filter((sample) => time - sample.time <= STREAM_RATE_WINDOW),
@@ -1433,11 +1468,11 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   const generationDuration = createMemo(() => {
     const generationStartedAt =
+      textStartedAt() ??
       firstTokenAt() ??
       props.parts
         .flatMap((part) => {
           if (part.type === "text" && part.time?.start) return [part.time.start]
-          if (part.type === "reasoning" && part.time?.start) return [part.time.start]
           return []
         })
         .sort((a, b) => a - b)[0]
@@ -1449,13 +1484,21 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   const promptProcessingDuration = createMemo(() => {
     if (!startedAt()) return 0
-    const end = firstTokenAt() ?? now()
+    const end =
+      responseStartedAt() ??
+      firstTokenAt() ??
+      props.parts
+        .flatMap((part) => {
+          if (part.type === "text" && part.time?.start) return [part.time.start]
+          if (part.type === "reasoning" && part.time?.start) return [part.time.start]
+          return []
+        })
+        .sort((a, b) => a - b)[0] ??
+      now()
     return Math.max(0, end - startedAt()!)
   })
 
   const promptTokensPerSecond = createMemo(() => {
-    if (final()) return 0
-    if (firstTokenAt()) return 0
     if (estimatedPromptTokens() <= 0) return 0
     const seconds = Math.max(promptProcessingDuration() / 1000, 0.1)
     return estimatedPromptTokens() / seconds
@@ -1467,18 +1510,27 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     if (recent.length === 0) return 0
     const chars = recent.reduce((total, sample) => total + sample.chars, 0)
     const started = recent[0]?.time
-    if (!started) return 0
-    const seconds = Math.max((current - started) / 1000, 0.1)
+    const ended = recent[recent.length - 1]?.time
+    if (!started || !ended) return 0
+    const seconds = Math.max((ended - started) / 1000, 0.1)
     return (chars / 4) / seconds
   }
+
+  const averageLiveTokensPerSecond = createMemo(() => {
+    if (final()) return 0
+    if (estimatedOutputTokens() <= 0) return 0
+    if (generationDuration() <= 0) return 0
+    return estimatedOutputTokens() / (generationDuration() / 1000)
+  })
 
   const liveTokensPerSecond = createMemo(() => {
     if (final()) return 0
     const short = rateForWindow(STREAM_RATE_SHORT_WINDOW)
     const medium = rateForWindow(STREAM_RATE_MEDIUM_WINDOW)
     const long = rateForWindow(STREAM_RATE_LONG_WINDOW)
-    const weighted = short * 0.25 + medium * 0.35 + long * 0.4
-    const floor = Math.max(long, medium * 0.9)
+    const average = averageLiveTokensPerSecond()
+    const weighted = average * 0.45 + short * 0.15 + medium * 0.2 + long * 0.2
+    const floor = Math.max(average * 0.9, long, medium * 0.95)
     return Math.max(weighted, floor)
   })
 
@@ -1487,7 +1539,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   })
 
   createEffect(() => {
-    if (firstTokenAt()) {
+    if (responseStartedAt() || firstTokenAt()) {
       setSmoothedPromptTokensPerSecond(0)
       return
     }
@@ -1553,7 +1605,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       ].filter(Boolean)
     }
 
-    if (!firstTokenAt()) {
+    if (!responseStartedAt()) {
       return [
         `↓ ${formatTokensPerSecond(smoothedPromptTokensPerSecond())}`,
         duration() > 0 ? Locale.duration(duration()) : "",
