@@ -1,5 +1,8 @@
 import type { AssistantMessage, Message, Part, Provider, Session } from "@opencode-ai/sdk/v2"
 
+const ACTIVE_EVENT_SPAN_MS = 30 * 1000
+const ACTIVE_IDLE_GAP_MS = 5 * 60 * 1000
+
 export const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -44,6 +47,62 @@ function clampDuration(start: number, end: number, rangeStart?: number) {
   const from = rangeStart ? Math.max(start, rangeStart) : start
   const to = Math.max(from, end)
   return to - from
+}
+
+function mergeActivityWindows(
+  windows: {
+    start: number
+    end: number
+  }[],
+) {
+  const sorted = windows
+    .filter((item) => item.end >= item.start)
+    .toSorted((a, b) => a.start - b.start || a.end - b.end)
+  if (sorted.length === 0) return []
+
+  return sorted.slice(1).reduce(
+    (acc, item) => {
+      const last = acc[acc.length - 1]
+      if (item.start <= last.end + ACTIVE_IDLE_GAP_MS) {
+        last.end = Math.max(last.end, item.end)
+        return acc
+      }
+      acc.push({ ...item })
+      return acc
+    },
+    [{ ...sorted[0] }],
+  )
+}
+
+function activityDuration(
+  messages: readonly Message[],
+  getParts: (messageID: string) => readonly Part[],
+  rangeStart?: number,
+) {
+  const windows = messages.flatMap((message) => {
+    const base =
+      message.role === "assistant"
+        ? [{ start: message.time.created, end: message.time.completed ?? message.time.created + ACTIVE_EVENT_SPAN_MS }]
+        : [{ start: message.time.created, end: message.time.created + ACTIVE_EVENT_SPAN_MS }]
+    const parts = getParts(message.id).flatMap((part) => {
+      if (part.type === "text" && part.time?.start)
+        return [{ start: part.time.start, end: part.time.end ?? part.time.start + ACTIVE_EVENT_SPAN_MS }]
+      if (part.type === "reasoning" && part.time?.start)
+        return [{ start: part.time.start, end: part.time.end ?? part.time.start + ACTIVE_EVENT_SPAN_MS }]
+      if (part.type === "tool" && "time" in part.state)
+        return [
+          {
+            start: part.state.time.start,
+            end: "end" in part.state.time ? part.state.time.end : part.state.time.start + ACTIVE_EVENT_SPAN_MS,
+          },
+        ]
+      if (part.type === "retry") return [{ start: part.time.created, end: part.time.created + ACTIVE_EVENT_SPAN_MS }]
+      return []
+    })
+    return [...base, ...parts]
+  })
+
+  return mergeActivityWindows(windows).reduce((sum, item) => sum + clampDuration(item.start, item.end, rangeStart), 0)
 }
 
 function modelLabel(providers: readonly Provider[], providerID: string, modelID: string) {
@@ -162,11 +221,7 @@ export function summarizeUsage(
         sessions: sum.sessions + (active ? 1 : 0),
         additions: sum.additions + (active ? (session.additions ?? session.session?.summary?.additions ?? 0) : 0),
         deletions: sum.deletions + (active ? (session.deletions ?? session.session?.summary?.deletions ?? 0) : 0),
-        duration:
-          sum.duration +
-          (active && session.session
-            ? clampDuration(session.session.time.created, session.session.time.updated, options.start)
-            : 0),
+        duration: sum.duration + activityDuration(messages, session.getParts, options.start),
         model_usage: [...sum.model_usage, ...model_usage.values()],
       }
     },

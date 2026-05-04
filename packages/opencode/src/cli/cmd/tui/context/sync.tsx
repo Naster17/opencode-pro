@@ -112,7 +112,28 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const kv = useKV()
 
     const fullSyncedSessions = new Set<string>()
+    const fullHistorySyncedSessions = new Set<string>()
     let syncedWorkspace = project.workspace.current()
+
+    async function fetchSessionMessages(sessionID: string, fullHistory?: boolean) {
+      if (!fullHistory) {
+        const result = await sdk.client.session.messages({ sessionID, limit: 100 })
+        return result.data ?? []
+      }
+
+      const all = []
+      let before: string | undefined
+
+      while (true) {
+        const result = await sdk.client.session.messages({ sessionID, limit: 200, before })
+        all.unshift(...(result.data ?? []))
+        const next = result.response.headers.get("x-next-cursor") ?? undefined
+        if (!next) break
+        before = next
+      }
+
+      return all.flat()
+    }
 
     function sessionListQuery(): { scope?: "project"; path?: string } {
       if (!kv.get("session_directory_filter_enabled", true)) return { scope: "project" }
@@ -269,7 +290,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
           )
           const updated = store.message[event.properties.info.sessionID]
-          if (updated.length > 100) {
+          if (!fullHistorySyncedSessions.has(event.properties.info.sessionID) && updated.length > 100) {
             const oldest = updated[0]
             batch(() => {
               setStore(
@@ -377,6 +398,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       const workspace = project.workspace.current()
       if (workspace !== syncedWorkspace) {
         fullSyncedSessions.clear()
+        fullHistorySyncedSessions.clear()
         syncedWorkspace = workspace
       }
       const projectPromise = project.sync()
@@ -512,11 +534,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (last.role === "user") return "working"
           return last.time.completed ? "idle" : "working"
         },
-        async sync(sessionID: string) {
-          if (fullSyncedSessions.has(sessionID)) return
+        async sync(sessionID: string, options?: { fullHistory?: boolean }) {
+          const fullHistory = options?.fullHistory ?? false
+          if (fullHistory && fullHistorySyncedSessions.has(sessionID)) return
+          if (!fullHistory && fullSyncedSessions.has(sessionID)) return
           const [session, messages, todo, diff] = await Promise.all([
             sdk.client.session.get({ sessionID }, { throwOnError: true }),
-            sdk.client.session.messages({ sessionID, limit: 100 }),
+            fetchSessionMessages(sessionID, fullHistory),
             sdk.client.session.todo({ sessionID }),
             sdk.client.session.diff({ sessionID }),
           ])
@@ -526,14 +550,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               if (match.found) draft.session[match.index] = session.data!
               if (!match.found) draft.session.splice(match.index, 0, session.data!)
               draft.todo[sessionID] = todo.data ?? []
-              draft.message[sessionID] = messages.data!.map((x) => x.info)
-              for (const message of messages.data!) {
+              draft.message[sessionID] = messages.map((x) => x.info)
+              for (const message of messages) {
                 draft.part[message.info.id] = message.parts
               }
               draft.session_diff[sessionID] = diff.data ?? []
             }),
           )
           fullSyncedSessions.add(sessionID)
+          if (fullHistory) fullHistorySyncedSessions.add(sessionID)
         },
       },
       bootstrap,

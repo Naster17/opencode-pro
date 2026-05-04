@@ -21,7 +21,9 @@ export function DialogUsage() {
   const [range, setRange] = createSignal(0)
 
   onMount(() => {
-    void Promise.allSettled(sync.data.session.map((item) => sync.session.sync(item.id))).finally(() => setLoading(false))
+    void Promise.allSettled(sync.data.session.map((item) => sync.session.sync(item.id, { fullHistory: true }))).finally(
+      () => setLoading(false),
+    )
   })
 
   useKeyboard((evt) => {
@@ -89,7 +91,7 @@ export function DialogUsage() {
       <Show when={loading()}>
         <text fg={theme.textMuted}>Loading sessions...</text>
       </Show>
-      <text fg={theme.textMuted}>{`time ${formatUsageDuration(usage().duration)}`}</text>
+      <text fg={theme.textMuted}>{`active ${formatUsageDuration(usage().duration)}`}</text>
       <text fg={theme.textMuted}>{`sessions ${usage().sessions}`}</text>
       <text wrapMode="none">
         <span style={{ fg: theme.textMuted }}>code </span>

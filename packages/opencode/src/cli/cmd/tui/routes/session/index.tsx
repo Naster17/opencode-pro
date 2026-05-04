@@ -224,7 +224,7 @@ export function Session() {
         } catch {}
       }
       editor.reconnect(result.data.directory)
-      await sync.session.sync(sessionID)
+      await sync.session.sync(sessionID, { fullHistory: true })
       if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
