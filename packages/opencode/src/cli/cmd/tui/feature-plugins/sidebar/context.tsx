@@ -16,6 +16,10 @@ function formatCompactTokens(value: number) {
   return value.toString()
 }
 
+function formatAlignedRow(left: string, right: string, width: number) {
+  return `${left.padEnd(width, " ")} ${right}`
+}
+
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
@@ -58,31 +62,40 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null,
     }
   })
-  const totalLabel = createMemo(() => {
+  const totalStats = createMemo(() => {
     const value = total()
     const tokens = value.input + value.output + value.reasoning + value.cache_read + value.cache_write
-    if (tokens <= 0) return "total 0"
-
-    return [
-      `total ${formatCompactTokens(tokens)}`,
-      value.input > 0 ? `in ${formatCompactTokens(value.input)}` : "",
-      value.output > 0 ? `out ${formatCompactTokens(value.output)}` : "",
-      value.reasoning > 0 ? `reason ${formatCompactTokens(value.reasoning)}` : "",
-      value.cache_read > 0 ? `cached ${formatCompactTokens(value.cache_read)}` : "",
-      value.cache_write > 0 ? `cachew ${formatCompactTokens(value.cache_write)}` : "",
-    ]
-      .filter(Boolean)
-      .join(" · ")
+    const left = {
+      total: `total ${formatCompactTokens(tokens)}`,
+      input: value.input > 0 ? `in ${formatCompactTokens(value.input)}` : "in 0",
+    }
+    const width = Math.max(left.total.length, left.input.length) + 1
+    return {
+      total: left.total,
+      cached:
+        value.cache_read + value.cache_write > 0
+          ? `cached ${formatCompactTokens(value.cache_read + value.cache_write)}`
+          : "cached 0",
+      input: left.input,
+      output: value.output > 0 ? `out ${formatCompactTokens(value.output)}` : "out 0",
+      width,
+    }
   })
 
   return (
     <box>
       <text fg={theme().text}>
-        <b>Context</b>
+        <b>Metrics</b>
       </text>
-      <text fg={theme().textMuted}>{formatCompactTokens(state().tokens)} tokens</text>
-      <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
-      <text fg={theme().textMuted}>{totalLabel()}</text>
+      <text fg={theme().textMuted}>
+        {formatCompactTokens(state().tokens)} tokens ({state().percent ?? 0}% used)
+      </text>
+      <text fg={theme().textMuted} wrapMode="none">
+        {formatAlignedRow(totalStats().input, totalStats().output, totalStats().width)}
+      </text>
+      <text fg={theme().textMuted} wrapMode="none">
+        {formatAlignedRow(totalStats().total, totalStats().cached, totalStats().width)}
+      </text>
       <text fg={theme().textMuted}>{money.format(cost())} spent</text>
     </box>
   )
