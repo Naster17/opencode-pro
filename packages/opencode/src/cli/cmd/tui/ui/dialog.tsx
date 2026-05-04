@@ -20,7 +20,7 @@ export function Dialog(
   let dismiss = false
   const width = () => {
     if (props.size === "xlarge") return 116
-    if (props.size === "large") return 88
+    if (props.size === "large") return 68
     return 60
   }
 
@@ -67,6 +67,7 @@ function init() {
     stack: [] as {
       element: JSX.Element
       onClose?: () => void
+      beforeClose?: (evt: { name: string; ctrl?: boolean }) => boolean | void
     }[],
     size: "medium" as "medium" | "large" | "xlarge",
   })
@@ -82,6 +83,11 @@ function init() {
         renderer.clearSelection()
       }
       const current = store.stack.at(-1)!
+      if (current.beforeClose?.(evt) === false) {
+        evt.preventDefault()
+        evt.stopPropagation()
+        return
+      }
       current.onClose?.()
       setStore("stack", store.stack.slice(0, -1))
       evt.preventDefault()
@@ -134,6 +140,10 @@ function init() {
           onClose,
         },
       ])
+    },
+    setBeforeClose(beforeClose?: (evt: { name: string; ctrl?: boolean }) => boolean | void) {
+      if (store.stack.length === 0) return
+      setStore("stack", store.stack.length - 1, "beforeClose", () => beforeClose)
     },
     get stack() {
       return store.stack

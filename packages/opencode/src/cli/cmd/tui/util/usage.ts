@@ -158,6 +158,11 @@ export function summarizeUsage(
           { output: 0, duration: 0 },
         )
       const cost = assistants.reduce((acc, item) => acc + (item.cost ?? 0), 0)
+      const session_tokens = assistants.reduce(
+        (acc, item) =>
+          acc + item.tokens.input + item.tokens.output + item.tokens.reasoning + item.tokens.cache.read + item.tokens.cache.write,
+        0,
+      )
       const last = assistants.findLast((item) => item.tokens.output > 0)
       const context_tokens = last
         ? last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
@@ -223,6 +228,18 @@ export function summarizeUsage(
         deletions: sum.deletions + (active ? (session.deletions ?? session.session?.summary?.deletions ?? 0) : 0),
         duration: sum.duration + activityDuration(messages, session.getParts, options.start),
         model_usage: [...sum.model_usage, ...model_usage.values()],
+        session_usage: active
+          ? [
+              ...sum.session_usage,
+              {
+                id: session.session?.id ?? "current",
+                title: session.session?.title ?? "Current session",
+                updated: session.session?.time.updated ?? 0,
+                cost,
+                tokens: session_tokens,
+              },
+            ]
+          : sum.session_usage,
       }
     },
     {
@@ -251,13 +268,20 @@ export function summarizeUsage(
         tokens: number
         cost: number
       }[],
+      session_usage: [] as {
+        id: string
+        title: string
+        updated: number
+        cost: number
+        tokens: number
+      }[],
     },
   )
   const tokens = totals.input + totals.output + totals.reasoning + totals.cache_read + totals.cache_write
   const average_context_percent = totals.context_percent_count
     ? Math.round(totals.context_percent_total / totals.context_percent_count)
     : null
-  const popular_models = [...totals.model_usage]
+  const model_usage = [...totals.model_usage]
     .reduce(
       (acc, item) => {
         const prev = acc.get(`${item.providerID}:${item.modelID}`)
@@ -288,7 +312,7 @@ export function summarizeUsage(
     .values()
     .toArray()
     .toSorted((a, b) => b.count - a.count || b.tokens - a.tokens || b.cost - a.cost)
-    .slice(0, 3)
+  const session_usage = totals.session_usage.toSorted((a, b) => b.cost - a.cost || b.tokens - a.tokens || b.updated - a.updated)
 
   return {
     tokens,
@@ -308,7 +332,9 @@ export function summarizeUsage(
     duration: totals.duration,
     additions: totals.additions,
     deletions: totals.deletions,
-    popular_models,
+    popular_models: model_usage.slice(0, 3),
+    model_usage,
+    session_usage,
     avg_tokens_per_second:
       totals.generation_output > 0 && totals.generation_duration > 0
         ? formatTokensPerSecond(totals.generation_output / (totals.generation_duration / 1000))

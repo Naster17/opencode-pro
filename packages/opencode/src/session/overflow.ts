@@ -22,5 +22,5 @@ export function isOverflow(input: { cfg: Config.Info; tokens: MessageV2.Assistan
 
   const count =
     input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
-  return count >= usable(input)
+  return count >= (input.model.limit.input ?? input.model.limit.context)
 }
