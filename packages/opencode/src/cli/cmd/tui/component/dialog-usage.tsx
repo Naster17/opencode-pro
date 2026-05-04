@@ -127,6 +127,11 @@ export function DialogUsage() {
       <Show when={!loading() && sync.data.session.length === 0}>
         <text fg={theme.text}>No Sessions</text>
       </Show>
+      <box width="100%" justifyContent="flex-end" paddingTop={1}>
+        <text fg={theme.textMuted}>
+          <span style={{ fg: theme.text }}>tab</span> range <span style={{ fg: theme.text }}>shift+tab</span> back
+        </text>
+      </box>
     </box>
   )
 }
