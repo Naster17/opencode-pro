@@ -1432,10 +1432,19 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   })
 
   const generationDuration = createMemo(() => {
-    if (!firstTokenAt()) return 0
+    const generationStartedAt =
+      firstTokenAt() ??
+      props.parts
+        .flatMap((part) => {
+          if (part.type === "text" && part.time?.start) return [part.time.start]
+          if (part.type === "reasoning" && part.time?.start) return [part.time.start]
+          return []
+        })
+        .sort((a, b) => a - b)[0]
+    if (!generationStartedAt) return 0
     const end = final() ? props.message.time.completed : now()
     if (!end) return 0
-    return Math.max(0, end - firstTokenAt()!)
+    return Math.max(0, end - generationStartedAt)
   })
 
   const promptProcessingDuration = createMemo(() => {

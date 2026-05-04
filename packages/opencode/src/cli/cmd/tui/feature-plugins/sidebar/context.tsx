@@ -9,10 +9,37 @@ const money = new Intl.NumberFormat("en-US", {
   currency: "USD",
 })
 
+function formatCompactTokens(value: number) {
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(value >= 10_000_000_000 ? 0 : 1)}B`
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`
+  return value.toString()
+}
+
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
   const cost = createMemo(() => msg().reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0))
+  const total = createMemo(() =>
+    msg()
+      .filter((item): item is AssistantMessage => item.role === "assistant")
+      .reduce(
+        (sum, item) => ({
+          input: sum.input + item.tokens.input,
+          output: sum.output + item.tokens.output,
+          reasoning: sum.reasoning + item.tokens.reasoning,
+          cache_read: sum.cache_read + item.tokens.cache.read,
+          cache_write: sum.cache_write + item.tokens.cache.write,
+        }),
+        {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache_read: 0,
+          cache_write: 0,
+        },
+      ),
+  )
 
   const state = createMemo(() => {
     const last = msg().findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
@@ -31,14 +58,31 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null,
     }
   })
+  const totalLabel = createMemo(() => {
+    const value = total()
+    const tokens = value.input + value.output + value.reasoning + value.cache_read + value.cache_write
+    if (tokens <= 0) return "total 0"
+
+    return [
+      `total ${formatCompactTokens(tokens)}`,
+      value.input > 0 ? `in ${formatCompactTokens(value.input)}` : "",
+      value.output > 0 ? `out ${formatCompactTokens(value.output)}` : "",
+      value.reasoning > 0 ? `reason ${formatCompactTokens(value.reasoning)}` : "",
+      value.cache_read > 0 ? `cached ${formatCompactTokens(value.cache_read)}` : "",
+      value.cache_write > 0 ? `cachew ${formatCompactTokens(value.cache_write)}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ")
+  })
 
   return (
     <box>
       <text fg={theme().text}>
         <b>Context</b>
       </text>
-      <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
+      <text fg={theme().textMuted}>{formatCompactTokens(state().tokens)} tokens</text>
       <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
+      <text fg={theme().textMuted}>{totalLabel()}</text>
       <text fg={theme().textMuted}>{money.format(cost())} spent</text>
     </box>
   )
