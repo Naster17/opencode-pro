@@ -110,6 +110,35 @@ function link(raw: string) {
   return `https://github.com/${repo}/releases/download/v${version}/${raw}`
 }
 
+async function resolveTauriSigningKey() {
+  const value = process.env.TAURI_SIGNING_PRIVATE_KEY
+  if (!value) throw new Error("TAURI_SIGNING_PRIVATE_KEY is required")
+
+  const file = Bun.file(value)
+  if (await file.exists()) return value
+
+  const inline = value.includes("\\n") ? value.replaceAll("\\n", "\n") : value
+  const decoded =
+    inline.startsWith("untrusted comment:")
+      ? inline
+      : (() => {
+          const text = Buffer.from(inline, "base64").toString("utf8")
+          return text.startsWith("untrusted comment:") ? text : inline
+        })()
+
+  if (!decoded.startsWith("untrusted comment:")) {
+    throw new Error(
+      "TAURI_SIGNING_PRIVATE_KEY must be a minisign private key or a path to one. The first line should start with 'untrusted comment:'.",
+    )
+  }
+
+  const tmp = process.env.RUNNER_TEMP ?? "/tmp"
+  const pathToKey = path.join(tmp, "tauri-signing-private-key")
+  await Bun.write(pathToKey, decoded.endsWith("\n") ? decoded : `${decoded}\n`)
+  process.env.TAURI_SIGNING_PRIVATE_KEY = pathToKey
+  return pathToKey
+}
+
 async function sign(url: string, key: string) {
   const name = decodeURIComponent(new URL(url).pathname.split("/").pop() ?? key)
   const asset = amap.get(name)
@@ -131,6 +160,8 @@ async function sign(url: string, key: string) {
   if (!(await sigFile.exists())) throw new Error(`Signature file not found for ${name}`)
   return (await sigFile.text()).trim()
 }
+
+await resolveTauriSigningKey()
 
 const add = async (data: Record<string, { url: string; signature: string }>, key: string, raw: string | undefined) => {
   if (!raw) return
