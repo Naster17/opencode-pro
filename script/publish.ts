@@ -29,7 +29,10 @@ async function prepareReleaseFiles() {
   let toml = await Bun.file(extensionToml).text()
   toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
   toml = toml.replace(/^repository = "[^"]+"/m, `repository = "${repoUrl}"`)
-  toml = toml.replaceAll(/https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/v[^/]+\//g, `${repoUrl}/releases/download/v${Script.version}/`)
+  toml = toml.replaceAll(
+    /https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/v[^/]+\//g,
+    `${repoUrl}/releases/download/v${Script.version}/`,
+  )
   toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Script.version}/`)
   console.log("updated:", extensionToml)
   await Bun.file(extensionToml).write(toml)

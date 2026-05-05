@@ -50,7 +50,8 @@ const VERSION = await (async () => {
   if (versionSuffix && env.OPENCODE_CHANNEL === "latest" && !env.OPENCODE_BUMP && packageVersion) {
     return applyVersionSuffix(packageVersion)
   }
-  if (IS_PREVIEW) return applyVersionSuffix(`0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`)
+  if (IS_PREVIEW)
+    return applyVersionSuffix(`0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`)
   const version = await fetch("https://registry.npmjs.org/opencode-ai/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)

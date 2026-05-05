@@ -118,7 +118,6 @@ describe("ProviderTransform.options - setCacheKey", () => {
     })
     expect(result.store).toBe(false)
   })
-
 })
 
 describe("ProviderTransform.options - zai/zhipuai thinking", () => {

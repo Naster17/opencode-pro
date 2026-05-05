@@ -372,7 +372,9 @@ test("openai-compatible providers mirror enable_thinking into chat_template_kwar
     return new Response(
       new ReadableStream({
         start(controller) {
-          controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":"stop"}]}\n\n'))
+          controller.enqueue(
+            new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":"stop"}]}\n\n'),
+          )
           controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"))
           controller.close()
         },
@@ -444,7 +446,9 @@ test("llama.cpp gpt-oss keeps native messages and passes reasoning effort via ch
     return new Response(
       new ReadableStream({
         start(controller) {
-          controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":"stop"}]}\n\n'))
+          controller.enqueue(
+            new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":"stop"}]}\n\n'),
+          )
           controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"))
           controller.close()
         },

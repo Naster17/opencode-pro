@@ -474,9 +474,18 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
   const usesThinkingToggle =
     model.api.npm === "@ai-sdk/openai-compatible" &&
-    ["deepseek-chat", "deepseek-reasoner", "deepseek-r1", "deepseek-v3", "minimax", "glm", "kimi", "k2p", "qwen", "big-pickle"].some(
-      (value) => id.includes(value),
-    )
+    [
+      "deepseek-chat",
+      "deepseek-reasoner",
+      "deepseek-r1",
+      "deepseek-v3",
+      "minimax",
+      "glm",
+      "kimi",
+      "k2p",
+      "qwen",
+      "big-pickle",
+    ].some((value) => id.includes(value))
   if (
     id.includes("deepseek-chat") ||
     id.includes("deepseek-reasoner") ||

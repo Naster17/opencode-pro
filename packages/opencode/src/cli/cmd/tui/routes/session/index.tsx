@@ -1399,9 +1399,13 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return messages().slice(0, index + 1)
   })
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
-  const providerModel = createMemo(() => sync.data.provider.find((item) => item.id === props.message.providerID)?.models[props.message.modelID])
+  const providerModel = createMemo(
+    () => sync.data.provider.find((item) => item.id === props.message.providerID)?.models[props.message.modelID],
+  )
   const parentUserMessage = createMemo(() =>
-    messages().find((message): message is UserMessage => message.role === "user" && message.id === props.message.parentID),
+    messages().find(
+      (message): message is UserMessage => message.role === "user" && message.id === props.message.parentID,
+    ),
   )
 
   const final = createMemo(() => {
@@ -1433,19 +1437,22 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       .reduce((total, part) => total + Token.estimate(part.text), 0),
   )
 
-  const estimatedPromptTokens = createMemo(() =>
-    contextMessages()
-      .flatMap((message) => sync.data.part[message.id] ?? [])
-      .map((part) => estimatePromptPartTokens(part))
-      .reduce((total, value) => total + value, 0) +
-    Token.estimate(
-      [
-        ...(providerModel() ? SystemPrompt.provider(providerModel() as Parameters<typeof SystemPrompt.provider>[0]) : []),
-        parentUserMessage()?.system ?? "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    ),
+  const estimatedPromptTokens = createMemo(
+    () =>
+      contextMessages()
+        .flatMap((message) => sync.data.part[message.id] ?? [])
+        .map((part) => estimatePromptPartTokens(part))
+        .reduce((total, value) => total + value, 0) +
+      Token.estimate(
+        [
+          ...(providerModel()
+            ? SystemPrompt.provider(providerModel() as Parameters<typeof SystemPrompt.provider>[0])
+            : []),
+          parentUserMessage()?.system ?? "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      ),
   )
 
   event.on("session.next.reasoning.started", (evt) => {
@@ -1527,7 +1534,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     const ended = recent[recent.length - 1]?.time
     if (!started || !ended) return 0
     const seconds = Math.max((ended - started) / 1000, 0.1)
-    return (chars / 4) / seconds
+    return chars / 4 / seconds
   }
 
   const averageLiveTokensPerSecond = createMemo(() => {
@@ -1719,7 +1726,9 @@ function estimatePromptPartTokens(part: Part) {
   if (part.type === "tool") {
     const input = part.state.input ? Token.estimate(JSON.stringify(part.state.input)) : 0
     const content =
-      part.state.status === "completed" || part.state.status === "error" ? Token.estimate(JSON.stringify(part.state)) : 0
+      part.state.status === "completed" || part.state.status === "error"
+        ? Token.estimate(JSON.stringify(part.state))
+        : 0
     return input + content
   }
   if (part.type === "retry") return Token.estimate(JSON.stringify(part.error))

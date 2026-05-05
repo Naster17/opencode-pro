@@ -315,23 +315,35 @@ export function DialogUsage() {
             return (
               <box backgroundColor={bg} width="100%" flexDirection="row">
                 <box width={sessionTitleWidth()}>
-                  <text fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted} wrapMode="none">
+                  <text
+                    fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted}
+                    wrapMode="none"
+                  >
                     {left}
                   </text>
                 </box>
                 <box flexGrow={1} />
                 <box width={sessionSpentWidth()}>
-                  <text fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted} wrapMode="none">
+                  <text
+                    fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted}
+                    wrapMode="none"
+                  >
                     {money.format(item.cost).padStart(sessionSpentWidth(), " ")}
                   </text>
                 </box>
                 <box width={2}>
-                  <text fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted} wrapMode="none">
+                  <text
+                    fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted}
+                    wrapMode="none"
+                  >
                     {"  "}
                   </text>
                 </box>
                 <box width={sessionTokensWidth()}>
-                  <text fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted} wrapMode="none">
+                  <text
+                    fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted}
+                    wrapMode="none"
+                  >
                     {formatCompactTokens(item.tokens).padStart(sessionTokensWidth(), " ")}
                   </text>
                 </box>
@@ -339,7 +351,9 @@ export function DialogUsage() {
             )
           })}
           <Show when={sessions().length > 0}>
-            <text fg={theme.textMuted}>{`${sessionIndex() + 1}/${sessions().length} · ${Locale.datetime(sessions()[sessionIndex()]?.updated ?? 0)}`}</text>
+            <text
+              fg={theme.textMuted}
+            >{`${sessionIndex() + 1}/${sessions().length} · ${Locale.datetime(sessions()[sessionIndex()]?.updated ?? 0)}`}</text>
           </Show>
         </Show>
         <Show when={sections[section()] === "Models"}>
@@ -400,33 +414,51 @@ export function DialogUsage() {
             return (
               <box backgroundColor={bg} width="100%" flexDirection="row">
                 <box width={modelTitleWidth()}>
-                  <text fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted} wrapMode="none">
+                  <text
+                    fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted}
+                    wrapMode="none"
+                  >
                     {left}
                   </text>
                 </box>
                 <box flexGrow={1} />
                 <box width={modelCallsWidth()}>
-                  <text fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted} wrapMode="none">
+                  <text
+                    fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted}
+                    wrapMode="none"
+                  >
                     {`x${item.count}`.padStart(modelCallsWidth(), " ")}
                   </text>
                 </box>
                 <box width={2}>
-                  <text fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted} wrapMode="none">
+                  <text
+                    fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted}
+                    wrapMode="none"
+                  >
                     {"  "}
                   </text>
                 </box>
                 <box width={modelTokensWidth()}>
-                  <text fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted} wrapMode="none">
+                  <text
+                    fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted}
+                    wrapMode="none"
+                  >
                     {formatCompactTokens(item.tokens).padStart(modelTokensWidth(), " ")}
                   </text>
                 </box>
                 <box width={2}>
-                  <text fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted} wrapMode="none">
+                  <text
+                    fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted}
+                    wrapMode="none"
+                  >
                     {"  "}
                   </text>
                 </box>
                 <box width={modelSpentWidth()}>
-                  <text fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted} wrapMode="none">
+                  <text
+                    fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted}
+                    wrapMode="none"
+                  >
                     {money.format(item.cost).padStart(modelSpentWidth(), " ")}
                   </text>
                 </box>
@@ -434,7 +466,9 @@ export function DialogUsage() {
             )
           })}
           <Show when={models().length > 0}>
-            <text fg={theme.textMuted}>{`${modelIndex() + 1}/${models().length} · ${models()[modelIndex()]?.providerID}/${models()[modelIndex()]?.modelID}`}</text>
+            <text
+              fg={theme.textMuted}
+            >{`${modelIndex() + 1}/${models().length} · ${models()[modelIndex()]?.providerID}/${models()[modelIndex()]?.modelID}`}</text>
           </Show>
         </Show>
       </Show>

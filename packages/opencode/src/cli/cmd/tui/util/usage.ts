@@ -55,9 +55,7 @@ function mergeActivityWindows(
     end: number
   }[],
 ) {
-  const sorted = windows
-    .filter((item) => item.end >= item.start)
-    .toSorted((a, b) => a.start - b.start || a.end - b.end)
+  const sorted = windows.filter((item) => item.end >= item.start).toSorted((a, b) => a.start - b.start || a.end - b.end)
   if (sorted.length === 0) return []
 
   return sorted.slice(1).reduce(
@@ -125,7 +123,9 @@ export function summarizeUsage(
   const totals = sessions.reduce(
     (sum, session) => {
       const active = session.session ? (options.start ? session.session.time.updated >= options.start : true) : true
-      const messages = options.start ? session.messages.filter((item) => item.time.created >= options.start!) : session.messages
+      const messages = options.start
+        ? session.messages.filter((item) => item.time.created >= options.start!)
+        : session.messages
       const parts = messages.flatMap((message) =>
         session.getParts(message.id).map((part) => ({
           message,
@@ -160,12 +160,21 @@ export function summarizeUsage(
       const cost = assistants.reduce((acc, item) => acc + (item.cost ?? 0), 0)
       const session_tokens = assistants.reduce(
         (acc, item) =>
-          acc + item.tokens.input + item.tokens.output + item.tokens.reasoning + item.tokens.cache.read + item.tokens.cache.write,
+          acc +
+          item.tokens.input +
+          item.tokens.output +
+          item.tokens.reasoning +
+          item.tokens.cache.read +
+          item.tokens.cache.write,
         0,
       )
       const last = assistants.findLast((item) => item.tokens.output > 0)
       const context_tokens = last
-        ? last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+        ? last.tokens.input +
+          last.tokens.output +
+          last.tokens.reasoning +
+          last.tokens.cache.read +
+          last.tokens.cache.write
         : 0
       const context_percent =
         last && context_tokens > 0
@@ -179,7 +188,11 @@ export function summarizeUsage(
         (acc, item) => {
           const key = `${item.providerID}:${item.modelID}`
           const tokens =
-            item.tokens.input + item.tokens.output + item.tokens.reasoning + item.tokens.cache.read + item.tokens.cache.write
+            item.tokens.input +
+            item.tokens.output +
+            item.tokens.reasoning +
+            item.tokens.cache.read +
+            item.tokens.cache.write
           const prev = acc.get(key) ?? {
             providerID: item.providerID,
             modelID: item.modelID,
@@ -312,7 +325,9 @@ export function summarizeUsage(
     .values()
     .toArray()
     .toSorted((a, b) => b.count - a.count || b.tokens - a.tokens || b.cost - a.cost)
-  const session_usage = totals.session_usage.toSorted((a, b) => b.cost - a.cost || b.tokens - a.tokens || b.updated - a.updated)
+  const session_usage = totals.session_usage.toSorted(
+    (a, b) => b.cost - a.cost || b.tokens - a.tokens || b.updated - a.updated,
+  )
 
   return {
     tokens,

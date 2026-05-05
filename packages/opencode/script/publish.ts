@@ -40,10 +40,7 @@ for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" }
     dir: filepath.replace(/\/package\.json$/, ""),
   }
 }
-console.log(
-  "binaries",
-  Object.fromEntries(Object.entries(binaries).map(([name, value]) => [name, value.version])),
-)
+console.log("binaries", Object.fromEntries(Object.entries(binaries).map(([name, value]) => [name, value.version])))
 const version = Object.values(binaries)[0]?.version
 if (!version) {
   throw new Error("No CLI binaries found in ./dist")

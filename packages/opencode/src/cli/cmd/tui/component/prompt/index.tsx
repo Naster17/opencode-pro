@@ -191,7 +191,9 @@ export function Prompt(props: PromptProps) {
     if (thinkingLevel() === "thinking") return theme.primary
     return theme.text
   })
-  const thinkingLabel = createMemo(() => (thinkingLevel() === "thinking" ? "Thinking" : Locale.titlecase(thinkingLevel())))
+  const thinkingLabel = createMemo(() =>
+    thinkingLevel() === "thinking" ? "Thinking" : Locale.titlecase(thinkingLevel()),
+  )
   const variantLabel = createMemo(() => local.model.variant.display())
 
   function selectWorkspace(selection: WorkspaceSelection | undefined) {

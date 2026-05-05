@@ -22,7 +22,16 @@ export function parseModel(model: string) {
 }
 
 const THINKING_LEVELS = ["off", "low", "medium", "high"] as const
-export const THINKING_DISPLAY_VARIANTS = new Set(["default", "off", "none", "disabled", "low", "medium", "high", "thinking"])
+export const THINKING_DISPLAY_VARIANTS = new Set([
+  "default",
+  "off",
+  "none",
+  "disabled",
+  "low",
+  "medium",
+  "high",
+  "thinking",
+])
 type ThinkingLevel = (typeof THINKING_LEVELS)[number]
 type ThinkingState = ThinkingLevel | "thinking" | "inherit"
 
@@ -281,21 +290,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           (typeof variants)[number] | undefined
         >
         const baseLevel = thinkingState(info.options)
-        const findLevel = (level: ThinkingLevel) => variants.find((item) => item.level === level)?.level as
-          | ThinkingLevel
-          | undefined
+        const findLevel = (level: ThinkingLevel) =>
+          variants.find((item) => item.level === level)?.level as ThinkingLevel | undefined
         const hasThinkingToggle = variants.some((item) => item.level === "thinking")
         const defaultLevel: ThinkingLevel =
-          findLevel("off") ??
-          findLevel("low") ??
-          findLevel("medium") ??
-          findLevel("high") ??
-          "off"
+          findLevel("off") ?? findLevel("low") ?? findLevel("medium") ?? findLevel("high") ?? "off"
         const currentVariant = current ? variantMap[current] : undefined
         const currentLevel =
           !currentVariant || currentVariant.level === "inherit"
             ? undefined
-            : (currentVariant.level === "thinking" ? "high" : currentVariant.level)
+            : currentVariant.level === "thinking"
+              ? "high"
+              : currentVariant.level
         const activeLevel: ThinkingLevel =
           currentLevel ?? (baseLevel === "inherit" ? defaultLevel : baseLevel === "thinking" ? "high" : baseLevel)
         const levelVariant = Object.fromEntries(
@@ -572,14 +578,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               })
               return
             }
-            const levels = thinking.hasThinkingToggle && thinking.levelVariant.high === "thinking"
-              ? (["off", "high"] as ThinkingLevel[])
-              : THINKING_LEVELS.filter((level) => {
-                  if (level === "off") {
-                    return Boolean(thinking.levelVariant.off || thinking.baseLevel === "off" || thinking.defaultLevel === "off")
-                  }
-                  return Boolean(thinking.levelVariant[level] || thinking.levels.includes(level))
-                })
+            const levels =
+              thinking.hasThinkingToggle && thinking.levelVariant.high === "thinking"
+                ? (["off", "high"] as ThinkingLevel[])
+                : THINKING_LEVELS.filter((level) => {
+                    if (level === "off") {
+                      return Boolean(
+                        thinking.levelVariant.off || thinking.baseLevel === "off" || thinking.defaultLevel === "off",
+                      )
+                    }
+                    return Boolean(thinking.levelVariant[level] || thinking.levels.includes(level))
+                  })
             if (levels.length === 0) return
             const index = levels.indexOf(thinking.activeLevel)
             const next = levels[(index + 1) % levels.length] ?? levels[0]
