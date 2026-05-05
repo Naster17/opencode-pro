@@ -32,13 +32,22 @@ async function publish(dir: string, name: string, version: string) {
   await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir)
 }
 
-const binaries: Record<string, string> = {}
+const binaries: Record<string, { version: string; dir: string }> = {}
 for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" })) {
   const pkg = await Bun.file(`./dist/${filepath}`).json()
-  binaries[pkg.name] = pkg.version
+  binaries[pkg.name] = {
+    version: pkg.version,
+    dir: filepath.replace(/\/package\.json$/, ""),
+  }
 }
-console.log("binaries", binaries)
-const version = Object.values(binaries)[0]
+console.log(
+  "binaries",
+  Object.fromEntries(Object.entries(binaries).map(([name, value]) => [name, value.version])),
+)
+const version = Object.values(binaries)[0]?.version
+if (!version) {
+  throw new Error("No CLI binaries found in ./dist")
+}
 
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
@@ -57,7 +66,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
       },
       version: version,
       license: pkg.license,
-      optionalDependencies: binaries,
+      optionalDependencies: Object.fromEntries(Object.entries(binaries).map(([name, value]) => [name, value.version])),
     },
     null,
     2,
@@ -65,7 +74,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 )
 
 const tasks = Object.entries(binaries).map(async ([name]) => {
-  await publish(`./dist/${name}`, name, binaries[name])
+  await publish(`./dist/${binaries[name].dir}`, name, binaries[name].version)
 })
 await Promise.all(tasks)
 await publish(`./dist/${pkg.name}`, publishedMetaName, version)

@@ -121,7 +121,7 @@ jobs:
     needs:
       - build-cli
       - version
-    runs-on: windows-2025-vs2026
+    runs-on: windows-latest
     steps:
       - run: echo "Skipping Windows CLI signing in this fork"
 
@@ -145,10 +145,10 @@ jobs:
             platform_flag: --mac --arm64
             bun_install_flags: --os=darwin --cpu=arm64
           # github-hosted: blacksmith lacks ARM64 MSVC cross-compilation toolchain
-          - host: "windows-2025-vs2026"
+          - host: "windows-latest"
             target: aarch64-pc-windows-msvc
             platform_flag: --win --arm64
-          - host: "windows-2025-vs2026"
+          - host: "windows-latest"
             target: x86_64-pc-windows-msvc
             platform_flag: --win
           - host: "ubuntu-latest"
@@ -328,25 +328,25 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         with:
           name: opencode-cli
           path: packages/opencode/dist
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         continue-on-error: true
         with:
           name: opencode-cli-windows
           path: packages/opencode/dist
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         if: needs.sign-cli-windows.result == 'success'
         continue-on-error: true
         with:
           name: opencode-cli-signed-windows
           path: packages/opencode/dist
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         if: needs.version.outputs.release
         continue-on-error: true
         with:

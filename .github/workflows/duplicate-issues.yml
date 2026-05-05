@@ -7,13 +7,13 @@ on:
 jobs:
   check-duplicates:
     if: github.event.action == 'opened'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       issues: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
@@ -119,13 +119,13 @@ jobs:
 
   recheck-compliance:
     if: github.event.action == 'edited' && contains(github.event.issue.labels.*.name, 'needs:compliance')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       issues: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
