@@ -35,6 +35,7 @@ Examples:
     process.exit(1)
   }
 
+  const model = process.env.OPENCODE_DUPLICATE_PR_MODEL ?? process.env.OPENCODE_MODEL
   const opencode = await createOpencode({ port: 0 })
 
   try {
@@ -64,6 +65,7 @@ Examples:
         path: { id: session.data!.id },
         body: {
           agent: "duplicate-pr",
+          ...(model ? { model } : {}),
           parts,
         },
         signal: AbortSignal.timeout(120_000),

@@ -49,6 +49,9 @@ await rm(file, { force: true })
 
 const quiet = values.quiet
 const cmd = ["opencode", "run"]
+if (process.env.OPENCODE_CHANGELOG_MODEL ?? process.env.OPENCODE_MODEL) {
+  cmd.push("--model", process.env.OPENCODE_CHANGELOG_MODEL ?? process.env.OPENCODE_MODEL!)
+}
 cmd.push("--variant", values.variant)
 cmd.push("--command", "changelog", "--", ...args)
 

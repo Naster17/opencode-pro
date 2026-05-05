@@ -48,6 +48,12 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      - name: Configure OpenCode for Gemini
+        uses: ./.github/actions/setup-opencode-gemini
+        with:
+          model: ${{ vars.OPENCODE_CHANGELOG_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}
+          small-model: ${{ vars.OPENCODE_SMALL_MODEL || 'google/gemini-2.5-flash' }}
+
       - name: Setup git committer
         id: committer
         uses: ./.github/actions/setup-git-committer
@@ -67,7 +73,8 @@ jobs:
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
           OPENCODE_VERSION_SUFFIX: ${{ inputs.version_suffix || vars.OPENCODE_VERSION_SUFFIX }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          OPENCODE_MODEL: ${{ vars.OPENCODE_CHANGELOG_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
           GH_REPO: ${{ (github.ref_name == 'beta' && vars.OPENCODE_BETA_REPO) || github.repository }}
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -120,6 +127,7 @@ jobs:
     needs:
       - build-cli
       - version
+    if: github.repository == 'anomalyco/opencode'
     runs-on: windows-latest
     steps:
       - run: echo "Skipping Windows CLI signing in this fork"

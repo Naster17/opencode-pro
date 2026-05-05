@@ -27,11 +27,19 @@ jobs:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
+      - name: Configure OpenCode for Gemini
+        uses: ./.github/actions/setup-opencode-gemini
+        with:
+          model: ${{ vars.OPENCODE_BETA_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}
+          small-model: ${{ vars.OPENCODE_SMALL_MODEL || 'google/gemini-2.5-flash' }}
+
       - name: Install OpenCode
         run: bun i -g opencode-ai
 
       - name: Sync beta branch
         env:
           GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          OPENCODE_BETA_MODEL: ${{ vars.OPENCODE_BETA_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}
+          OPENCODE_MODEL: ${{ vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
         run: bun script/beta.ts

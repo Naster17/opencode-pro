@@ -115,15 +115,22 @@ async function resolveTauriSigningKey() {
   if (!value) throw new Error("TAURI_SIGNING_PRIVATE_KEY is required")
 
   const file = Bun.file(value)
-  if (await file.exists()) return value
+  if (await file.exists()) {
+    const text = await file.text()
+    process.env.TAURI_SIGNING_PRIVATE_KEY = text.endsWith("\n") ? text : `${text}\n`
+    return process.env.TAURI_SIGNING_PRIVATE_KEY
+  }
 
   const inline = value.includes("\\n") ? value.replaceAll("\\n", "\n") : value
-  const decoded = inline.startsWith("untrusted comment:")
-    ? inline
-    : (() => {
-        const text = Buffer.from(inline, "base64").toString("utf8")
-        return text.startsWith("untrusted comment:") ? text : inline
-      })()
+  const decoded =
+    inline.startsWith("untrusted comment:")
+      ? inline
+      : (() => {
+          const normalized = inline.replaceAll("-", "+").replaceAll("_", "/")
+          const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=")
+          const text = Buffer.from(padded, "base64").toString("utf8")
+          return text.startsWith("untrusted comment:") ? text : inline
+        })()
 
   if (!decoded.startsWith("untrusted comment:")) {
     throw new Error(
@@ -131,11 +138,8 @@ async function resolveTauriSigningKey() {
     )
   }
 
-  const tmp = process.env.RUNNER_TEMP ?? "/tmp"
-  const pathToKey = path.join(tmp, "tauri-signing-private-key")
-  await Bun.write(pathToKey, decoded.endsWith("\n") ? decoded : `${decoded}\n`)
-  process.env.TAURI_SIGNING_PRIVATE_KEY = pathToKey
-  return pathToKey
+  process.env.TAURI_SIGNING_PRIVATE_KEY = decoded.endsWith("\n") ? decoded : `${decoded}\n`
+  return process.env.TAURI_SIGNING_PRIVATE_KEY
 }
 
 async function sign(url: string, key: string) {

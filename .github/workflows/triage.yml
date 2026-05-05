@@ -19,18 +19,24 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      - name: Configure OpenCode for Gemini
+        uses: ./.github/actions/setup-opencode-gemini
+        with:
+          model: ${{ vars.OPENCODE_ISSUE_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}
+          small-model: ${{ vars.OPENCODE_SMALL_MODEL || 'google/gemini-2.5-flash' }}
+
       - name: Install opencode
         run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Triage issue
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          opencode run --agent triage "The following issue was just opened, triage it:
+          opencode run --agent triage --model "${{ vars.OPENCODE_ISSUE_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}" "The following issue was just opened, triage it:
 
           Title: $ISSUE_TITLE
 

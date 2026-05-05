@@ -25,6 +25,12 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      - name: Configure OpenCode for Gemini
+        uses: ./.github/actions/setup-opencode-gemini
+        with:
+          model: ${{ vars.OPENCODE_DOCS_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}
+          small-model: ${{ vars.OPENCODE_SMALL_MODEL || 'google/gemini-2.5-flash' }}
+
       - name: Get recent commits
         id: commits
         run: |
@@ -45,9 +51,9 @@ jobs:
         if: steps.commits.outputs.has_commits == 'true'
         uses: sst/opencode/github@latest
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
         with:
-          model: opencode/gpt-5.2
+          model: ${{ vars.OPENCODE_DOCS_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}
           agent: docs
           prompt: |
             Review the following commits from the last ${{ env.LOOKBACK_HOURS }} hours and identify any new features that may need documentation.

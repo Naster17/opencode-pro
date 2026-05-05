@@ -25,10 +25,16 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      - name: Configure OpenCode for Gemini
+        uses: ./.github/actions/setup-opencode-gemini
+        with:
+          model: ${{ vars.OPENCODE_ACTION_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}
+          small-model: ${{ vars.OPENCODE_SMALL_MODEL || 'google/gemini-2.5-flash' }}
+
       - name: Run opencode
         uses: anomalyco/opencode/github@latest
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
           OPENCODE_PERMISSION: '{"bash": "deny"}'
         with:
-          model: opencode/claude-opus-4-5
+          model: ${{ vars.OPENCODE_ACTION_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}

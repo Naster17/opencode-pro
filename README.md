@@ -29,34 +29,20 @@ nix run github:Naster17/opencode-pro
 
 ### PRO Features
 
-| Feature                        | Description                                                                                                                       |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| Sidebar Metrics                | Live session metrics in the sidebar with context usage, token totals, cache, tool calls, compactions, speed, and spend.           |
-| `/usage` Dashboard             | Interactive usage analytics with Overview, Sessions, and Models views across Today, 7d, 30d, or all-time history.                 |
-| Accurate Full-History Totals   | Usage and metrics are calculated across full session history, without the old 100-message cap skewing totals.                     |
-| Smarter Thinking Controls      | Refined thinking mode UX with visible levels, cleaner variant labels, and faster cycling for reasoning-capable models.            |
-| `Ctrl+T` Variant Flow          | `Ctrl+T` cycles model variants cleanly, while `Ctrl+Shift+T` or `F3` steps through supported thinking levels.                     |
-| Better Local Reasoning Support | Improved handling for llama.cpp and OpenAI-compatible reasoning models, including toggle-style thinking providers.                |
-| Privacy-First Hardening        | Telemetry is stripped back, session sharing is permanently disabled, and remote workspace sync cannot be re-enabled by env flags. |
-| Lightweight `/help` Base       | A clean in-app help entrypoint is already wired in as the foundation for a fuller guided help experience next.                    |
+| Feature | Description |
+| ------- | ----------- |
+| Sidebar Metrics | Live session metrics in the sidebar with context usage, token totals, cache, tool calls, compactions, speed, and spend. |
+| `/usage` Dashboard | Interactive usage analytics with Overview, Sessions, and Models views across Today, 7d, 30d, or all-time history. |
+| Accurate Full-History Totals | Usage and metrics are calculated across full session history, without the old 100-message cap skewing totals. |
+| Smarter Thinking Controls | Refined thinking mode UX with visible levels, cleaner variant labels, and faster cycling for reasoning-capable models. |
+| `Ctrl+T` Variant Flow | `Ctrl+T` cycles model variants cleanly, while `Ctrl+Shift+T` or `F3` steps through supported thinking levels. |
+| Better Local Reasoning Support | Improved handling for llama.cpp and OpenAI-compatible reasoning models, including toggle-style thinking providers. |
+| Privacy-First Hardening | Telemetry is stripped back, session sharing is permanently disabled, and remote workspace sync cannot be re-enabled by env flags. |
+| Lightweight `/help` Base | A clean in-app help entrypoint is already wired in as the foundation for a fuller guided help experience next. |
 
 ### Desktop App (BETA)
 
 OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/Naster17/opencode-pro/releases).
-
-| Platform              | Download                              |
-| --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm`, or AppImage           |
-
-```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
-```
 
 ### Agents
 

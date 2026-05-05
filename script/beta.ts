@@ -3,7 +3,7 @@
 import { $ } from "bun"
 import fs from "fs/promises"
 
-const model = "opencode/gpt-5.3-codex"
+const model = process.env.OPENCODE_BETA_MODEL ?? process.env.OPENCODE_MODEL ?? "google/gemini-2.5-pro"
 
 interface PR {
   number: number

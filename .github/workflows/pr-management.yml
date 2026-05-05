@@ -39,6 +39,13 @@ jobs:
         if: steps.team-check.outputs.is_team != 'true'
         run: curl -fsSL https://opencode.ai/install | bash
 
+      - name: Configure OpenCode for Gemini
+        if: steps.team-check.outputs.is_team != 'true'
+        uses: ./.github/actions/setup-opencode-gemini
+        with:
+          model: ${{ vars.OPENCODE_DUPLICATE_PR_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}
+          small-model: ${{ vars.OPENCODE_SMALL_MODEL || 'google/gemini-2.5-flash' }}
+
       - name: Build prompt
         if: steps.team-check.outputs.is_team != 'true'
         env:
@@ -59,8 +66,9 @@ jobs:
       - name: Check for duplicate PRs
         if: steps.team-check.outputs.is_team != 'true'
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENCODE_DUPLICATE_PR_MODEL: ${{ vars.OPENCODE_DUPLICATE_PR_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           COMMENT=$(bun script/duplicate-pr.ts -f pr_info.txt "Check the attached file for PR details and search for duplicates")
