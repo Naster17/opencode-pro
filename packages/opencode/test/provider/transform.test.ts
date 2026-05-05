@@ -1125,7 +1125,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
 })
 
 describe("ProviderTransform.message - gpt-oss harmony prompt", () => {
-  test("rewrites system messages into harmony format with reasoning level", () => {
+  test("preserves native messages for llama.cpp gpt-oss models", () => {
     const msgs = [
       {
         role: "system",
@@ -1174,6 +1174,58 @@ describe("ProviderTransform.message - gpt-oss harmony prompt", () => {
       { reasoningEffort: "low" },
     )
 
+    expect(result).toEqual(msgs)
+  })
+
+  test("rewrites non-llama gpt-oss system messages into harmony format with reasoning level", () => {
+    const msgs = [
+      {
+        role: "system",
+        content: "Use a concise tone.",
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(
+      msgs,
+      {
+        id: ModelID.make("custom-provider/gpt-oss-20b"),
+        providerID: ProviderID.make("custom-provider"),
+        api: {
+          id: "gpt-oss-20b",
+          url: "https://api.example.com/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+        name: "gpt-oss-20b",
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: false,
+          toolcall: true,
+          input: { text: true, audio: false, image: false, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: false,
+        },
+        cost: {
+          input: 0.001,
+          output: 0.002,
+          cache: { read: 0.0001, write: 0.0002 },
+        },
+        limit: {
+          context: 128000,
+          output: 8192,
+        },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2025-08-05",
+      },
+      { reasoningEffort: "low" },
+    )
+
     expect(result).toHaveLength(2)
     expect(result[0].role).toBe("system")
     expect(result[0].content).toContain("You are ChatGPT, a large language model trained by OpenAI.")
@@ -1184,6 +1236,69 @@ describe("ProviderTransform.message - gpt-oss harmony prompt", () => {
     expect(result[1]).toEqual({
       role: "user",
       content: "Hello",
+    })
+  })
+})
+
+describe("ProviderTransform.providerOptions - llama.cpp gpt-oss off normalization", () => {
+  test("normalizes off to low plus zero thinking budget", () => {
+    const result = ProviderTransform.providerOptions(
+      {
+        id: ModelID.make("llama.cpp/gpt-oss-20b"),
+        providerID: ProviderID.make("llama.cpp"),
+        api: {
+          id: "gpt-oss-20b",
+          url: "http://127.0.0.1:8080/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+        name: "gpt-oss-20b",
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: false,
+          toolcall: true,
+          input: { text: true, audio: false, image: false, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: false,
+        },
+        cost: {
+          input: 0.001,
+          output: 0.002,
+          cache: { read: 0.0001, write: 0.0002 },
+        },
+        limit: {
+          context: 128000,
+          output: 8192,
+        },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2025-08-05",
+      },
+      {
+        enable_thinking: false,
+        thinking_budget_tokens: 0,
+        chat_template_kwargs: {
+          enable_thinking: false,
+          reasoning_effort: "none",
+        },
+        chat_template_args: {
+          enable_thinking: false,
+          reasoning_effort: "none",
+        },
+      },
+    )
+
+    expect(result).toEqual({
+      llama: {
+        thinking_budget_tokens: 0,
+        chat_template_kwargs: {
+          reasoning_effort: "low",
+        },
+        chat_template_args: {
+          reasoning_effort: "low",
+        },
+      },
     })
   })
 })

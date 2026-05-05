@@ -337,6 +337,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           .filter(([name, options]) => thinkingState(options, name) !== thinking.baseLevel)
           .map(([name]) => name)
       }
+      const isThinkingOnlyVariantModel = () => {
+        const variants = variantList()
+        if (variants.length === 0) return false
+        return variants.every(([name, options]) => thinkingState(options, name) !== "inherit")
+      }
 
       return {
         current: currentModel,
@@ -507,10 +512,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             save()
           },
           cycle() {
-            const variants = cycleVariantList()
-            if (variants.length === 0) return
             const current = this.current()
             const thinking = resolveThinking()
+            if (thinking && isThinkingOnlyVariantModel()) {
+              this.cycleThinking()
+              return
+            }
+            const variants = cycleVariantList()
+            if (variants.length === 0) return
             if (thinking?.hasThinkingToggle && thinking.levelVariant.high === "thinking") {
               this.set(current === "thinking" ? undefined : "thinking")
               return

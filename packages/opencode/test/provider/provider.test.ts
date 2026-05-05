@@ -435,7 +435,7 @@ test("openai-compatible providers mirror enable_thinking into chat_template_kwar
   }
 })
 
-test("gpt-oss openai-compatible providers render harmony reasoning levels into the system message", async () => {
+test("llama.cpp gpt-oss keeps native messages and passes reasoning effort via chat_template_kwargs", async () => {
   const originalFetch = globalThis.fetch
   let capturedBody: Record<string, unknown> | undefined
 
@@ -496,14 +496,16 @@ test("gpt-oss openai-compatible providers render harmony reasoning levels into t
             { role: "user", content: "hi" },
           ] as any[],
           model,
-          { reasoningEffort: "low" },
+          { chat_template_kwargs: { reasoning_effort: "low" } },
         ) as Array<{ role: string; content: string }>
         await language.doStream({
           prompt: transformed.map((msg) => ({
             role: msg.role,
             content: [{ type: "text", text: msg.content }],
           })) as any,
-          providerOptions: ProviderTransform.providerOptions(model, { reasoningEffort: "low" }),
+          providerOptions: ProviderTransform.providerOptions(model, {
+            chat_template_kwargs: { reasoning_effort: "low" },
+          }),
           includeRawChunks: false,
         })
       },
@@ -513,9 +515,10 @@ test("gpt-oss openai-compatible providers render harmony reasoning levels into t
       | Array<{ role?: string; content?: Array<{ type?: string; text?: string }> }>
       | undefined
     expect(messages?.[0]?.role).toBe("system")
-    expect(messages?.[0]?.content?.[0]?.text).toContain("Reasoning: low")
-    expect(messages?.[0]?.content?.[0]?.text).toContain("# Valid channels: analysis, commentary, final.")
-    expect(messages?.[0]?.content?.[0]?.text).toContain("Use a concise tone.")
+    expect(messages?.[0]?.content?.[0]?.text).toBe("Use a concise tone.")
+    expect(capturedBody?.chat_template_kwargs).toEqual({
+      reasoning_effort: "low",
+    })
   } finally {
     globalThis.fetch = originalFetch
   }

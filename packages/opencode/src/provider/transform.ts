@@ -335,7 +335,11 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
 export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
-  if (model.api.npm === "@ai-sdk/openai-compatible" && model.api.id.toLowerCase().includes("gpt-oss")) {
+  if (
+    model.api.npm === "@ai-sdk/openai-compatible" &&
+    model.api.id.toLowerCase().includes("gpt-oss") &&
+    model.providerID !== "llama.cpp"
+  ) {
     const instructions = msgs
       .flatMap((msg) => {
         if (msg.role !== "system") return []
@@ -1087,6 +1091,42 @@ const SLUG_OVERRIDES: Record<string, string> = {
 }
 
 export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
+  if (
+    model.providerID === "llama.cpp" &&
+    model.api.npm === "@ai-sdk/openai-compatible" &&
+    model.api.id.toLowerCase().includes("gpt-oss")
+  ) {
+    const off =
+      options.enable_thinking === false ||
+      options.thinking_budget_tokens === 0 ||
+      options.chat_template_kwargs?.enable_thinking === false ||
+      options.chat_template_kwargs?.reasoning_effort === "none" ||
+      options.chat_template_args?.enable_thinking === false ||
+      options.chat_template_args?.reasoning_effort === "none"
+    if (off) {
+      const normalized: Record<string, any> = {
+        ...options,
+        thinking_budget_tokens: 0,
+        chat_template_kwargs: {
+          ...(typeof options.chat_template_kwargs === "object" && options.chat_template_kwargs !== null
+            ? options.chat_template_kwargs
+            : {}),
+          reasoning_effort: "low",
+        },
+      }
+      delete normalized.enable_thinking
+      delete normalized.chat_template_kwargs.enable_thinking
+      if (typeof normalized.chat_template_args === "object" && normalized.chat_template_args !== null) {
+        normalized.chat_template_args = {
+          ...normalized.chat_template_args,
+          reasoning_effort: "low",
+        }
+        delete normalized.chat_template_args.enable_thinking
+      }
+      options = normalized
+    }
+  }
+
   if (model.api.npm === "@ai-sdk/gateway") {
     // Gateway providerOptions are split across two namespaces:
     // - `gateway`: gateway-native routing/caching controls (order, only, byok, etc.)
