@@ -236,14 +236,20 @@ List available themes.
 
 ### thinking
 
-Toggle the visibility of thinking/reasoning blocks in the conversation. When enabled, you can see the model's reasoning process for models that support extended thinking.
+Toggle the model's thinking/reasoning mode for the current session. On providers that expose reasoning controls through model variants, this switches between a thinking-enabled and thinking-disabled variant.
 
 :::note
-This command only controls whether thinking blocks are **displayed** - it does not enable or disable the model's reasoning capabilities. To toggle actual reasoning capabilities, use `ctrl+t` to cycle through model variants.
+For local `llama.cpp`-style OpenAI-compatible models, this can be wired to `enable_thinking: true/false` through `provider.models.<model>.options` and `variants`.
 :::
 
 ```bash frame="none"
 /thinking
+```
+
+To only show or hide reasoning blocks in the UI, use:
+
+```bash frame="none"
+/thinking-blocks
 ```
 
 ---

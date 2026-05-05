@@ -174,6 +174,16 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
 
         reasoning_effort: compatibleOptions.reasoningEffort,
         verbosity: compatibleOptions.textVerbosity,
+        enable_thinking: compatibleOptions.enable_thinking,
+        chat_template_kwargs:
+          compatibleOptions.chat_template_kwargs || compatibleOptions.enable_thinking !== undefined
+            ? {
+                ...(compatibleOptions.chat_template_kwargs ?? {}),
+                ...(compatibleOptions.enable_thinking !== undefined
+                  ? { enable_thinking: compatibleOptions.enable_thinking }
+                  : {}),
+              }
+            : undefined,
 
         // messages:
         messages: convertToOpenAICompatibleChatMessages(prompt),

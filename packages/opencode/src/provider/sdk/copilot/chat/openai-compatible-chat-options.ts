@@ -10,6 +10,17 @@ export const openaiCompatibleProviderOptions = z.object({
   user: z.string().optional(),
 
   /**
+   * Controls provider-side thinking / reasoning mode for OpenAI-compatible
+   * backends such as llama-server and DashScope.
+   */
+  enable_thinking: z.boolean().optional(),
+
+  /**
+   * Extra chat template kwargs for llama.cpp-style servers.
+   */
+  chat_template_kwargs: z.record(z.string(), z.unknown()).optional(),
+
+  /**
    * Reasoning effort for reasoning models. Defaults to `medium`.
    */
   reasoningEffort: z.string().optional(),

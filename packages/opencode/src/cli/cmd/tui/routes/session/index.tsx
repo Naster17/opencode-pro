@@ -657,8 +657,8 @@ export function Session() {
       },
     },
     {
-      title: showThinking() ? "Hide thinking" : "Show thinking",
-      value: "session.toggle.thinking",
+      title: showThinking() ? "Hide thinking blocks" : "Show thinking blocks",
+      value: "session.toggle.thinking.visibility",
       keybind: "display_thinking",
       category: "Session",
       slash: {
@@ -667,6 +667,19 @@ export function Session() {
       },
       onSelect: (dialog) => {
         setShowThinking((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: local.model.variant.thinking() === "off" ? "Enable thinking mode" : "Disable thinking mode",
+      value: "session.toggle.model.thinking",
+      category: "Session",
+      slash: {
+        name: "thinking-mode",
+        aliases: ["toggle-thinking-mode"],
+      },
+      onSelect: (dialog) => {
+        local.model.variant.toggleThinking()
         dialog.clear()
       },
     },

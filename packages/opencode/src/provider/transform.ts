@@ -442,6 +442,11 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 
   const id = model.id.toLowerCase()
   const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
+  const usesThinkingToggle =
+    model.api.npm === "@ai-sdk/openai-compatible" &&
+    ["deepseek-chat", "deepseek-reasoner", "deepseek-r1", "deepseek-v3", "minimax", "glm", "kimi", "k2p", "qwen", "big-pickle"].some(
+      (value) => id.includes(value),
+    )
   if (
     id.includes("deepseek-chat") ||
     id.includes("deepseek-reasoner") ||
@@ -454,7 +459,16 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     id.includes("qwen") ||
     id.includes("big-pickle")
   )
-    return {}
+    return usesThinkingToggle
+      ? {
+          none: {
+            enable_thinking: false,
+          },
+          thinking: {
+            enable_thinking: true,
+          },
+        }
+      : {}
 
   // see: https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks
   if (id.includes("grok") && id.includes("grok-3-mini")) {
@@ -935,6 +949,19 @@ export function options(input: {
     !modelId.includes("kimi-k2-thinking")
   ) {
     result["enable_thinking"] = true
+  }
+
+  if (
+    input.model.providerID === "llama.cpp" &&
+    input.model.api.npm === "@ai-sdk/openai-compatible" &&
+    typeof result["enable_thinking"] === "boolean"
+  ) {
+    result["chat_template_kwargs"] = {
+      ...(typeof result["chat_template_kwargs"] === "object" && result["chat_template_kwargs"] !== null
+        ? result["chat_template_kwargs"]
+        : {}),
+      enable_thinking: result["enable_thinking"],
+    }
   }
 
   if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {

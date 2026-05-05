@@ -91,9 +91,9 @@ function createMockFetch(chunks: string[]) {
   })
 }
 
-function createModel(fetchFn: ReturnType<typeof mock>) {
+function createModel(fetchFn: ReturnType<typeof mock>, provider = "copilot.chat") {
   return new OpenAICompatibleChatLanguageModel("test-model", {
-    provider: "copilot.chat",
+    provider,
     url: () => "https://api.test.com/chat/completions",
     headers: () => ({ Authorization: "Bearer test-token" }),
     fetch: fetchFn as any,
@@ -588,5 +588,99 @@ describe("request body", () => {
         },
       },
     ])
+  })
+
+  test("should send enable_thinking when provided", async () => {
+    let capturedBody: unknown
+    const mockFetch = mock(async (_url: string, init?: RequestInit) => {
+      capturedBody = JSON.parse(init?.body as string)
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(`data: [DONE]\n\n`))
+            controller.close()
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      )
+    })
+
+    const model = createModel(mockFetch)
+
+    await model.doStream({
+      prompt: TEST_PROMPT,
+      providerOptions: {
+        copilot: {
+          enable_thinking: false,
+        },
+      },
+      includeRawChunks: false,
+    })
+
+    expect((capturedBody as { enable_thinking?: boolean }).enable_thinking).toBe(false)
+  })
+
+  test("should mirror enable_thinking into chat_template_kwargs for openai-compatible providers", async () => {
+    let capturedBody: unknown
+    const mockFetch = mock(async (_url: string, init?: RequestInit) => {
+      capturedBody = JSON.parse(init?.body as string)
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(`data: [DONE]\n\n`))
+            controller.close()
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      )
+    })
+
+    const model = createModel(mockFetch, "custom.chat")
+
+    await model.doStream({
+      prompt: TEST_PROMPT,
+      providerOptions: {
+        custom: {
+          enable_thinking: false,
+        },
+      },
+      includeRawChunks: false,
+    })
+
+    expect((capturedBody as { chat_template_kwargs?: { enable_thinking?: boolean } }).chat_template_kwargs).toEqual({
+      enable_thinking: false,
+    })
+  })
+
+  test("should send chat_template_kwargs for llama.cpp providers", async () => {
+    let capturedBody: unknown
+    const mockFetch = mock(async (_url: string, init?: RequestInit) => {
+      capturedBody = JSON.parse(init?.body as string)
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(`data: [DONE]\n\n`))
+            controller.close()
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      )
+    })
+
+    const model = createModel(mockFetch, "llama.cpp.chat")
+
+    await model.doStream({
+      prompt: TEST_PROMPT,
+      providerOptions: {
+        llama: {
+          enable_thinking: false,
+        },
+      },
+      includeRawChunks: false,
+    })
+
+    expect((capturedBody as { chat_template_kwargs?: { enable_thinking?: boolean } }).chat_template_kwargs).toEqual({
+      enable_thinking: false,
+    })
   })
 })

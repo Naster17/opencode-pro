@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { useDialog } from "@tui/ui/dialog"
 import { useSync } from "@tui/context/sync"
 import { selectedForeground, useTheme } from "../context/theme"
@@ -33,7 +33,9 @@ export function DialogUsage() {
   const [loading, setLoading] = createSignal(true)
   const [section, setSection] = createSignal(0)
   const [mode, setMode] = createSignal<"sections" | "content">("sections")
-  const [range, setRange] = createSignal(0)
+  const [overviewRange, setOverviewRange] = createSignal(0)
+  const [sessionsRange, setSessionsRange] = createSignal(0)
+  const [modelsRange, setModelsRange] = createSignal(0)
   const [sessionIndex, setSessionIndex] = createSignal(0)
   const [modelIndex, setModelIndex] = createSignal(0)
 
@@ -54,7 +56,7 @@ export function DialogUsage() {
     dialog.setBeforeClose(undefined)
   })
 
-  const usage = createMemo(() =>
+  const overviewUsage = createMemo(() =>
     summarizeUsage(
       sync.data.session.map((session) => ({
         session,
@@ -64,33 +66,61 @@ export function DialogUsage() {
         deletions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.deletions, 0),
       })),
       sync.data.provider,
-      { start: ranges[range()].start() },
+      { start: ranges[overviewRange()].start() },
+    ),
+  )
+
+  const sessionsUsage = createMemo(() =>
+    summarizeUsage(
+      sync.data.session.map((session) => ({
+        session,
+        messages: sync.data.message[session.id] ?? [],
+        getParts: (messageID: string) => sync.data.part[messageID] ?? [],
+        additions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.additions, 0),
+        deletions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.deletions, 0),
+      })),
+      sync.data.provider,
+      { start: ranges[sessionsRange()].start() },
+    ),
+  )
+
+  const modelsUsage = createMemo(() =>
+    summarizeUsage(
+      sync.data.session.map((session) => ({
+        session,
+        messages: sync.data.message[session.id] ?? [],
+        getParts: (messageID: string) => sync.data.part[messageID] ?? [],
+        additions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.additions, 0),
+        deletions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.deletions, 0),
+      })),
+      sync.data.provider,
+      { start: ranges[modelsRange()].start() },
     ),
   )
 
   const rows = createMemo(() => {
     const left = {
-      total: `total ${formatCompactTokens(usage().tokens)}`,
-      input: `in ${formatCompactTokens(usage().input)}`,
+      total: `total ${formatCompactTokens(overviewUsage().tokens)}`,
+      input: `in ${formatCompactTokens(overviewUsage().input)}`,
     }
     const width = Math.max(left.total.length, left.input.length) + 1
     return {
-      first: formatAlignedRow(left.input, `out ${formatCompactTokens(usage().output)}`, width),
-      second: formatAlignedRow(left.total, `cached ${formatCompactTokens(usage().cached)}`, width),
-      third: formatAlignedRow(`tools ${usage().tools}`, `compact ${usage().compact}`, width),
+      first: formatAlignedRow(left.input, `out ${formatCompactTokens(overviewUsage().output)}`, width),
+      second: formatAlignedRow(left.total, `cached ${formatCompactTokens(overviewUsage().cached)}`, width),
+      third: formatAlignedRow(`tools ${overviewUsage().tools}`, `compact ${overviewUsage().compact}`, width),
     }
   })
 
   const spentRow = createMemo(() => {
-    const left = `spent ${money.format(usage().cost)}`
-    const right = `avg/session ${money.format(usage().avg_spent_per_session)}`
+    const left = `spent ${money.format(overviewUsage().cost)}`
+    const right = `avg/session ${money.format(overviewUsage().avg_spent_per_session)}`
     return formatAlignedRow(left, right, Math.max(left.length, 18) + 1)
   })
 
   const listHeight = createMemo(() => Math.max(5, Math.min(10, Math.floor(term().height / 4))))
   const contentWidth = 58
-  const sessions = createMemo(() => usage().session_usage)
-  const models = createMemo(() => usage().model_usage)
+  const sessions = createMemo(() => sessionsUsage().session_usage)
+  const models = createMemo(() => modelsUsage().model_usage)
   const sessionSpentWidth = createMemo(() =>
     Math.max("spent".length, ...sessions().map((item) => money.format(item.cost).length)),
   )
@@ -100,16 +130,28 @@ export function DialogUsage() {
   const sessionTitleWidth = createMemo(() =>
     Math.max(12, contentWidth - 1 - sessionSpentWidth() - 2 - sessionTokensWidth()),
   )
-  const modelRightWidth = createMemo(
-    () =>
-      Math.max(
-        16,
-        ...models().map((item) => `x${item.count}  ${formatCompactTokens(item.tokens)}  ${money.format(item.cost)}`.length),
-      ),
+  const modelCallsWidth = createMemo(() => Math.max("calls".length, ...models().map((item) => `x${item.count}`.length)))
+  const modelTokensWidth = createMemo(() =>
+    Math.max("tokens".length, ...models().map((item) => formatCompactTokens(item.tokens).length)),
   )
-  const modelTitleWidth = createMemo(() => Math.max(12, contentWidth - 1 - modelRightWidth()))
+  const modelSpentWidth = createMemo(() =>
+    Math.max("spent".length, ...models().map((item) => money.format(item.cost).length)),
+  )
+  const modelTitleWidth = createMemo(() =>
+    Math.max(12, contentWidth - 1 - modelCallsWidth() - 2 - modelTokensWidth() - 2 - modelSpentWidth()),
+  )
   const visibleSessions = createMemo(() => visibleWindow(sessions(), sessionIndex(), listHeight()))
   const visibleModels = createMemo(() => visibleWindow(models(), modelIndex(), listHeight()))
+
+  createEffect(() => {
+    if (sessionIndex() < sessions().length) return
+    setSessionIndex(Math.max(0, sessions().length - 1))
+  })
+
+  createEffect(() => {
+    if (modelIndex() < models().length) return
+    setModelIndex(Math.max(0, models().length - 1))
+  })
 
   useKeyboard((evt) => {
     if (evt.name === "tab") {
@@ -121,16 +163,28 @@ export function DialogUsage() {
         return
       }
       if (sections[section()] === "Overview") {
-        setRange((value) => (value + direction + ranges.length) % ranges.length)
+        setOverviewRange((value) => (value + direction + ranges.length) % ranges.length)
         return
       }
       if (sections[section()] === "Sessions") {
-        if (sessions().length === 0) return
-        setSessionIndex((value) => (value + direction + sessions().length) % sessions().length)
+        setSessionsRange((value) => (value + direction + ranges.length) % ranges.length)
         return
       }
-      if (models().length === 0) return
-      setModelIndex((value) => (value + direction + models().length) % models().length)
+      setModelsRange((value) => (value + direction + ranges.length) % ranges.length)
+    }
+
+    if (mode() === "content" && (evt.name === "up" || evt.name === "down")) {
+      if (sections[section()] === "Sessions") {
+        if (sessions().length === 0) return
+        evt.preventDefault()
+        evt.stopPropagation()
+        setSessionIndex((value) => (value + (evt.name === "up" ? -1 : 1) + sessions().length) % sessions().length)
+        return
+      }
+      if (sections[section()] !== "Models" || models().length === 0) return
+      evt.preventDefault()
+      evt.stopPropagation()
+      setModelIndex((value) => (value + (evt.name === "up" ? -1 : 1) + models().length) % models().length)
     }
 
     if (evt.name === "return" && mode() === "sections") {
@@ -190,7 +244,7 @@ export function DialogUsage() {
         <Show when={sections[section()] === "Overview"}>
           <box flexDirection="row" gap={1} paddingBottom={1}>
             {ranges.map((item, index) => {
-              const active = range() === index
+              const active = overviewRange() === index
               const engaged = active && mode() === "content"
               const bg = active ? (engaged ? theme.primary : theme.accent) : theme.backgroundElement
               return (
@@ -200,13 +254,13 @@ export function DialogUsage() {
               )
             })}
           </box>
-          <text fg={theme.textMuted}>{`active ${formatUsageDuration(usage().duration)}`}</text>
-          <text fg={theme.textMuted}>{`sessions ${usage().sessions}`}</text>
+          <text fg={theme.textMuted}>{`active ${formatUsageDuration(overviewUsage().duration)}`}</text>
+          <text fg={theme.textMuted}>{`sessions ${overviewUsage().sessions}`}</text>
           <text wrapMode="none">
             <span style={{ fg: theme.textMuted }}>code </span>
-            <span style={{ fg: theme.diffAdded }}>+{formatCompactTokens(usage().additions)}</span>
+            <span style={{ fg: theme.diffAdded }}>+{formatCompactTokens(overviewUsage().additions)}</span>
             <span style={{ fg: theme.textMuted }}> </span>
-            <span style={{ fg: theme.diffRemoved }}>-{formatCompactTokens(usage().deletions)}</span>
+            <span style={{ fg: theme.diffRemoved }}>-{formatCompactTokens(overviewUsage().deletions)}</span>
           </text>
           <text fg={theme.textMuted} wrapMode="none">
             {rows().first}
@@ -220,11 +274,11 @@ export function DialogUsage() {
           <text fg={theme.textMuted} wrapMode="none">
             {spentRow()}
           </text>
-          <Show when={usage().popular_models.length > 0}>
+          <Show when={overviewUsage().popular_models.length > 0}>
             <text fg={theme.text} attributes={TextAttributes.BOLD}>
               Top Models
             </text>
-            {usage().popular_models.map((item, index) => (
+            {overviewUsage().popular_models.map((item, index) => (
               <box width="100%" flexDirection="row" justifyContent="space-between">
                 <text wrapMode="none" fg={index === 0 ? theme.warning : index === 1 ? theme.info : theme.success}>
                   {`${index + 1}. ${item.name}`}
@@ -237,6 +291,18 @@ export function DialogUsage() {
           </Show>
         </Show>
         <Show when={sections[section()] === "Sessions"}>
+          <box flexDirection="row" gap={1} paddingBottom={1}>
+            {ranges.map((item, index) => {
+              const active = sessionsRange() === index
+              const engaged = active && mode() === "content"
+              const bg = active ? (engaged ? theme.primary : theme.accent) : theme.backgroundElement
+              return (
+                <box paddingLeft={1} paddingRight={1} backgroundColor={bg}>
+                  <text fg={active ? selectedForeground(theme, bg) : theme.text}>{item.label}</text>
+                </box>
+              )
+            })}
+          </box>
           <text fg={theme.textMuted}>Top sessions by spend and tokens.</text>
           <box width="100%" flexDirection="row">
             <box width={sessionTitleWidth()}>
@@ -300,6 +366,18 @@ export function DialogUsage() {
           </Show>
         </Show>
         <Show when={sections[section()] === "Models"}>
+          <box flexDirection="row" gap={1} paddingBottom={1}>
+            {ranges.map((item, index) => {
+              const active = modelsRange() === index
+              const engaged = active && mode() === "content"
+              const bg = active ? (engaged ? theme.primary : theme.accent) : theme.backgroundElement
+              return (
+                <box paddingLeft={1} paddingRight={1} backgroundColor={bg}>
+                  <text fg={active ? selectedForeground(theme, bg) : theme.text}>{item.label}</text>
+                </box>
+              )
+            })}
+          </box>
           <text fg={theme.textMuted}>Models ranked by usage count, then tokens and cost.</text>
           <box width="100%" flexDirection="row">
             <box width={modelTitleWidth()}>
@@ -308,9 +386,29 @@ export function DialogUsage() {
               </text>
             </box>
             <box flexGrow={1} />
-            <box width={modelRightWidth()}>
+            <box width={modelCallsWidth()}>
               <text fg={theme.textMuted} wrapMode="none">
-                {"calls  tokens  spent".padStart(modelRightWidth(), " ")}
+                {"calls".padStart(modelCallsWidth(), " ")}
+              </text>
+            </box>
+            <box width={2}>
+              <text fg={theme.textMuted} wrapMode="none">
+                {"  "}
+              </text>
+            </box>
+            <box width={modelTokensWidth()}>
+              <text fg={theme.textMuted} wrapMode="none">
+                {"tokens".padStart(modelTokensWidth(), " ")}
+              </text>
+            </box>
+            <box width={2}>
+              <text fg={theme.textMuted} wrapMode="none">
+                {"  "}
+              </text>
+            </box>
+            <box width={modelSpentWidth()}>
+              <text fg={theme.textMuted} wrapMode="none">
+                {"spent".padStart(modelSpentWidth(), " ")}
               </text>
             </box>
           </box>
@@ -322,10 +420,6 @@ export function DialogUsage() {
             const active = modelIndex() === absolute
             const bg = active && mode() === "content" ? theme.primary : undefined
             const left = Locale.truncate(`${absolute + 1}. ${item.name}`, modelTitleWidth())
-            const right = `x${item.count}  ${formatCompactTokens(item.tokens)}  ${money.format(item.cost)}`.padStart(
-              modelRightWidth(),
-              " ",
-            )
             return (
               <box backgroundColor={bg} width="100%" flexDirection="row">
                 <box width={modelTitleWidth()}>
@@ -334,9 +428,29 @@ export function DialogUsage() {
                   </text>
                 </box>
                 <box flexGrow={1} />
-                <box width={modelRightWidth()}>
+                <box width={modelCallsWidth()}>
                   <text fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted} wrapMode="none">
-                    {right}
+                    {`x${item.count}`.padStart(modelCallsWidth(), " ")}
+                  </text>
+                </box>
+                <box width={2}>
+                  <text fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted} wrapMode="none">
+                    {"  "}
+                  </text>
+                </box>
+                <box width={modelTokensWidth()}>
+                  <text fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted} wrapMode="none">
+                    {formatCompactTokens(item.tokens).padStart(modelTokensWidth(), " ")}
+                  </text>
+                </box>
+                <box width={2}>
+                  <text fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted} wrapMode="none">
+                    {"  "}
+                  </text>
+                </box>
+                <box width={modelSpentWidth()}>
+                  <text fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted} wrapMode="none">
+                    {money.format(item.cost).padStart(modelSpentWidth(), " ")}
                   </text>
                 </box>
               </box>
@@ -355,7 +469,8 @@ export function DialogUsage() {
             </>
           ) : (
             <>
-              <span style={{ fg: theme.text }}>tab</span> navigate <span style={{ fg: theme.text }}>esc</span> back
+              <span style={{ fg: theme.text }}>tab</span> range <span style={{ fg: theme.text }}>↑↓</span> list{" "}
+              <span style={{ fg: theme.text }}>esc</span> back
             </>
           )}
         </text>

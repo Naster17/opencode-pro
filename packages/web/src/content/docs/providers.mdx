@@ -1201,7 +1201,7 @@ See the [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/he
 
 You can configure opencode to use local models through [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server utility
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-24}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1214,9 +1214,18 @@ You can configure opencode to use local models through [llama.cpp's](https://git
       "models": {
         "qwen3-coder:a3b": {
           "name": "Qwen3-Coder: a3b-30b (local)",
+          "reasoning": true,
           "limit": {
             "context": 128000,
             "output": 65536
+          },
+          "options": {
+            "enable_thinking": false
+          },
+          "variants": {
+            "thinking": {
+              "enable_thinking": true
+            }
           }
         }
       }
@@ -1232,6 +1241,7 @@ In this example:
 - `name` is the display name for the provider in the UI.
 - `options.baseURL` is the endpoint for the local server.
 - `models` is a map of model IDs to their configurations. The model name will be displayed in the model selection list.
+- For reasoning-capable `llama.cpp` models, `options.enable_thinking: false` disables thinking by default, and a variant like `"thinking": { "enable_thinking": true }` lets `/thinking` turn it back on.
 
 ---
 

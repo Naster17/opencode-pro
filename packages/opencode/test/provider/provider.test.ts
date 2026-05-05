@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { test, expect, mock } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 
@@ -11,6 +11,7 @@ import { ModelsDev } from "@/provider/models"
 import { Provider } from "@/provider/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "@/util/filesystem"
+import * as ProviderTransform from "@/provider/transform"
 import { Env } from "../../src/env"
 import { Effect } from "effect"
 import { AppRuntime } from "../../src/effect/app-runtime"
@@ -360,6 +361,77 @@ test("custom DeepSeek openai-compatible model defaults interleaved reasoning fie
       ).toBe(false)
     },
   })
+})
+
+test("openai-compatible providers mirror enable_thinking into chat_template_kwargs", async () => {
+  const originalFetch = globalThis.fetch
+  let capturedBody: Record<string, unknown> | undefined
+
+  globalThis.fetch = mock(async (_input: string | URL | Request, init?: RequestInit) => {
+    capturedBody = JSON.parse(String(init?.body ?? "{}"))
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":"stop"}]}\n\n'))
+          controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"))
+          controller.close()
+        },
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      },
+    )
+  }) as unknown as typeof globalThis.fetch
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "llama.cpp": {
+                name: "llama.cpp",
+                npm: "@ai-sdk/openai-compatible",
+                api: "http://127.0.0.1:8080/v1",
+                models: {
+                  "qwen3.5-9b": {
+                    name: "Qwen 3.5 9B",
+                    tool_call: true,
+                    reasoning: true,
+                    limit: { context: 128000, output: 65536 },
+                  },
+                },
+                options: { apiKey: "test-key" },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = await getModel(ProviderID.make("llama.cpp"), ModelID.make("qwen3.5-9b"))
+        const language = await getLanguage(model)
+        await language.doStream({
+          prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+          providerOptions: ProviderTransform.providerOptions(model, { enable_thinking: false }),
+          includeRawChunks: false,
+        })
+      },
+    })
+
+    expect(capturedBody?.enable_thinking).toBe(false)
+    expect(capturedBody?.chat_template_kwargs).toEqual({
+      enable_thinking: false,
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })
 
 test("env variable takes precedence, config merges options", async () => {

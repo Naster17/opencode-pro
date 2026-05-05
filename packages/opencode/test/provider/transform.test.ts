@@ -118,6 +118,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
     })
     expect(result.store).toBe(false)
   })
+
 })
 
 describe("ProviderTransform.options - zai/zhipuai thinking", () => {
@@ -2215,7 +2216,7 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
-  test("deepseek returns empty object", () => {
+  test("deepseek returns enable_thinking toggle variants for openai-compatible models", () => {
     const model = createMockModel({
       id: "deepseek/deepseek-chat",
       providerID: "deepseek",
@@ -2226,10 +2227,13 @@ describe("ProviderTransform.variants", () => {
       },
     })
     const result = ProviderTransform.variants(model)
-    expect(result).toEqual({})
+    expect(result).toEqual({
+      none: { enable_thinking: false },
+      thinking: { enable_thinking: true },
+    })
   })
 
-  test("minimax returns empty object", () => {
+  test("minimax returns enable_thinking toggle variants for openai-compatible models", () => {
     const model = createMockModel({
       id: "minimax/minimax-model",
       providerID: "minimax",
@@ -2240,10 +2244,13 @@ describe("ProviderTransform.variants", () => {
       },
     })
     const result = ProviderTransform.variants(model)
-    expect(result).toEqual({})
+    expect(result).toEqual({
+      none: { enable_thinking: false },
+      thinking: { enable_thinking: true },
+    })
   })
 
-  test("glm returns empty object", () => {
+  test("glm returns enable_thinking toggle variants for openai-compatible models", () => {
     const model = createMockModel({
       id: "glm/glm-4",
       providerID: "glm",
@@ -2254,7 +2261,10 @@ describe("ProviderTransform.variants", () => {
       },
     })
     const result = ProviderTransform.variants(model)
-    expect(result).toEqual({})
+    expect(result).toEqual({
+      none: { enable_thinking: false },
+      thinking: { enable_thinking: true },
+    })
   })
 
   test("mistral models with reasoning support return variants", () => {
@@ -2767,6 +2777,23 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["low", "medium", "high"])
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
+    })
+
+    test("returns enable_thinking variants for qwen reasoning models", () => {
+      const model = createMockModel({
+        id: "llama.cpp/qwen3.5-9b",
+        providerID: "llama.cpp",
+        api: {
+          id: "qwen3.5-9b",
+          url: "http://127.0.0.1:8080/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({
+        none: { enable_thinking: false },
+        thinking: { enable_thinking: true },
+      })
     })
   })
 

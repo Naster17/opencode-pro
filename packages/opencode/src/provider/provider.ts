@@ -1503,6 +1503,19 @@ const layer: Layer.Layer<
             }
           }
 
+          if (model.api.npm === "@ai-sdk/openai-compatible" && opts.body && opts.method === "POST") {
+            const body = JSON.parse(opts.body as string)
+            if (typeof body.enable_thinking === "boolean") {
+              body.chat_template_kwargs = {
+                ...(typeof body.chat_template_kwargs === "object" && body.chat_template_kwargs !== null
+                  ? body.chat_template_kwargs
+                  : {}),
+                enable_thinking: body.enable_thinking,
+              }
+              opts.body = JSON.stringify(body)
+            }
+          }
+
           const res = await fetchFn(input, {
             ...opts,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682

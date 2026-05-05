@@ -207,6 +207,64 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           ) ?? undefined
         )
       })
+      const modelInfo = createMemo(() => {
+        const value = currentModel()
+        if (!value) return
+        const provider = sync.data.provider.find((x) => x.id === value.providerID)
+        return provider?.models[value.modelID]
+      })
+      const variantList = () => {
+        const info = modelInfo()
+        if (!info?.variants) return []
+        return Object.entries(info.variants)
+      }
+      const thinkingState = (options: Record<string, any> | undefined) => {
+        if (!options) return "inherit"
+        if (options.enable_thinking === false) return "off"
+        if (options.enable_thinking === true) return "on"
+        if (options.reasoningEffort === "none") return "off"
+        if (typeof options.reasoningEffort === "string" && options.reasoningEffort.length > 0) return "on"
+        if (options.reasoning?.effort === "none") return "off"
+        if (typeof options.reasoning?.effort === "string") return "on"
+        if (options.chat_template_kwargs?.enable_thinking === false) return "off"
+        if (options.chat_template_kwargs?.enable_thinking === true) return "on"
+        if (options.chat_template_args?.enable_thinking === false) return "off"
+        if (options.chat_template_args?.enable_thinking === true) return "on"
+        if (options.chatTemplateArgs?.enable_thinking === false) return "off"
+        if (options.chatTemplateArgs?.enable_thinking === true) return "on"
+        if (options.thinking?.type === "disabled") return "off"
+        if (["enabled", "adaptive"].includes(options.thinking?.type)) return "on"
+        if (options.reasoningConfig?.type === "disabled") return "off"
+        if (["enabled", "adaptive"].includes(options.reasoningConfig?.type)) return "on"
+        if (options.thinkingConfig?.thinkingBudget === 0) return "off"
+        if (options.thinkingConfig?.includeThoughts) return "on"
+        if (typeof options.thinkingConfig?.thinkingLevel === "string") return "on"
+        return "inherit"
+      }
+      const resolveThinking = () => {
+        const info = modelInfo()
+        if (!info?.capabilities.reasoning) return
+        const current = model.variant.current()
+        const variants = variantList().map(([name, options]) => ({
+          name,
+          state: thinkingState(options),
+        }))
+        const baseState = thinkingState(info.options)
+        const currentState = current ? variants.find((item) => item.name === current)?.state : undefined
+        return {
+          baseState,
+          activeState: currentState ?? baseState,
+          off: variants.find((item) => item.state === "off")?.name,
+          on: variants.find((item) => item.state === "on")?.name,
+        }
+      }
+      const defaultVariantTitle = () => {
+        const thinking = resolveThinking()
+        if (!thinking) return "default"
+        if (thinking.baseState === "off") return "off"
+        if (thinking.baseState === "on" && !thinking.on) return "on"
+        return "default"
+      }
 
       return {
         current: currentModel,
@@ -334,6 +392,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         variant: {
+          options() {
+            return [
+              {
+                value: "default",
+                title: defaultVariantTitle(),
+              },
+              ...variantList().map(([name, options]) => {
+                const state = thinkingState(options)
+                return {
+                  value: name,
+                  title: state === "inherit" ? name : `${name} (${state})`,
+                }
+              }),
+            ]
+          },
           selected() {
             const m = currentModel()
             if (!m) return undefined
@@ -347,12 +420,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             return v
           },
           list() {
-            const m = currentModel()
-            if (!m) return []
-            const provider = sync.data.provider.find((x) => x.id === m.providerID)
-            const info = provider?.models[m.modelID]
-            if (!info?.variants) return []
-            return Object.keys(info.variants)
+            return variantList().map(([name]) => name)
+          },
+          display() {
+            const current = this.current()
+            if (current) {
+              return this.options().find((item) => item.value === current)?.title ?? current
+            }
+            if (this.selected() === "default") return defaultVariantTitle()
+            return undefined
           },
           set(value: string | undefined) {
             const m = currentModel()
@@ -375,6 +451,49 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               return
             }
             this.set(variants[index + 1])
+          },
+          thinking() {
+            return resolveThinking()?.activeState === "off" ? "off" : "on"
+          },
+          toggleThinking() {
+            const thinking = resolveThinking()
+            if (!thinking) {
+              toast.show({
+                variant: "info",
+                message: "Current model does not support thinking mode",
+                duration: 3000,
+              })
+              return
+            }
+            if (thinking.activeState === "off") {
+              if (thinking.baseState === "on") {
+                this.set(undefined)
+                return
+              }
+              if (thinking.on) {
+                this.set(thinking.on)
+                return
+              }
+              toast.show({
+                variant: "info",
+                message: "Add a variant with enable_thinking: true to turn thinking back on",
+                duration: 4000,
+              })
+              return
+            }
+            if (thinking.off) {
+              this.set(thinking.off)
+              return
+            }
+            if (thinking.baseState === "off") {
+              this.set(undefined)
+              return
+            }
+            toast.show({
+              variant: "info",
+              message: "Add a variant with enable_thinking: false to turn thinking off",
+              duration: 4000,
+            })
           },
         },
       }
