@@ -506,6 +506,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (variants.length === 0) return
             const current = this.current()
             const thinking = resolveThinking()
+            if (thinking?.hasThinkingToggle && thinking.levelVariant.high === "thinking") {
+              this.set(current === "thinking" ? undefined : "thinking")
+              return
+            }
             if (!current) {
               this.set(variants[0])
               return
