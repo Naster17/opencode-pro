@@ -45,6 +45,26 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
+function filterEmptyContentMessages(msgs: ModelMessage[]) {
+  return msgs
+    .map((msg) => {
+      if (typeof msg.content === "string") {
+        if (msg.content === "") return undefined
+        return msg
+      }
+      if (!Array.isArray(msg.content)) return msg
+      const filtered = msg.content.filter((part) => {
+        if (part.type === "text" || part.type === "reasoning") {
+          return part.text !== ""
+        }
+        return true
+      })
+      if (filtered.length === 0) return undefined
+      return { ...msg, content: filtered }
+    })
+    .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
+}
+
 function normalizeMessages(
   msgs: ModelMessage[],
   model: Provider.Model,
@@ -53,44 +73,12 @@ function normalizeMessages(
   // Anthropic rejects messages with empty content - filter out empty string messages
   // and remove empty text/reasoning parts from array content
   if (model.api.npm === "@ai-sdk/anthropic") {
-    msgs = msgs
-      .map((msg) => {
-        if (typeof msg.content === "string") {
-          if (msg.content === "") return undefined
-          return msg
-        }
-        if (!Array.isArray(msg.content)) return msg
-        const filtered = msg.content.filter((part) => {
-          if (part.type === "text" || part.type === "reasoning") {
-            return part.text !== ""
-          }
-          return true
-        })
-        if (filtered.length === 0) return undefined
-        return { ...msg, content: filtered }
-      })
-      .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
+    msgs = filterEmptyContentMessages(msgs)
   }
 
   // Bedrock specific transforms
   if (model.api.npm === "@ai-sdk/amazon-bedrock") {
-    msgs = msgs
-      .map((msg) => {
-        if (typeof msg.content === "string") {
-          if (msg.content === "") return undefined
-          return msg
-        }
-        if (!Array.isArray(msg.content)) return msg
-        const filtered = msg.content.filter((part) => {
-          if (part.type === "text" || part.type === "reasoning") {
-            return part.text !== ""
-          }
-          return true
-        })
-        if (filtered.length === 0) return undefined
-        return { ...msg, content: filtered }
-      })
-      .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
+    msgs = filterEmptyContentMessages(msgs)
   }
 
   if (model.api.id.includes("claude")) {
@@ -157,32 +145,37 @@ function normalizeMessages(
         .substring(0, 9) // Take first 9 characters
         .padEnd(9, "0") // Pad with zeros if less than 9 characters
     }
-    const result: ModelMessage[] = []
-    for (let i = 0; i < msgs.length; i++) {
-      const msg = msgs[i]
-      const nextMsg = msgs[i + 1]
+    return msgs.flatMap((msg, index) => {
+      const normalized =
+        msg.role === "assistant" && Array.isArray(msg.content)
+          ? {
+              ...msg,
+              content: msg.content.map((part) => {
+                if (part.type === "tool-call" || part.type === "tool-result") {
+                  return { ...part, toolCallId: scrub(part.toolCallId) }
+                }
+                return part
+              }),
+            }
+          : msg.role === "tool" && Array.isArray(msg.content)
+            ? {
+                ...msg,
+                content: msg.content.map((part) => {
+                  if (part.type === "tool-result") {
+                    return { ...part, toolCallId: scrub(part.toolCallId) }
+                  }
+                  return part
+                }),
+              }
+            : msg
 
-      if (msg.role === "assistant" && Array.isArray(msg.content)) {
-        msg.content = msg.content.map((part) => {
-          if (part.type === "tool-call" || part.type === "tool-result") {
-            return { ...part, toolCallId: scrub(part.toolCallId) }
-          }
-          return part
-        })
+      if (msg.role !== "tool" || msgs[index + 1]?.role !== "user") {
+        return [normalized]
       }
-      if (msg.role === "tool" && Array.isArray(msg.content)) {
-        msg.content = msg.content.map((part) => {
-          if (part.type === "tool-result") {
-            return { ...part, toolCallId: scrub(part.toolCallId) }
-          }
-          return part
-        })
-      }
-      result.push(msg)
 
-      // Fix message sequence: tool messages cannot be followed by user messages
-      if (msg.role === "tool" && nextMsg?.role === "user") {
-        result.push({
+      return [
+        normalized,
+        {
           role: "assistant",
           content: [
             {
@@ -190,10 +183,9 @@ function normalizeMessages(
               text: "Done.",
             },
           ],
-        })
-      }
-    }
-    return result
+        },
+      ]
+    })
   }
 
   // Deepseek requires all assistant messages to have reasoning on them

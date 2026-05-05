@@ -38,6 +38,15 @@ export function DialogUsage() {
   const [modelsRange, setModelsRange] = createSignal(0)
   const [sessionIndex, setSessionIndex] = createSignal(0)
   const [modelIndex, setModelIndex] = createSignal(0)
+  const sessionData = createMemo(() =>
+    sync.data.session.map((session) => ({
+      session,
+      messages: sync.data.message[session.id] ?? [],
+      getParts: (messageID: string) => sync.data.part[messageID] ?? [],
+      additions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.additions, 0),
+      deletions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.deletions, 0),
+    })),
+  )
 
   onMount(() => {
     dialog.setSize("large")
@@ -57,45 +66,13 @@ export function DialogUsage() {
   })
 
   const overviewUsage = createMemo(() =>
-    summarizeUsage(
-      sync.data.session.map((session) => ({
-        session,
-        messages: sync.data.message[session.id] ?? [],
-        getParts: (messageID: string) => sync.data.part[messageID] ?? [],
-        additions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.additions, 0),
-        deletions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.deletions, 0),
-      })),
-      sync.data.provider,
-      { start: ranges[overviewRange()].start() },
-    ),
+    summarizeUsage(sessionData(), sync.data.provider, { start: ranges[overviewRange()].start() }),
   )
-
   const sessionsUsage = createMemo(() =>
-    summarizeUsage(
-      sync.data.session.map((session) => ({
-        session,
-        messages: sync.data.message[session.id] ?? [],
-        getParts: (messageID: string) => sync.data.part[messageID] ?? [],
-        additions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.additions, 0),
-        deletions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.deletions, 0),
-      })),
-      sync.data.provider,
-      { start: ranges[sessionsRange()].start() },
-    ),
+    summarizeUsage(sessionData(), sync.data.provider, { start: ranges[sessionsRange()].start() }),
   )
-
   const modelsUsage = createMemo(() =>
-    summarizeUsage(
-      sync.data.session.map((session) => ({
-        session,
-        messages: sync.data.message[session.id] ?? [],
-        getParts: (messageID: string) => sync.data.part[messageID] ?? [],
-        additions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.additions, 0),
-        deletions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.deletions, 0),
-      })),
-      sync.data.provider,
-      { start: ranges[modelsRange()].start() },
-    ),
+    summarizeUsage(sessionData(), sync.data.provider, { start: ranges[modelsRange()].start() }),
   )
 
   const rows = createMemo(() => {

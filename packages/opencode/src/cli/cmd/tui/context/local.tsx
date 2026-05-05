@@ -267,6 +267,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           name,
           level: thinkingState(options, name),
         }))
+        const variantMap = Object.fromEntries(variants.map((item) => [item.name, item])) as Record<
+          string,
+          (typeof variants)[number] | undefined
+        >
         const baseLevel = thinkingState(info.options)
         const findLevel = (level: ThinkingLevel) => variants.find((item) => item.level === level)?.level as
           | ThinkingLevel
@@ -278,13 +282,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           findLevel("medium") ??
           findLevel("high") ??
           "off"
-        const currentLevel = current
-          ? ((variants.find((item) => item.name === current)?.level ?? "inherit") === "inherit"
-              ? undefined
-              : ((variants.find((item) => item.name === current)?.level === "thinking"
-                    ? "high"
-                    : variants.find((item) => item.name === current)?.level) as ThinkingLevel))
-          : undefined
+        const currentVariant = current ? variantMap[current] : undefined
+        const currentLevel =
+          !currentVariant || currentVariant.level === "inherit"
+            ? undefined
+            : (currentVariant.level === "thinking" ? "high" : currentVariant.level)
         const activeLevel: ThinkingLevel =
           currentLevel ?? (baseLevel === "inherit" ? defaultLevel : baseLevel === "thinking" ? "high" : baseLevel)
         const levelVariant = Object.fromEntries(
@@ -299,8 +301,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return baseLevel === "inherit" && defaultLevel === level
         })
         const cycleVariants = variantList()
-          .filter(([name, options]) => {
-            const level = thinkingState(options, name)
+          .filter(([name]) => {
+            const level = variantMap[name]?.level
             if (name === "none" && activeLevel === "off") return false
             if (level === "off" && baseLevel === "inherit" && defaultLevel === "off") return false
             return true
@@ -503,16 +505,25 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const variants = cycleVariantList()
             if (variants.length === 0) return
             const current = this.current()
+            const thinking = resolveThinking()
             if (!current) {
               this.set(variants[0])
               return
             }
             const index = variants.indexOf(current)
-            if (index === -1 || index === variants.length - 1) {
+            if (index === -1) {
               this.set(variants[0])
               return
             }
-            this.set(variants[index + 1])
+            if (index < variants.length - 1) {
+              this.set(variants[index + 1])
+              return
+            }
+            if (!thinking) {
+              this.set(variants[0])
+              return
+            }
+            this.set(undefined)
           },
           thinking() {
             const thinking = resolveThinking()
