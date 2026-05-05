@@ -2843,6 +2843,20 @@ describe("ProviderTransform.variants", () => {
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })
 
+    test("llama.cpp does not expose generic reasoningEffort variants", () => {
+      const model = createMockModel({
+        id: "llama.cpp/gpt-oss-20b",
+        providerID: "llama.cpp",
+        api: {
+          id: "gpt-oss-20b",
+          url: "http://127.0.0.1:8080/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({})
+    })
+
     test("returns enable_thinking variants for qwen reasoning models", () => {
       const model = createMockModel({
         id: "llama.cpp/qwen3.5-9b",

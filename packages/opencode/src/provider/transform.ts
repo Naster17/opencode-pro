@@ -612,6 +612,12 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "venice-ai-sdk-provider":
     // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
     case "@ai-sdk/openai-compatible":
+      // llama.cpp's OpenAI-compatible server supports model-specific thinking toggles
+      // like `enable_thinking`, but does not reliably support generic
+      // `reasoning_effort` switching across reasoning models.
+      if (model.providerID === "llama.cpp") {
+        return {}
+      }
       const efforts = [...WIDELY_SUPPORTED_EFFORTS]
       if (model.api.id.toLowerCase().includes("deepseek-v4")) {
         efforts.push("max")
