@@ -17,6 +17,10 @@ await import("./generate.ts")
 import { Script } from "@opencode-ai/script"
 import pkg from "../package.json"
 
+const npmPackagePrefix = process.env.OPENCODE_NPM_PACKAGE_PREFIX || Script.repoName
+const publishedBinaryName = (name: string) =>
+  `${npmPackagePrefix}${name.startsWith("opencode-") ? name.slice("opencode".length) : `-${name}`}`
+
 // Load migrations from migration directories
 const migrationDirs = (
   await fs.promises.readdir(path.join(dir, "migration"), {
@@ -242,7 +246,7 @@ for (const item of targets) {
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {
-        name,
+        name: publishedBinaryName(name),
         version: Script.version,
         os: [item.os],
         cpu: [item.arch],

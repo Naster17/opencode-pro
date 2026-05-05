@@ -7,9 +7,13 @@ import { fileURLToPath } from "url"
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
+const npmPackagePrefix = process.env.OPENCODE_NPM_PACKAGE_PREFIX || Script.repoName
+
 async function published(name: string, version: string) {
   return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0
 }
+
+const shouldPublishNpm = process.env.OPENCODE_PUBLISH_NPM === "true"
 
 const originalText = await Bun.file("package.json").text()
 const pkg = JSON.parse(originalText) as {
@@ -17,6 +21,7 @@ const pkg = JSON.parse(originalText) as {
   version: string
   exports: Record<string, unknown>
 }
+pkg.name = `${npmPackagePrefix}-sdk`
 function transformExports(exports: Record<string, unknown>) {
   return Object.fromEntries(
     Object.entries(exports).map(([key, value]) => {
@@ -31,7 +36,9 @@ function transformExports(exports: Record<string, unknown>) {
     }),
   )
 }
-if (await published(pkg.name, pkg.version)) {
+if (!shouldPublishNpm) {
+  console.log(`skipping npm publish for ${pkg.name}@${pkg.version} because OPENCODE_PUBLISH_NPM is not enabled`)
+} else if (await published(pkg.name, pkg.version)) {
   console.log(`already published ${pkg.name}@${pkg.version}`)
 } else {
   pkg.exports = transformExports(pkg.exports)

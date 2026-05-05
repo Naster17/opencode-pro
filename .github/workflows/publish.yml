@@ -34,11 +34,16 @@ permissions:
   contents: write
   packages: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  OPENCODE_NPM_PACKAGE_PREFIX: "@naster17/opencode-pro"
+  OPENCODE_PUBLISH_NPM: true
+
 jobs:
   version:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -75,7 +80,7 @@ jobs:
     needs: version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           fetch-tags: true
 
@@ -98,14 +103,14 @@ jobs:
           GH_REPO: ${{ needs.version.outputs.repo }}
           GH_TOKEN: ${{ steps.committer.outputs.token }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: opencode-cli
           path: |
             packages/opencode/dist/opencode-darwin*
             packages/opencode/dist/opencode-linux*
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: opencode-cli-windows
           path: packages/opencode/dist/opencode-windows*
@@ -116,100 +121,9 @@ jobs:
     needs:
       - build-cli
       - version
-    runs-on: windows-2025
-    env:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
-      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+    runs-on: windows-2025-vs2026
     steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: opencode-cli-windows
-          path: packages/opencode/dist
-
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
-
-      - name: Azure login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ env.AZURE_CLIENT_ID }}
-          tenant-id: ${{ env.AZURE_TENANT_ID }}
-          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
-
-      - uses: azure/artifact-signing-action@v1
-        with:
-          endpoint: ${{ env.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          signing-account-name: ${{ env.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-          certificate-profile-name: ${{ env.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
-          files: |
-            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe
-            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe
-            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe
-          exclude-environment-credential: true
-          exclude-workload-identity-credential: true
-          exclude-managed-identity-credential: true
-          exclude-shared-token-cache-credential: true
-          exclude-visual-studio-credential: true
-          exclude-visual-studio-code-credential: true
-          exclude-azure-cli-credential: false
-          exclude-azure-powershell-credential: true
-          exclude-azure-developer-cli-credential: true
-          exclude-interactive-browser-credential: true
-
-      - name: Verify Windows CLI signatures
-        shell: pwsh
-        run: |
-          $files = @(
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe",
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe",
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe"
-          )
-
-          foreach ($file in $files) {
-            $sig = Get-AuthenticodeSignature $file
-            if ($sig.Status -ne "Valid") {
-              throw "Invalid signature for ${file}: $($sig.Status)"
-            }
-          }
-
-      - name: Repack Windows CLI archives
-        working-directory: packages/opencode/dist
-        shell: pwsh
-        run: |
-          Compress-Archive -Path "opencode-windows-arm64\bin\*" -DestinationPath "opencode-windows-arm64.zip" -Force
-          Compress-Archive -Path "opencode-windows-x64\bin\*" -DestinationPath "opencode-windows-x64.zip" -Force
-          Compress-Archive -Path "opencode-windows-x64-baseline\bin\*" -DestinationPath "opencode-windows-x64-baseline.zip" -Force
-
-      - name: Upload signed Windows CLI release assets
-        if: needs.version.outputs.release != ''
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
-        run: |
-          gh release upload "v${{ needs.version.outputs.version }}" `
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64.zip" `
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64.zip" `
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline.zip" `
-            --clobber `
-            --repo "${{ needs.version.outputs.repo }}"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: opencode-cli-signed-windows
-          path: |
-            packages/opencode/dist/opencode-windows-arm64
-            packages/opencode/dist/opencode-windows-x64
-            packages/opencode/dist/opencode-windows-x64-baseline
+      - run: echo "Skipping Windows CLI signing in this fork"
 
   build-electron:
     needs:
@@ -218,12 +132,6 @@ jobs:
     continue-on-error: false
     env:
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
-      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
     strategy:
       fail-fast: false
       matrix:
@@ -237,10 +145,10 @@ jobs:
             platform_flag: --mac --arm64
             bun_install_flags: --os=darwin --cpu=arm64
           # github-hosted: blacksmith lacks ARM64 MSVC cross-compilation toolchain
-          - host: "windows-2025"
+          - host: "windows-2025-vs2026"
             target: aarch64-pc-windows-msvc
             platform_flag: --win --arm64
-          - host: "windows-2025"
+          - host: "windows-2025-vs2026"
             target: x86_64-pc-windows-msvc
             platform_flag: --win
           - host: "ubuntu-latest"
@@ -251,13 +159,13 @@ jobs:
             platform_flag: --linux
     runs-on: ${{ matrix.settings.host }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
 
       - name: Skip unsigned macOS build on forks
         if: runner.os == 'macOS' && env.HAS_APPLE_CERT != 'true'
         run: echo "Skipping macOS build because APPLE_CERTIFICATE is not configured"
 
-      - uses: apple-actions/import-codesign-certs@v2
+      - uses: apple-actions/import-codesign-certs@v5
         if: runner.os == 'macOS' && env.HAS_APPLE_CERT == 'true'
         with:
           keychain: build
@@ -273,22 +181,14 @@ jobs:
         with:
           install-flags: ${{ matrix.settings.bun_install_flags }}
 
-      - name: Azure login
-        if: runner.os == 'Windows'
-        uses: azure/login@v2
-        with:
-          client-id: ${{ env.AZURE_CLIENT_ID }}
-          tenant-id: ${{ env.AZURE_TENANT_ID }}
-          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
-
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         if: runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true'
         with:
           node-version: "24"
 
       - name: Cache apt packages
         if: contains(matrix.settings.host, 'ubuntu') && (runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true')
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/apt-cache
           key: ${{ runner.os }}-${{ matrix.settings.target }}-apt-electron-${{ hashFiles('.github/workflows/publish.yml') }}
@@ -383,29 +283,13 @@ jobs:
           tar -czf "$OUT_NAME" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
           gh release upload "v${{ needs.version.outputs.version }}" "$OUT_NAME" --clobber --repo "${{ needs.version.outputs.repo }}"
 
-      - name: Verify signed Windows Electron artifacts
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $files = @()
-          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\dist\*.exe" | Select-Object -ExpandProperty FullName
-          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\dist\*unpacked\*.exe" | Select-Object -ExpandProperty FullName
-          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\dist\*unpacked\resources\opencode-cli.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
-
-          foreach ($file in $files | Select-Object -Unique) {
-            $sig = Get-AuthenticodeSignature $file
-            if ($sig.Status -ne "Valid") {
-              throw "Invalid signature for ${file}: $($sig.Status)"
-            }
-          }
-
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true'
         with:
           name: opencode-desktop-${{ matrix.settings.target }}
           path: packages/desktop/dist/*
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: needs.version.outputs.release && (runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true')
         with:
           name: latest-yml-${{ matrix.settings.target }}
@@ -422,7 +306,7 @@ jobs:
     env:
       HAS_AUR_KEY: ${{ secrets.AUR_KEY != '' }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-bun
 
@@ -439,7 +323,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
@@ -478,7 +362,7 @@ jobs:
 
       - name: Cache apt packages (AUR)
         if: env.HAS_AUR_KEY == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /var/cache/apt/archives
           key: ${{ runner.os }}-apt-aur-${{ hashFiles('.github/workflows/publish.yml') }}
@@ -505,6 +389,7 @@ jobs:
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
           GH_REPO: ${{ needs.version.outputs.repo }}
           NPM_CONFIG_PROVENANCE: false
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           LATEST_YML_DIR: /tmp/latest-yml
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}

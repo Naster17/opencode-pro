@@ -7,14 +7,23 @@ import { fileURLToPath } from "url"
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
+const npmPackagePrefix = process.env.OPENCODE_NPM_PACKAGE_PREFIX || Script.repoName
+const publishedMetaName = npmPackagePrefix
+
 async function published(name: string, version: string) {
   return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0
 }
+
+const shouldPublishNpm = process.env.OPENCODE_PUBLISH_NPM === "true"
 
 async function publish(dir: string, name: string, version: string) {
   // GitHub artifact downloads can drop the executable bit, and Docker uses the
   // unpacked dist binaries directly rather than the published tarball.
   if (process.platform !== "win32") await $`chmod -R 755 .`.cwd(dir)
+  if (!shouldPublishNpm) {
+    console.log(`skipping npm publish for ${name}@${version} because OPENCODE_PUBLISH_NPM is not enabled`)
+    return
+  }
   if (await published(name, version)) {
     console.log(`already published ${name}@${version}`)
     return
@@ -39,7 +48,7 @@ await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
-      name: pkg.name + "-ai",
+      name: publishedMetaName,
       bin: {
         [pkg.name]: `./bin/${pkg.name}`,
       },
@@ -59,7 +68,7 @@ const tasks = Object.entries(binaries).map(async ([name]) => {
   await publish(`./dist/${name}`, name, binaries[name])
 })
 await Promise.all(tasks)
-await publish(`./dist/${pkg.name}`, `${pkg.name}-ai`, version)
+await publish(`./dist/${pkg.name}`, publishedMetaName, version)
 
 const repo = Script.repo
 const repoUrl = Script.repoUrl
