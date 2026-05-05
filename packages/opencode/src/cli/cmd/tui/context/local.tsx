@@ -237,12 +237,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (variantName === "none") return "off"
         const direct =
           normalizeThinkingLevel(options.reasoningEffort) ??
+          normalizeThinkingLevel(options.chat_template_kwargs?.reasoning_effort) ??
+          normalizeThinkingLevel(options.chat_template_args?.reasoning_effort) ??
+          normalizeThinkingLevel(options.chatTemplateArgs?.reasoning_effort) ??
           normalizeThinkingLevel(options.reasoning?.effort) ??
           normalizeThinkingLevel(options.reasoningConfig?.maxReasoningEffort) ??
           normalizeThinkingLevel(options.thinkingConfig?.thinkingLevel) ??
           normalizeThinkingLevel(options.thinkingLevel) ??
           normalizeThinkingLevel(options.effort)
         if (direct) return direct
+        if (options.thinking_budget_tokens === 0) return "off"
         if (options.enable_thinking === false) return "off"
         if (options.enable_thinking === true) return variantName === "thinking" ? "thinking" : "high"
         if (options.chat_template_kwargs?.enable_thinking === false) return "off"
@@ -304,7 +308,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           .filter(([name]) => {
             const level = variantMap[name]?.level
             if (name === "none" && activeLevel === "off") return false
-            if (level === "off" && baseLevel === "inherit" && defaultLevel === "off") return false
+            if (level === "off" && baseLevel === "inherit" && defaultLevel === "off" && activeLevel === "off")
+              return false
             return true
           })
           .map(([name]) => name)
@@ -527,6 +532,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               this.set(variants[0])
               return
             }
+            const offVariant = thinking.levelVariant.off
+            if (offVariant && variants.includes(offVariant)) {
+              this.set(offVariant)
+              return
+            }
             this.set(undefined)
           },
           thinking() {
@@ -548,7 +558,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               })
               return
             }
-            const levels = thinking.levels
+            const levels = thinking.hasThinkingToggle && thinking.levelVariant.high === "thinking"
+              ? (["off", "high"] as ThinkingLevel[])
+              : THINKING_LEVELS.filter((level) => {
+                  if (level === "off") {
+                    return Boolean(thinking.levelVariant.off || thinking.baseLevel === "off" || thinking.defaultLevel === "off")
+                  }
+                  return Boolean(thinking.levelVariant[level] || thinking.levels.includes(level))
+                })
             if (levels.length === 0) return
             const index = levels.indexOf(thinking.activeLevel)
             const next = levels[(index + 1) % levels.length] ?? levels[0]

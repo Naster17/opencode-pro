@@ -177,10 +177,11 @@ export function Prompt(props: PromptProps) {
   const hasRightContent = createMemo(() => Boolean(props.right))
   const thinkingLevel = createMemo(() => local.model.variant.thinking())
   const thinkingColor = createMemo(() => {
+    if (thinkingLevel() === "off") return theme.text
     if (thinkingLevel() === "low") return theme.success
     if (thinkingLevel() === "medium") return theme.warning
     if (thinkingLevel() === "high") return theme.error
-    if (thinkingLevel() === "thinking") return theme.error
+    if (thinkingLevel() === "thinking") return theme.primary
     return theme.text
   })
   const thinkingLabel = createMemo(() => (thinkingLevel() === "thinking" ? "Thinking" : Locale.titlecase(thinkingLevel())))
@@ -274,7 +275,10 @@ export function Prompt(props: PromptProps) {
     const value = variantLabel()
     if (!value) return
     const normalized = value.toLowerCase()
-    if (showThinking() && ["default", "thinking", ...(thinkingLevel() === "off" ? ["off"] : [thinkingLevel()])].includes(normalized))
+    if (
+      showThinking() &&
+      ["default", "off", "none", "disabled", "low", "medium", "high", "thinking"].includes(normalized)
+    )
       return
     return value
   })
