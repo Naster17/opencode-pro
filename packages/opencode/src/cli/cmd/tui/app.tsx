@@ -539,6 +539,16 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
     },
     {
+      title: "Thinking level cycle",
+      value: "thinking.cycle",
+      keybind: "thinking_level_cycle",
+      category: "Agent",
+      hidden: true,
+      onSelect: () => {
+        local.model.variant.cycleThinking()
+      },
+    },
+    {
       title: "Switch model variant",
       value: "variant.list",
       keybind: "variant_list",

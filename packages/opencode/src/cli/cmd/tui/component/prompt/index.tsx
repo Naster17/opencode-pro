@@ -175,6 +175,16 @@ export function Prompt(props: PromptProps) {
   const [auto, setAuto] = createSignal<AutocompleteRef>()
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
+  const thinkingLevel = createMemo(() => local.model.variant.thinking())
+  const thinkingColor = createMemo(() => {
+    if (thinkingLevel() === "low") return theme.success
+    if (thinkingLevel() === "medium") return theme.warning
+    if (thinkingLevel() === "high") return theme.error
+    if (thinkingLevel() === "thinking") return theme.error
+    return theme.text
+  })
+  const thinkingLabel = createMemo(() => (thinkingLevel() === "thinking" ? "Thinking" : Locale.titlecase(thinkingLevel())))
+  const variantLabel = createMemo(() => local.model.variant.display())
 
   function promptModelWarning() {
     toast.show({
@@ -258,6 +268,15 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+  })
+  const showThinking = createMemo(() => local.model.parsed().reasoning && store.mode === "normal")
+  const visibleVariantLabel = createMemo(() => {
+    const value = variantLabel()
+    if (!value) return
+    const normalized = value.toLowerCase()
+    if (showThinking() && ["default", "thinking", ...(thinkingLevel() === "off" ? ["off"] : [thinkingLevel()])].includes(normalized))
+      return
+    return value
   })
 
   createEffect(
@@ -1000,7 +1019,7 @@ export function Prompt(props: PromptProps) {
   })
 
   const showVariant = createMemo(() => {
-    return !!local.model.variant.display()
+    return !!visibleVariantLabel()
   })
 
   const agentMetaAlpha = createFadeIn(() => !!local.agent.current(), animationsEnabled)
@@ -1289,6 +1308,15 @@ export function Prompt(props: PromptProps) {
                       <text fg={fadeColor(highlight(), agentMetaAlpha())}>
                         {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
                       </text>
+                      <Show when={showThinking()}>
+                        <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                        <text
+                          fg={fadeColor(thinkingColor(), modelMetaAlpha())}
+                          onMouseUp={() => local.model.variant.cycleThinking()}
+                        >
+                          <span style={{ bold: true }}>{thinkingLabel()}</span>
+                        </text>
+                      </Show>
                       <Show when={store.mode === "normal"}>
                         <box flexDirection="row" gap={1}>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
@@ -1303,7 +1331,7 @@ export function Prompt(props: PromptProps) {
                             <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
                             <text>
                               <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
-                                {local.model.variant.display()}
+                                {visibleVariantLabel()}
                               </span>
                             </text>
                           </Show>

@@ -671,15 +671,16 @@ export function Session() {
       },
     },
     {
-      title: local.model.variant.thinking() === "off" ? "Enable thinking mode" : "Disable thinking mode",
+      title: `Cycle thinking level (${local.model.variant.thinking()})`,
       value: "session.toggle.model.thinking",
+      keybind: "thinking_level_cycle",
       category: "Session",
       slash: {
         name: "thinking-mode",
         aliases: ["toggle-thinking-mode"],
       },
       onSelect: (dialog) => {
-        local.model.variant.toggleThinking()
+        local.model.variant.cycleThinking()
         dialog.clear()
       },
     },
