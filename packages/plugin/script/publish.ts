@@ -7,7 +7,8 @@ const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
 const npmPackagePrefix = process.env.OPENCODE_NPM_PACKAGE_PREFIX || Script.repoName
-const previewPublishAuthError = /npm error code E403|Two-factor authentication|bypass 2fa enabled|required to publish packages/i
+const previewPublishAuthError =
+  /npm error code E403|Two-factor authentication|bypass 2fa enabled|required to publish packages/i
 
 async function published(name: string, version: string) {
   return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0
@@ -42,7 +43,9 @@ if (!shouldPublishNpm) {
     const result = await $`npm publish *.tgz --tag ${Script.channel} --access public`.nothrow()
     if (result.exitCode !== 0) {
       if (Script.preview && previewPublishAuthError.test(result.stderr.toString())) {
-        console.log(`skipping npm publish for ${pkg.name}@${pkg.version} because npm token cannot publish preview packages`)
+        console.log(
+          `skipping npm publish for ${pkg.name}@${pkg.version} because npm token cannot publish preview packages`,
+        )
       } else {
         throw new Error(result.stderr.toString())
       }
