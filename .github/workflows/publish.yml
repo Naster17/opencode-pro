@@ -408,6 +408,8 @@ jobs:
       - build-electron
     if: always() && !cancelled()
     runs-on: ubuntu-latest
+    env:
+      HAS_AUR_KEY: ${{ secrets.AUR_KEY != '' }}
     steps:
       - uses: actions/checkout@v3
 
@@ -464,7 +466,7 @@ jobs:
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Cache apt packages (AUR)
-        if: secrets.AUR_KEY != ''
+        if: env.HAS_AUR_KEY == 'true'
         uses: actions/cache@v4
         with:
           path: /var/cache/apt/archives
@@ -473,7 +475,7 @@ jobs:
             ${{ runner.os }}-apt-aur-
 
       - name: Setup SSH for AUR
-        if: secrets.AUR_KEY != ''
+        if: env.HAS_AUR_KEY == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y pacman-package-manager
