@@ -118,13 +118,12 @@ async function resolveTauriSigningKey() {
   if (await file.exists()) return value
 
   const inline = value.includes("\\n") ? value.replaceAll("\\n", "\n") : value
-  const decoded =
-    inline.startsWith("untrusted comment:")
-      ? inline
-      : (() => {
-          const text = Buffer.from(inline, "base64").toString("utf8")
-          return text.startsWith("untrusted comment:") ? text : inline
-        })()
+  const decoded = inline.startsWith("untrusted comment:")
+    ? inline
+    : (() => {
+        const text = Buffer.from(inline, "base64").toString("utf8")
+        return text.startsWith("untrusted comment:") ? text : inline
+      })()
 
   if (!decoded.startsWith("untrusted comment:")) {
     throw new Error(
