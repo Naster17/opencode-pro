@@ -38,6 +38,13 @@ async function prepareReleaseFiles() {
   await $`./packages/sdk/js/script/build.ts`
 }
 
+async function hasLatestYmlArtifacts() {
+  const dir = process.env.LATEST_YML_DIR
+  if (!dir) return false
+  for await (const _ of new Bun.Glob("**/*").scan({ cwd: dir, absolute: false })) return true
+  return false
+}
+
 if (Script.release && !Script.preview) {
   await $`git fetch origin --tags`
   await $`git switch --detach`
@@ -54,7 +61,7 @@ await $`bun ./packages/sdk/js/script/publish.ts`
 console.log("\n=== plugin ===\n")
 await $`bun ./packages/plugin/script/publish.ts`
 
-if (Script.release) {
+if (Script.release && (await hasLatestYmlArtifacts())) {
   await $`bun ./packages/desktop/scripts/finalize-latest-json.ts`
   await $`bun ./packages/desktop/scripts/finalize-latest-yml.ts`
 }

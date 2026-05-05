@@ -406,7 +406,7 @@ jobs:
       - build-cli
       - sign-cli-windows
       - build-electron
-    if: always() && !failure() && !cancelled()
+    if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -437,17 +437,21 @@ jobs:
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: opencode-cli-windows
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@v4
+        if: needs.sign-cli-windows.result == 'success'
+        continue-on-error: true
         with:
           name: opencode-cli-signed-windows
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@v4
         if: needs.version.outputs.release
+        continue-on-error: true
         with:
           pattern: latest-yml-*
           path: /tmp/latest-yml
@@ -460,6 +464,7 @@ jobs:
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Cache apt packages (AUR)
+        if: secrets.AUR_KEY != ''
         uses: actions/cache@v4
         with:
           path: /var/cache/apt/archives
@@ -468,6 +473,7 @@ jobs:
             ${{ runner.os }}-apt-aur-
 
       - name: Setup SSH for AUR
+        if: secrets.AUR_KEY != ''
         run: |
           sudo apt-get update
           sudo apt-get install -y pacman-package-manager
