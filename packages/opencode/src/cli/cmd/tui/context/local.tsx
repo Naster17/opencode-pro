@@ -265,6 +265,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (thinking.baseState === "on" && !thinking.on) return "on"
         return "default"
       }
+      const cycleVariantList = () => {
+        const thinking = resolveThinking()
+        if (!thinking) return variantList().map(([name]) => name)
+        return variantList()
+          .filter(([_, options]) => thinkingState(options) !== thinking.baseState)
+          .map(([name]) => name)
+      }
 
       return {
         current: currentModel,
@@ -398,13 +405,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
                 value: "default",
                 title: defaultVariantTitle(),
               },
-              ...variantList().map(([name, options]) => {
-                const state = thinkingState(options)
-                return {
-                  value: name,
-                  title: state === "inherit" ? name : `${name} (${state})`,
-                }
-              }),
+              ...variantList().map(([name]) => ({
+                value: name,
+                title: name,
+              })),
             ]
           },
           selected() {
@@ -438,7 +442,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             save()
           },
           cycle() {
-            const variants = this.list()
+            const variants = cycleVariantList()
             if (variants.length === 0) return
             const current = this.current()
             if (!current) {

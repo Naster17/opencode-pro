@@ -343,6 +343,40 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
 export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
+  if (model.api.npm === "@ai-sdk/openai-compatible" && model.api.id.toLowerCase().includes("gpt-oss")) {
+    const instructions = msgs
+      .flatMap((msg) => {
+        if (msg.role !== "system") return []
+        if (typeof msg.content === "string") return [msg.content]
+        if (!Array.isArray(msg.content)) return []
+        return (msg.content as Array<{ type?: string; text?: string }>).flatMap((part) =>
+          part.type === "text" && typeof part.text === "string" ? [part.text] : [],
+        )
+      })
+      .filter((item) => item.trim().length > 0)
+      .join("\n\n")
+    const reasoning =
+      typeof options.reasoningEffort === "string" && ["low", "medium", "high"].includes(options.reasoningEffort)
+        ? options.reasoningEffort
+        : "medium"
+    msgs = [
+      {
+        role: "system",
+        content: [
+          "You are ChatGPT, a large language model trained by OpenAI.",
+          "Knowledge cutoff: 2024-06",
+          `Current date: ${new Date().toISOString().slice(0, 10)}`,
+          "",
+          `Reasoning: ${reasoning}`,
+          "",
+          "# Valid channels: analysis, commentary, final. Channel must be included for every message.",
+          "Calls to these tools must go to the commentary channel: 'functions'.",
+          ...(instructions ? ["", "# Instructions", "", instructions] : []),
+        ].join("\n"),
+      },
+      ...msgs.filter((msg) => msg.role !== "system"),
+    ]
+  }
   if (
     (model.providerID === "anthropic" ||
       model.providerID === "google-vertex-anthropic" ||

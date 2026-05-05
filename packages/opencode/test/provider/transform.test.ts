@@ -1124,6 +1124,70 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   })
 })
 
+describe("ProviderTransform.message - gpt-oss harmony prompt", () => {
+  test("rewrites system messages into harmony format with reasoning level", () => {
+    const msgs = [
+      {
+        role: "system",
+        content: "Use a concise tone.",
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(
+      msgs,
+      {
+        id: ModelID.make("llama.cpp/gpt-oss-20b"),
+        providerID: ProviderID.make("llama.cpp"),
+        api: {
+          id: "gpt-oss-20b",
+          url: "http://127.0.0.1:8080/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+        name: "gpt-oss-20b",
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: false,
+          toolcall: true,
+          input: { text: true, audio: false, image: false, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: false,
+        },
+        cost: {
+          input: 0.001,
+          output: 0.002,
+          cache: { read: 0.0001, write: 0.0002 },
+        },
+        limit: {
+          context: 128000,
+          output: 8192,
+        },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2025-08-05",
+      },
+      { reasoningEffort: "low" },
+    )
+
+    expect(result).toHaveLength(2)
+    expect(result[0].role).toBe("system")
+    expect(result[0].content).toContain("You are ChatGPT, a large language model trained by OpenAI.")
+    expect(result[0].content).toContain("Reasoning: low")
+    expect(result[0].content).toContain("# Valid channels: analysis, commentary, final.")
+    expect(result[0].content).toContain("# Instructions")
+    expect(result[0].content).toContain("Use a concise tone.")
+    expect(result[1]).toEqual({
+      role: "user",
+      content: "Hello",
+    })
+  })
+})
+
 describe("ProviderTransform.message - empty image handling", () => {
   const mockModel = {
     id: "anthropic/claude-3-5-sonnet",

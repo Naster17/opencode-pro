@@ -385,6 +385,7 @@ test("openai-compatible providers mirror enable_thinking into chat_template_kwar
   }) as unknown as typeof globalThis.fetch
 
   try {
+    await mkdir(path.join(Global.Path.config, "opencode"), { recursive: true })
     await using tmp = await tmpdir({
       init: async (dir) => {
         await Bun.write(
@@ -429,6 +430,92 @@ test("openai-compatible providers mirror enable_thinking into chat_template_kwar
     expect(capturedBody?.chat_template_kwargs).toEqual({
       enable_thinking: false,
     })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("gpt-oss openai-compatible providers render harmony reasoning levels into the system message", async () => {
+  const originalFetch = globalThis.fetch
+  let capturedBody: Record<string, unknown> | undefined
+
+  globalThis.fetch = mock(async (_input: string | URL | Request, init?: RequestInit) => {
+    capturedBody = JSON.parse(String(init?.body ?? "{}"))
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":"stop"}]}\n\n'))
+          controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"))
+          controller.close()
+        },
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      },
+    )
+  }) as unknown as typeof globalThis.fetch
+
+  try {
+    await mkdir(path.join(Global.Path.config, "opencode"), { recursive: true })
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "llama.cpp": {
+                name: "llama.cpp",
+                npm: "@ai-sdk/openai-compatible",
+                api: "http://127.0.0.1:8080/v1",
+                models: {
+                  "gpt-oss-20b": {
+                    name: "GPT-OSS 20B",
+                    tool_call: true,
+                    reasoning: true,
+                    limit: { context: 131072, output: 16384 },
+                  },
+                },
+                options: { apiKey: "test-key" },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = await getModel(ProviderID.make("llama.cpp"), ModelID.make("gpt-oss-20b"))
+        const language = await getLanguage(model)
+        const transformed = ProviderTransform.message(
+          [
+            { role: "system", content: "Use a concise tone." },
+            { role: "user", content: "hi" },
+          ] as any[],
+          model,
+          { reasoningEffort: "low" },
+        ) as Array<{ role: string; content: string }>
+        await language.doStream({
+          prompt: transformed.map((msg) => ({
+            role: msg.role,
+            content: [{ type: "text", text: msg.content }],
+          })) as any,
+          providerOptions: ProviderTransform.providerOptions(model, { reasoningEffort: "low" }),
+          includeRawChunks: false,
+        })
+      },
+    })
+
+    const messages = capturedBody?.messages as
+      | Array<{ role?: string; content?: Array<{ type?: string; text?: string }> }>
+      | undefined
+    expect(messages?.[0]?.role).toBe("system")
+    expect(messages?.[0]?.content?.[0]?.text).toContain("Reasoning: low")
+    expect(messages?.[0]?.content?.[0]?.text).toContain("# Valid channels: analysis, commentary, final.")
+    expect(messages?.[0]?.content?.[0]?.text).toContain("Use a concise tone.")
   } finally {
     globalThis.fetch = originalFetch
   }
