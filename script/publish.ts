@@ -9,6 +9,7 @@ console.log("=== publishing ===\n")
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 const tag = `v${Script.version}`
+const repoUrl = Script.repoUrl
 
 const pkgjsons = await Array.fromAsync(
   new Bun.Glob("**/package.json").scan({
@@ -27,6 +28,8 @@ async function prepareReleaseFiles() {
   const extensionToml = fileURLToPath(new URL("../packages/extensions/zed/extension.toml", import.meta.url))
   let toml = await Bun.file(extensionToml).text()
   toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
+  toml = toml.replace(/^repository = "[^"]+"/m, `repository = "${repoUrl}"`)
+  toml = toml.replaceAll(/https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/v[^/]+\//g, `${repoUrl}/releases/download/v${Script.version}/`)
   toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Script.version}/`)
   console.log("updated:", extensionToml)
   await Bun.file(extensionToml).write(toml)

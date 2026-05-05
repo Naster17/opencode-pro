@@ -25,6 +25,11 @@ const channel = (() => {
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
   return "dev"
 })()
+const repo = (() => {
+  if (channel === "beta" && process.env.OPENCODE_BETA_REPO) return process.env.OPENCODE_BETA_REPO
+  return process.env.GH_REPO || process.env.GITHUB_REPOSITORY || "Naster17/opencode-pro"
+})()
+const [owner = "Naster17", name = "opencode-pro"] = repo.split("/", 2)
 
 const getBase = (): Configuration => ({
   artifactName: "opencode-desktop-${os}-${arch}.${ext}",
@@ -96,7 +101,7 @@ function getConfig() {
         appId: "ai.opencode.desktop.beta",
         productName: "OpenCode Beta",
         protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
+        publish: { provider: "github", owner, repo: name, channel: "latest" },
         rpm: { packageName: "opencode-beta" },
       }
     }
@@ -106,7 +111,7 @@ function getConfig() {
         appId: "ai.opencode.desktop",
         productName: "OpenCode",
         protocols: { name: "OpenCode", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
+        publish: { provider: "github", owner, repo: name, channel: "latest" },
         rpm: { packageName: "opencode" },
       }
     }

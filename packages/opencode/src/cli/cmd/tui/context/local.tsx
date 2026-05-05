@@ -22,6 +22,7 @@ export function parseModel(model: string) {
 }
 
 const THINKING_LEVELS = ["off", "low", "medium", "high"] as const
+export const THINKING_DISPLAY_VARIANTS = new Set(["default", "off", "none", "disabled", "low", "medium", "high", "thinking"])
 type ThinkingLevel = (typeof THINKING_LEVELS)[number]
 type ThinkingState = ThinkingLevel | "thinking" | "inherit"
 
@@ -32,6 +33,12 @@ function normalizeThinkingLevel(value: string | undefined) {
   if (value === "medium") return "medium" as const
   if (value === "thinking") return "thinking" as const
   if (["high", "xhigh", "max", "on", "enabled", "adaptive"].includes(value)) return "high" as const
+}
+
+function toggleThinkingState(value: boolean | undefined, variantName?: string): ThinkingState | undefined {
+  if (value === undefined) return
+  if (!value) return "off"
+  return variantName === "thinking" ? "thinking" : "high"
 }
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
@@ -247,14 +254,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           normalizeThinkingLevel(options.effort)
         if (direct) return direct
         if (options.thinking_budget_tokens === 0) return "off"
-        if (options.enable_thinking === false) return "off"
-        if (options.enable_thinking === true) return variantName === "thinking" ? "thinking" : "high"
-        if (options.chat_template_kwargs?.enable_thinking === false) return "off"
-        if (options.chat_template_kwargs?.enable_thinking === true) return variantName === "thinking" ? "thinking" : "high"
-        if (options.chat_template_args?.enable_thinking === false) return "off"
-        if (options.chat_template_args?.enable_thinking === true) return variantName === "thinking" ? "thinking" : "high"
-        if (options.chatTemplateArgs?.enable_thinking === false) return "off"
-        if (options.chatTemplateArgs?.enable_thinking === true) return variantName === "thinking" ? "thinking" : "high"
+        const toggle =
+          toggleThinkingState(options.enable_thinking, variantName) ??
+          toggleThinkingState(options.chat_template_kwargs?.enable_thinking, variantName) ??
+          toggleThinkingState(options.chat_template_args?.enable_thinking, variantName) ??
+          toggleThinkingState(options.chatTemplateArgs?.enable_thinking, variantName)
+        if (toggle) return toggle
         if (options.thinking?.type === "disabled") return "off"
         if (["enabled", "adaptive"].includes(options.thinking?.type)) return "high"
         if (options.reasoningConfig?.type === "disabled") return "off"

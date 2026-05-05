@@ -4,7 +4,7 @@ import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
 import { Filesystem } from "@/util/filesystem"
-import { useLocal } from "@tui/context/local"
+import { THINKING_DISPLAY_VARIANTS, useLocal } from "@tui/context/local"
 import { tint, useTheme } from "@tui/context/theme"
 import { EmptyBorder, SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
@@ -361,12 +361,7 @@ export function Prompt(props: PromptProps) {
   const visibleVariantLabel = createMemo(() => {
     const value = variantLabel()
     if (!value) return
-    const normalized = value.toLowerCase()
-    if (
-      showThinking() &&
-      ["default", "off", "none", "disabled", "low", "medium", "high", "thinking"].includes(normalized)
-    )
-      return
+    if (showThinking() && THINKING_DISPLAY_VARIANTS.has(value.toLowerCase())) return
     return value
   })
 

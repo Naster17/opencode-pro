@@ -1095,12 +1095,20 @@ const SLUG_OVERRIDES: Record<string, string> = {
   amazon: "bedrock",
 }
 
-export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
-  if (
+function recordOrEmpty(value: unknown) {
+  return typeof value === "object" && value !== null ? value : {}
+}
+
+function isLlamaCppGptOssModel(model: Provider.Model) {
+  return (
     model.providerID === "llama.cpp" &&
     model.api.npm === "@ai-sdk/openai-compatible" &&
     model.api.id.toLowerCase().includes("gpt-oss")
-  ) {
+  )
+}
+
+export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
+  if (isLlamaCppGptOssModel(model)) {
     const off =
       options.enable_thinking === false ||
       options.thinking_budget_tokens === 0 ||
@@ -1113,17 +1121,15 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
         ...options,
         thinking_budget_tokens: 0,
         chat_template_kwargs: {
-          ...(typeof options.chat_template_kwargs === "object" && options.chat_template_kwargs !== null
-            ? options.chat_template_kwargs
-            : {}),
+          ...recordOrEmpty(options.chat_template_kwargs),
           reasoning_effort: "low",
         },
       }
       delete normalized.enable_thinking
       delete normalized.chat_template_kwargs.enable_thinking
-      if (typeof normalized.chat_template_args === "object" && normalized.chat_template_args !== null) {
+      if (Object.keys(recordOrEmpty(normalized.chat_template_args)).length > 0) {
         normalized.chat_template_args = {
-          ...normalized.chat_template_args,
+          ...recordOrEmpty(normalized.chat_template_args),
           reasoning_effort: "low",
         }
         delete normalized.chat_template_args.enable_thinking

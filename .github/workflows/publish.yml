@@ -22,8 +22,12 @@ on:
         description: "Override version (optional)"
         required: false
         type: string
+      version_suffix:
+        description: "Append suffix to version, for example PRO"
+        required: false
+        type: string
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version || inputs.bump }}
+concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version || inputs.version_suffix || inputs.bump }}
 
 permissions:
   id-token: write
@@ -33,7 +37,6 @@ permissions:
 jobs:
   version:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -59,8 +62,9 @@ jobs:
           GH_TOKEN: ${{ steps.committer.outputs.token }}
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
+          OPENCODE_VERSION_SUFFIX: ${{ inputs.version_suffix || vars.OPENCODE_VERSION_SUFFIX }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          GH_REPO: ${{ (github.ref_name == 'beta' && 'anomalyco/opencode-beta') || github.repository }}
+          GH_REPO: ${{ (github.ref_name == 'beta' && vars.OPENCODE_BETA_REPO) || github.repository }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
@@ -70,7 +74,6 @@ jobs:
   build-cli:
     needs: version
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -114,7 +117,6 @@ jobs:
       - build-cli
       - version
     runs-on: blacksmith-4vcpu-windows-2025
-    if: github.repository == 'anomalyco/opencode'
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -213,7 +215,6 @@ jobs:
     needs:
       - build-cli
       - version
-    if: github.repository == 'anomalyco/opencode'
     continue-on-error: false
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}

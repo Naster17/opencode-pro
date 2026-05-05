@@ -21,8 +21,22 @@ const env = {
   OPENCODE_CHANNEL: process.env["OPENCODE_CHANNEL"],
   OPENCODE_BUMP: process.env["OPENCODE_BUMP"],
   OPENCODE_VERSION: process.env["OPENCODE_VERSION"],
+  OPENCODE_VERSION_SUFFIX: process.env["OPENCODE_VERSION_SUFFIX"],
   OPENCODE_RELEASE: process.env["OPENCODE_RELEASE"],
+  GH_REPO: process.env["GH_REPO"],
 }
+const opencodePkgPath = path.resolve(import.meta.dir, "../../opencode/package.json")
+const opencodePkg = await Bun.file(opencodePkgPath).json()
+const packageVersion = typeof opencodePkg.version === "string" ? opencodePkg.version : ""
+const versionSuffix = env.OPENCODE_VERSION_SUFFIX
+  ? env.OPENCODE_VERSION_SUFFIX.startsWith("-")
+    ? env.OPENCODE_VERSION_SUFFIX
+    : `-${env.OPENCODE_VERSION_SUFFIX}`
+  : ""
+const applyVersionSuffix = (version: string) =>
+  versionSuffix && !version.endsWith(versionSuffix) ? `${version}${versionSuffix}` : version
+const REPO = env.GH_REPO || process.env["GITHUB_REPOSITORY"] || "Naster17/opencode-pro"
+const [repoOwner = "Naster17", repoName = "opencode-pro"] = REPO.split("/", 2)
 const CHANNEL = await (async () => {
   if (env.OPENCODE_CHANNEL) return env.OPENCODE_CHANNEL
   if (env.OPENCODE_BUMP) return "latest"
@@ -32,8 +46,11 @@ const CHANNEL = await (async () => {
 const IS_PREVIEW = CHANNEL !== "latest"
 
 const VERSION = await (async () => {
-  if (env.OPENCODE_VERSION) return env.OPENCODE_VERSION
-  if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
+  if (env.OPENCODE_VERSION) return applyVersionSuffix(env.OPENCODE_VERSION)
+  if (versionSuffix && env.OPENCODE_CHANNEL === "latest" && !env.OPENCODE_BUMP && packageVersion) {
+    return applyVersionSuffix(packageVersion)
+  }
+  if (IS_PREVIEW) return applyVersionSuffix(`0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`)
   const version = await fetch("https://registry.npmjs.org/opencode-ai/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
@@ -42,9 +59,9 @@ const VERSION = await (async () => {
     .then((data: any) => data.version)
   const [major, minor, patch] = version.split(".").map((x: string) => Number(x) || 0)
   const t = env.OPENCODE_BUMP?.toLowerCase()
-  if (t === "major") return `${major + 1}.0.0`
-  if (t === "minor") return `${major}.${minor + 1}.0`
-  return `${major}.${minor}.${patch + 1}`
+  if (t === "major") return applyVersionSuffix(`${major + 1}.0.0`)
+  if (t === "minor") return applyVersionSuffix(`${major}.${minor + 1}.0`)
+  return applyVersionSuffix(`${major}.${minor}.${patch + 1}`)
 })()
 
 const bot = ["actions-user", "opencode", "opencode-agent[bot]"]
@@ -60,6 +77,18 @@ const team = [
 export const Script = {
   get channel() {
     return CHANNEL
+  },
+  get repo() {
+    return REPO
+  },
+  get repoOwner() {
+    return repoOwner
+  },
+  get repoName() {
+    return repoName
+  },
+  get repoUrl() {
+    return `https://github.com/${REPO}`
   },
   get version() {
     return VERSION
