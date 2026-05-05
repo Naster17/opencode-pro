@@ -64,7 +64,12 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Run unit tests
-        run: bun turbo test:ci
+        run: |
+          bun --cwd packages/ui test:ci
+          bun --cwd packages/app test:ci
+          bun --cwd packages/core test:ci
+          bun --cwd packages/opencode test:ci
+        timeout-minutes: 45
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
