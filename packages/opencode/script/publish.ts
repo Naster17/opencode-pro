@@ -9,6 +9,7 @@ process.chdir(dir)
 
 const npmPackagePrefix = process.env.OPENCODE_NPM_PACKAGE_PREFIX || Script.repoName
 const publishedMetaName = npmPackagePrefix
+const previewPublishAuthError = /npm error code E403|Two-factor authentication|bypass 2fa enabled|required to publish packages/i
 
 async function published(name: string, version: string) {
   return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0
@@ -29,7 +30,13 @@ async function publish(dir: string, name: string, version: string) {
     return
   }
   await $`bun pm pack`.cwd(dir)
-  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir)
+  const result = await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir).nothrow()
+  if (result.exitCode === 0) return
+  if (Script.preview && previewPublishAuthError.test(result.stderr.toString())) {
+    console.log(`skipping npm publish for ${name}@${version} because npm token cannot publish preview packages`)
+    return
+  }
+  throw new Error(result.stderr.toString())
 }
 
 const binaries: Record<string, { version: string; dir: string }> = {}

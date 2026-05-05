@@ -23,7 +23,7 @@ on:
         required: false
         type: string
       version_suffix:
-        description: "Append suffix to version, for example PRO"
+        description: "Append suffix to version."
         required: false
         type: string
 
@@ -37,7 +37,6 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   OPENCODE_NPM_PACKAGE_PREFIX: "@naster17/opencode-pro"
-  OPENCODE_PUBLISH_NPM: true
 
 jobs:
   version:
@@ -385,6 +384,7 @@ jobs:
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
+          OPENCODE_PUBLISH_NPM: ${{ github.event_name == 'workflow_dispatch' && needs.version.outputs.release && 'true' || 'false' }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
           GH_REPO: ${{ needs.version.outputs.repo }}
