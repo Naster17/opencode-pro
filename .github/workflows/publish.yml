@@ -217,6 +217,7 @@ jobs:
       - version
     continue-on-error: false
     env:
+      HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
@@ -252,18 +253,23 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Skip unsigned macOS build on forks
+        if: runner.os == 'macOS' && env.HAS_APPLE_CERT != 'true'
+        run: echo "Skipping macOS build because APPLE_CERTIFICATE is not configured"
+
       - uses: apple-actions/import-codesign-certs@v2
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && env.HAS_APPLE_CERT == 'true'
         with:
           keychain: build
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
       - name: Setup Apple API Key
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && env.HAS_APPLE_CERT == 'true'
         run: echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
 
       - uses: ./.github/actions/setup-bun
+        if: runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true'
         with:
           install-flags: ${{ matrix.settings.bun_install_flags }}
 
@@ -276,11 +282,12 @@ jobs:
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
       - uses: actions/setup-node@v4
+        if: runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true'
         with:
           node-version: "24"
 
       - name: Cache apt packages
-        if: contains(matrix.settings.host, 'ubuntu')
+        if: contains(matrix.settings.host, 'ubuntu') && (runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true')
         uses: actions/cache@v4
         with:
           path: ~/apt-cache
@@ -289,7 +296,7 @@ jobs:
             ${{ runner.os }}-${{ matrix.settings.target }}-apt-electron-
 
       - name: Install dependencies (ubuntu only)
-        if: contains(matrix.settings.host, 'ubuntu')
+        if: contains(matrix.settings.host, 'ubuntu') && (runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true')
         run: |
           mkdir -p ~/apt-cache && chmod -R a+rw ~/apt-cache
           sudo apt-get update
@@ -297,6 +304,7 @@ jobs:
           sudo chmod -R a+rw ~/apt-cache
 
       - name: Setup git committer
+        if: runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true'
         id: committer
         uses: ./.github/actions/setup-git-committer
         with:
@@ -304,6 +312,7 @@ jobs:
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Prepare
+        if: runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true'
         run: bun ./scripts/prepare.ts
         working-directory: packages/desktop
         env:
@@ -315,6 +324,7 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
 
       - name: Build
+        if: runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true'
         run: bun run build
         working-directory: packages/desktop
         env:
@@ -328,7 +338,7 @@ jobs:
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
 
       - name: Package and publish
-        if: needs.version.outputs.release
+        if: needs.version.outputs.release && (runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true')
         run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish always --config electron-builder.config.ts
         working-directory: packages/desktop
         timeout-minutes: 60
@@ -342,7 +352,7 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
 
       - name: Package (no publish)
-        if: ${{ !needs.version.outputs.release }}
+        if: ${{ !needs.version.outputs.release && (runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true') }}
         run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
         working-directory: packages/desktop
         timeout-minutes: 60
@@ -350,7 +360,7 @@ jobs:
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
 
       - name: Create and upload macOS .app.tar.gz
-        if: runner.os == 'macOS' && needs.version.outputs.release
+        if: runner.os == 'macOS' && env.HAS_APPLE_CERT == 'true' && needs.version.outputs.release
         working-directory: packages/desktop/dist
         env:
           GH_TOKEN: ${{ steps.committer.outputs.token }}
@@ -390,12 +400,13 @@ jobs:
           }
 
       - uses: actions/upload-artifact@v4
+        if: runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true'
         with:
           name: opencode-desktop-${{ matrix.settings.target }}
           path: packages/desktop/dist/*
 
       - uses: actions/upload-artifact@v4
-        if: needs.version.outputs.release
+        if: needs.version.outputs.release && (runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true')
         with:
           name: latest-yml-${{ matrix.settings.target }}
           path: packages/desktop/dist/latest*.yml
