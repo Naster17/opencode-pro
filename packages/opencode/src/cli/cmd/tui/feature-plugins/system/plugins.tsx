@@ -1,4 +1,6 @@
 import { Keybind } from "@/util/keybind"
+import { ConfigPlugin } from "@/config/plugin"
+import { parsePluginSpecifier } from "@/plugin/shared"
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule, TuiPluginStatus } from "@opencode-ai/plugin/tui"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { fileURLToPath } from "url"
@@ -9,6 +11,33 @@ const id = "internal:plugin-manager"
 const key = Keybind.parse("space").at(0)
 const add = Keybind.parse("shift+i").at(0)
 const tab = Keybind.parse("tab").at(0)
+
+interface BackendPluginInfo {
+  id: string
+  name: string
+  description: string
+  provider: string
+}
+
+type PluginSpec = NonNullable<TuiPluginApi["state"]["config"]["plugin"]>[number]
+
+type ListedPlugin = {
+  title: string
+  value: string
+  category: string
+  description: string
+  footer: string
+}
+
+const BACKEND_PLUGINS: BackendPluginInfo[] = [
+  { id: "codex", name: "OpenAI Codex", description: "ChatGPT Pro/Plus OAuth authentication for GPT models", provider: "openai" },
+  { id: "github-copilot", name: "GitHub Copilot", description: "GitHub Copilot authentication for GPT models", provider: "github-copilot" },
+  { id: "gitlab", name: "GitLab Duo", description: "GitLab Duo authentication", provider: "gitlab" },
+  { id: "poe", name: "Poe", description: "Poe platform authentication", provider: "poe" },
+  { id: "cloudflare-workers", name: "Cloudflare Workers AI", description: "Cloudflare Workers AI gateway", provider: "cloudflare-workers" },
+  { id: "cloudflare-aigateway", name: "Cloudflare AI Gateway", description: "Cloudflare AI Gateway authentication", provider: "cloudflare-aigateway" },
+  { id: "azure", name: "Azure OpenAI", description: "Azure OpenAI Service authentication", provider: "azure" },
+]
 
 function state(api: TuiPluginApi, item: TuiPluginStatus) {
   if (!item.enabled) {
@@ -35,6 +64,72 @@ function meta(item: TuiPluginStatus, width: number) {
   const next = source(item.spec)
   if (next) return next
   return item.spec
+}
+
+function pluginName(spec: string) {
+  if (spec.startsWith("file://")) {
+    const path = fileURLToPath(spec)
+    const part = path.split("/").at(-1) ?? path
+    const base = part.includes(".") ? part.slice(0, part.lastIndexOf(".")) : part
+    if (base === "index") {
+      const dir = path.split("/").at(-2)
+      return dir || base
+    }
+    return base
+  }
+
+  return parsePluginSpecifier(spec).pkg
+}
+
+function pluginIdentity(spec: string) {
+  if (spec.startsWith("file://")) return spec
+  return parsePluginSpecifier(spec).pkg
+}
+
+function pluginDescription(spec: string, width: number, label: string) {
+  if (spec.startsWith("file://")) {
+    const file = fileURLToPath(spec)
+    if (width >= 120) return `${label}: ${file}`
+    return file
+  }
+
+  if (width >= 100) return `${label}: ${spec}`
+  return spec
+}
+
+export function configuredPlugins(api: TuiPluginApi, width: number, list: ReadonlyArray<TuiPluginStatus>) {
+  const seen = new Set(list.map((item) => pluginIdentity(item.spec)))
+  const specs = [
+    ...(api.state.config.plugin ?? []),
+    ...(api.tuiConfig.plugin ?? []),
+  ]
+  const rows: ListedPlugin[] = []
+
+  for (const item of specs) {
+    const spec = ConfigPlugin.pluginSpecifier(item as PluginSpec)
+    const identity = pluginIdentity(spec)
+    if (seen.has(identity)) continue
+    seen.add(identity)
+    rows.push({
+      title: pluginName(spec),
+      value: `config:${identity}`,
+      category: "Configured",
+      description: pluginDescription(spec, width, "No TUI entry"),
+      footer: "server-only or failed to load",
+    })
+  }
+
+  return rows.sort((a, b) => a.title.localeCompare(b.title))
+}
+
+export function backendPlugins(width: number) {
+  return BACKEND_PLUGINS.map<ListedPlugin>((plugin) => ({
+    title: plugin.name,
+    value: `backend:${plugin.id}`,
+    category: "Backend/Auth",
+    description: width >= 80 ? `${plugin.description} (${plugin.provider})` : plugin.provider,
+    footer: "built-in auth plugin",
+  }))
 }
 
 function Install(props: { api: TuiPluginApi }) {
@@ -148,6 +243,16 @@ function row(api: TuiPluginApi, item: TuiPluginStatus, width: number): DialogSel
   }
 }
 
+function listedRow(api: TuiPluginApi, item: ListedPlugin): DialogSelectOption<string> {
+  return {
+    title: item.title,
+    value: item.value,
+    category: item.category,
+    description: item.description,
+    footer: <span style={{ fg: api.theme.current.textMuted }}>{item.footer}</span>,
+  }
+}
+
 function showInstall(api: TuiPluginApi) {
   api.ui.dialog.replace(() => <Install api={api} />)
 }
@@ -171,16 +276,23 @@ function View(props: { api: TuiPluginApi }) {
     props.api.ui.dialog.setSize("medium")
   })
 
-  const rows = createMemo(() =>
-    [...list()]
+  const rows = createMemo(() => {
+    const width = size().width
+    const tuiPlugins = [...list()]
       .sort((a, b) => {
         const x = a.source === "internal" ? 1 : 0
         const y = b.source === "internal" ? 1 : 0
         if (x !== y) return x - y
         return a.id.localeCompare(b.id)
       })
-      .map((item) => row(props.api, item, size().width)),
-  )
+      .map((item) => row(props.api, item, width))
+
+    return [
+      ...tuiPlugins,
+      ...configuredPlugins(props.api, width, list()).map((item) => listedRow(props.api, item)),
+      ...backendPlugins(width).map((item) => listedRow(props.api, item)),
+    ]
+  })
 
   const flip = (x: string) => {
     if (lock()) return
