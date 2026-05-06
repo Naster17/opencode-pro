@@ -144,6 +144,10 @@ export function Prompt(props: PromptProps) {
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
   const fileContextEnabled = createMemo(() => kv.get("file_context_enabled", true))
+  const canRetryGeminiQuota = createMemo(() => {
+    const current = status()
+    return current.type === "retry" && current.message.includes("exceeded your current quota") && current.message.includes("gemini")
+  })
   const [dismissedEditorSelectionKey, setDismissedEditorSelectionKey] = createSignal<string>()
   const editorContext = createMemo(() => {
     const selection = fileContextEnabled() ? editor.selection() : undefined
@@ -294,6 +298,7 @@ export function Prompt(props: PromptProps) {
     editor.clearSelection()
   }
 
+  const [lastPrompt, setLastPrompt] = createSignal<PromptInfo>()
   const textareaKeybindings = useTextareaKeybindings()
 
   const fileStyleId = syntax().getStyleId("extmark.file")!
@@ -1026,6 +1031,8 @@ export function Prompt(props: PromptProps) {
       ...store.prompt,
       mode: currentMode,
     })
+    const currentPrompt = { ...store.prompt }
+    setLastPrompt(currentPrompt)
     input.extmarks.clear()
     setStore("prompt", {
       input: "",
@@ -1280,6 +1287,20 @@ export function Prompt(props: PromptProps) {
                 // Check clipboard for images before terminal-handled paste runs.
                 // This helps terminals that forward Ctrl+V to the app; Windows
                 // Terminal 1.25+ usually handles Ctrl+V before this path.
+                if (e.ctrl && e.name === "r" && canRetryGeminiQuota()) {
+                  const s = status()
+                  if (s.type === "retry") {
+                    const last = lastPrompt()
+                    if (last) {
+                      setStore("prompt", last)
+                      restoreExtmarksFromParts(last.parts)
+                      input.setText(last.input)
+                      void submit()
+                      e.preventDefault()
+                      return
+                    }
+                  }
+                }
                 if (keybind.match("input_paste", e)) {
                   const content = await Clipboard.read()
                   if (content?.mime.startsWith("image/")) {
@@ -1646,7 +1667,11 @@ export function Prompt(props: PromptProps) {
                 </box>
               )}
             </Match>
-            <Match when={true}>{props.hint ?? <text />}</Match>
+             <Match when={true}>
+                               {canRetryGeminiQuota()
+                                   ? <text fg={theme.textMuted}>Press Alt+r to retry immediately</text>
+                                   : props.hint ?? <text />}
+             </Match>
           </Switch>
           <Show when={status().type !== "retry"}>
             <box gap={2} flexDirection="row">

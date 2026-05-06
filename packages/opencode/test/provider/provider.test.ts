@@ -1533,6 +1533,80 @@ test("disabled_providers and enabled_providers interaction", async () => {
   })
 })
 
+test("google provider only keeps models returned by models.list", async () => {
+  const originalFetch = globalThis.fetch
+  let requestCount = 0
+  let apiKeyHeader: string | null = null
+
+  globalThis.fetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
+    requestCount += 1
+    const url = String(input)
+    expect(url).toContain("https://generativelanguage.googleapis.com/v1beta/models")
+    apiKeyHeader = new Headers(init?.headers).get("x-goog-api-key")
+    return new Response(
+      JSON.stringify({
+        models: [
+          {
+            name: "models/gemini-2.5-flash",
+            baseModelId: "gemini-2.5-flash",
+            supportedGenerationMethods: ["generateContent"],
+          },
+          {
+            name: "models/gemma-4b-it",
+            baseModelId: "gemma-4b-it",
+            displayName: "Gemma 4B IT",
+            inputTokenLimit: 65536,
+            outputTokenLimit: 8192,
+            temperature: 1,
+            supportedGenerationMethods: ["generateContent"],
+          },
+          {
+            name: "models/gemini-embedding-001",
+            baseModelId: "gemini-embedding-001",
+            supportedGenerationMethods: ["embedContent"],
+          },
+        ],
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      },
+    )
+  }) as unknown as typeof globalThis.fetch
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+          }),
+        )
+      },
+    })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        set("GOOGLE_GENERATIVE_AI_API_KEY", "test-google-key")
+        const providers = await list()
+        const google = providers[ProviderID.google]
+        expect(google).toBeDefined()
+        expect(apiKeyHeader).toBe("test-google-key")
+        expect(requestCount).toBe(1)
+        expect(google.models["gemini-2.5-flash"]).toBeDefined()
+        expect(google.models["gemma-4b-it"]).toBeDefined()
+        expect(google.models["gemma-4b-it"].name).toBe("Gemma 4B IT")
+        expect(google.models["gemini-2.5-pro"]).toBeUndefined()
+        expect(google.models["gemini-2.5-flash-image"]).toBeUndefined()
+      },
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("model with tool_call false", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

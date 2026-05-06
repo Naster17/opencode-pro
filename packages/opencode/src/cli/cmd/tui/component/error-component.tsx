@@ -1,6 +1,7 @@
 import { TextAttributes } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import * as Clipboard from "@tui/util/clipboard"
+import { restoreTerminalState } from "../util/terminal"
 import { win32FlushInputBuffer } from "../win32"
 import { getScrollAcceleration } from "../util/scroll"
 import { createSignal } from "solid-js"
@@ -20,6 +21,7 @@ export function ErrorComponent(props: {
     await props.onBeforeExit?.()
     renderer.setTerminalTitle("")
     renderer.destroy()
+    restoreTerminalState()
     win32FlushInputBuffer()
     await props.onExit()
   }

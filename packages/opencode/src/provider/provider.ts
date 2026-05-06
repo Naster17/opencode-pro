@@ -89,6 +89,27 @@ type BundledSDK = {
   languageModel(modelId: string): LanguageModelV3
 }
 
+type DiscoveredModels = {
+  mode?: "merge" | "replace"
+  models: Record<string, Model>
+}
+
+type GoogleModelListResponse = {
+  models?: Array<{
+    name?: string
+    baseModelId?: string
+    displayName?: string
+    description?: string
+    inputTokenLimit?: number
+    outputTokenLimit?: number
+    thinking?: boolean
+    temperature?: number
+    supportedActions?: string[]
+    supportedGenerationMethods?: string[]
+  }>
+  nextPageToken?: string
+}
+
 const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>> = {
   "@ai-sdk/amazon-bedrock": () => import("@ai-sdk/amazon-bedrock").then((m) => m.createAmazonBedrock),
   "@ai-sdk/anthropic": () => import("@ai-sdk/anthropic").then((m) => m.createAnthropic),
@@ -118,7 +139,7 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
 
 type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
 type CustomVarsLoader = (options: Record<string, any>) => Record<string, string>
-type CustomDiscoverModels = () => Promise<Record<string, Model>>
+type CustomDiscoverModels = () => Promise<DiscoveredModels>
 type CustomLoader = (provider: Info) => Effect.Effect<{
   autoload: boolean
   getModel?: CustomModelLoader
@@ -144,6 +165,91 @@ function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean) {
   if (sdk.messages) return sdk.messages(modelID)
   if (sdk.chat) return sdk.chat(modelID)
   return sdk.languageModel(modelID)
+}
+
+function googleDiscoveredModel(provider: Info, model: NonNullable<GoogleModelListResponse["models"]>[number]): Model | undefined {
+  const id = model.baseModelId ?? model.name?.replace(/^models\//, "")
+  if (!id) return
+
+  const providerModel = Object.values(provider.models)[0]
+  const familyParts = id.split("-")
+  const family = familyParts.length > 1 ? familyParts.slice(0, 2).join("-") : familyParts[0]
+
+  return {
+    id: ModelID.make(id),
+    providerID: provider.id,
+    name: model.displayName ?? id,
+    family,
+    api: {
+      id,
+      url: providerModel?.api.url ?? "",
+      npm: providerModel?.api.npm ?? "@ai-sdk/google",
+    },
+    status: "active",
+    headers: {},
+    options: {},
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: {
+      context: Math.max(0, Math.trunc(model.inputTokenLimit ?? 0)),
+      output: Math.max(0, Math.trunc(model.outputTokenLimit ?? 0)),
+    },
+    capabilities: {
+      temperature: model.temperature !== undefined,
+      reasoning: model.thinking ?? false,
+      attachment: false,
+      toolcall: true,
+      input: {
+        text: true,
+        audio: false,
+        image: false,
+        video: false,
+        pdf: false,
+      },
+      output: {
+        text: true,
+        audio: false,
+        image: false,
+        video: false,
+        pdf: false,
+      },
+      interleaved: false,
+    },
+    release_date: "",
+    variants: {},
+  }
+}
+
+async function googleAvailableModels(apiKey: string) {
+  const result = new Map<string, NonNullable<GoogleModelListResponse["models"]>[number]>()
+  let pageToken: string | undefined
+
+  while (true) {
+    const url = new URL("https://generativelanguage.googleapis.com/v1beta/models")
+    url.searchParams.set("pageSize", "1000")
+    if (pageToken) url.searchParams.set("pageToken", pageToken)
+
+    const response = await fetch(url, {
+      headers: {
+        "x-goog-api-key": apiKey,
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`google models.list failed with ${response.status}`)
+    }
+
+    const body = (await response.json()) as GoogleModelListResponse
+    for (const model of body.models ?? []) {
+      const methods = model.supportedActions ?? model.supportedGenerationMethods ?? []
+      if (!methods.includes("generateContent")) continue
+
+      const id = model.baseModelId ?? model.name?.replace(/^models\//, "")
+      if (id) result.set(id, model)
+    }
+
+    if (!body.nextPageToken) return result
+    pageToken = body.nextPageToken
+  }
 }
 
 function custom(dep: CustomDep): Record<string, CustomLoader> {
@@ -196,6 +302,48 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
         options: {},
       }),
+    google: Effect.fnUntraced(function* (provider: Info) {
+      const env = yield* dep.env()
+      const auth = yield* dep.auth(provider.id)
+      const configProvider = (yield* dep.config()).provider?.["google"]
+      const apiKey = iife(() => {
+        const configured = configProvider?.options?.apiKey
+        if (typeof configured === "string" && configured.trim() !== "") return configured
+        if (auth?.type === "api") return auth.key
+        return provider.env.map((item) => env[item]).find((value) => typeof value === "string" && value.trim() !== "")
+      })
+
+      return {
+        autoload: false,
+        async discoverModels() {
+          if (!apiKey) return { mode: "replace", models: provider.models }
+
+          try {
+            const allowed = await googleAvailableModels(apiKey)
+            const models = Object.fromEntries(
+              Object.entries(provider.models).filter(([modelID, model]) => {
+                return allowed.has(modelID) || allowed.has(model.api.id)
+              }),
+            )
+
+            for (const [id, discovered] of allowed.entries()) {
+              if (models[id]) continue
+              const next = googleDiscoveredModel(provider, discovered)
+              if (!next) continue
+              models[id] = next
+            }
+
+            return {
+              mode: "replace",
+              models,
+            }
+          } catch (error) {
+            log.warn("google model discovery failed", { error })
+            return { mode: "replace", models: provider.models }
+          }
+        },
+      }
+    }),
     "github-copilot": () =>
       Effect.succeed({
         autoload: false,
@@ -606,10 +754,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             featureFlags,
           })
         },
-        async discoverModels(): Promise<Record<string, Model>> {
+        async discoverModels(): Promise<DiscoveredModels> {
           if (!apiKey) {
             log.info("gitlab model discovery skipped: no apiKey")
-            return {}
+            return { mode: "merge", models: {} }
           }
 
           try {
@@ -629,7 +777,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
                     }
                   : null,
               })
-              return {}
+              return { mode: "merge", models: {} }
             }
 
             const models: Record<string, Model> = {}
@@ -681,10 +829,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
               count: Object.keys(models).length,
               models: Object.keys(models),
             })
-            return models
+            return { mode: "merge", models }
           } catch (e) {
             log.warn("gitlab model discovery failed", { error: e })
-            return {}
+            return { mode: "merge", models: {} }
           }
         },
       }
@@ -1336,18 +1484,25 @@ const layer: Layer.Layer<
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+        for (const [id, discoverModels] of Object.entries(discoveryLoaders)) {
+          const providerID = ProviderID.make(id)
+          if (!providers[providerID] || !isProviderAllowed(providerID)) continue
+
           yield* Effect.promise(async () => {
             try {
-              const discovered = await discoveryLoaders[gitlab]()
-              for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
+              const discovered = await discoverModels()
+              if (discovered.mode === "replace") {
+                providers[providerID].models = discovered.models
+                return
+              }
+
+              for (const [modelID, model] of Object.entries(discovered.models)) {
+                if (!providers[providerID].models[modelID]) {
+                  providers[providerID].models[modelID] = model
                 }
               }
-            } catch (e) {
-              log.warn("state discovery error", { id: "gitlab", error: e })
+            } catch (error) {
+              log.warn("state discovery error", { id: providerID, error })
             }
           })
         }
