@@ -18,8 +18,11 @@ import { Script } from "@opencode-ai/script"
 import pkg from "../package.json"
 
 const npmPackagePrefix = process.env.OPENCODE_NPM_PACKAGE_PREFIX || Script.repoName
+const assetBaseName = Script.repoName
 const publishedBinaryName = (name: string) =>
   `${npmPackagePrefix}${name.startsWith("opencode-") ? name.slice("opencode".length) : `-${name}`}`
+const releaseAssetName = (name: string) =>
+  `${assetBaseName}${name.startsWith(`${pkg.name}-`) ? name.slice(pkg.name.length) : `-${name}`}`
 
 // Load migrations from migration directories
 const migrationDirs = (
@@ -260,10 +263,11 @@ for (const item of targets) {
 
 if (Script.release) {
   for (const key of Object.keys(binaries)) {
+    const filename = key.includes("linux") ? `${releaseAssetName(key)}.tar.gz` : `${releaseAssetName(key)}.zip`
     if (key.includes("linux")) {
-      await $`tar -czf ../../${key}.tar.gz *`.cwd(`dist/${key}/bin`)
+      await $`tar -czf ../../${filename} *`.cwd(`dist/${key}/bin`)
     } else {
-      await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)
+      await $`zip -r ../../${filename} *`.cwd(`dist/${key}/bin`)
     }
   }
   await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`

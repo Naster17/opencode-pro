@@ -32,7 +32,7 @@ const repo = (() => {
 const [owner = "Naster17", name = "opencode-pro"] = repo.split("/", 2)
 
 const getBase = (): Configuration => ({
-  artifactName: "opencode-desktop-${os}-${arch}.${ext}",
+  artifactName: `${name}-desktop-\${os}-\${arch}.\${ext}`,
   directories: {
     output: "dist",
     buildResources: "resources",
