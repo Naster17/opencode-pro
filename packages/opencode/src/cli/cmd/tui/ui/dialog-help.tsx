@@ -77,7 +77,7 @@ function Section(props: { title: string; description?: string; rows: HelpRow[] }
               <text fg={theme.text} wrapMode="none" overflow="hidden">
                 {row.label}
               </text>
-            <Show when={row.meta}>
+              <Show when={row.meta}>
                 <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
                   {row.meta}
                 </text>
@@ -276,12 +276,8 @@ export function DialogHelp(props: { commands: CommandOption[] }) {
       >
         <box flexDirection="column" gap={1} paddingBottom={1}>
           <Section title="Overview" rows={overviewRows()} />
-          <For each={commandSections()}>
-            {(section) => <Section title={section.title} rows={section.rows} />}
-          </For>
-          <For each={keybindSections()}>
-            {(section) => <Section title={section.title} rows={section.rows} />}
-          </For>
+          <For each={commandSections()}>{(section) => <Section title={section.title} rows={section.rows} />}</For>
+          <For each={keybindSections()}>{(section) => <Section title={section.title} rows={section.rows} />}</For>
         </box>
       </scrollbox>
       <box flexDirection="row" justifyContent="space-between" paddingBottom={1}>
