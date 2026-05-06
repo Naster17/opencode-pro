@@ -75,6 +75,9 @@ function init() {
   })
 
   const result = {
+    list() {
+      return visibleOptions()
+    },
     trigger(name: string) {
       for (const option of entries()) {
         if (option.value === name) {

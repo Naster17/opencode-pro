@@ -661,7 +661,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         name: "help",
       },
       onSelect: () => {
-        dialog.replace(() => <DialogHelp />)
+        dialog.replace(() => <DialogHelp commands={command.list()} />)
       },
       category: "System",
     },

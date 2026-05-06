@@ -353,6 +353,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (variants.length === 0) return false
         return variants.every(([name, options]) => thinkingState(options, name) !== "inherit")
       }
+      const thinkingLevels = () => {
+        const thinking = resolveThinking()
+        if (!thinking) return []
+        if (thinking.hasThinkingToggle && thinking.levelVariant.high === "thinking") {
+          return ["off", "high"] as ThinkingLevel[]
+        }
+        return THINKING_LEVELS.filter((level) => {
+          if (level === "off") {
+            return Boolean(
+              thinking.levelVariant.off || thinking.baseLevel === "off" || thinking.defaultLevel === "off",
+            )
+          }
+          return Boolean(thinking.levelVariant[level] || thinking.levels.includes(level))
+        })
+      }
 
       return {
         current: currentModel,
@@ -568,6 +583,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
             return thinking.activeLevel
           },
+          supportsThinking() {
+            return thinkingLevels().length > 1
+          },
           cycleThinking() {
             const thinking = resolveThinking()
             if (!thinking) {
@@ -578,17 +596,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               })
               return
             }
-            const levels =
-              thinking.hasThinkingToggle && thinking.levelVariant.high === "thinking"
-                ? (["off", "high"] as ThinkingLevel[])
-                : THINKING_LEVELS.filter((level) => {
-                    if (level === "off") {
-                      return Boolean(
-                        thinking.levelVariant.off || thinking.baseLevel === "off" || thinking.defaultLevel === "off",
-                      )
-                    }
-                    return Boolean(thinking.levelVariant[level] || thinking.levels.includes(level))
-                  })
+            const levels = thinkingLevels()
             if (levels.length === 0) return
             const index = levels.indexOf(thinking.activeLevel)
             const next = levels[(index + 1) % levels.length] ?? levels[0]

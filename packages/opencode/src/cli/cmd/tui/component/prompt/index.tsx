@@ -359,10 +359,11 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: new Map(),
     interrupt: 0,
   })
-  const showThinking = createMemo(() => local.model.parsed().reasoning && store.mode === "normal")
+  const showThinking = createMemo(() => local.model.variant.supportsThinking() && store.mode === "normal")
   const visibleVariantLabel = createMemo(() => {
     const value = variantLabel()
     if (!value) return
+    if (value.toLowerCase() === "default") return
     if (showThinking() && THINKING_DISPLAY_VARIANTS.has(value.toLowerCase())) return
     return value
   })

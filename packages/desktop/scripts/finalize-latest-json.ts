@@ -114,6 +114,8 @@ async function resolveTauriSigningKey() {
   const value = process.env.TAURI_SIGNING_PRIVATE_KEY
   if (!value) throw new Error("TAURI_SIGNING_PRIVATE_KEY is required")
 
+  const encodeMinisignKey = (input: string) => Buffer.from(input, "utf8").toString("base64")
+
   const normalizeMinisignKey = (input: string) => {
     const lines = input
       .replaceAll("\r\n", "\n")
@@ -146,19 +148,25 @@ async function resolveTauriSigningKey() {
         "TAURI_SIGNING_PRIVATE_KEY file must contain a minisign private key. The first line should start with 'untrusted comment:'.",
       )
     }
-    process.env.TAURI_SIGNING_PRIVATE_KEY = text
+    process.env.TAURI_SIGNING_PRIVATE_KEY = encodeMinisignKey(text)
     return process.env.TAURI_SIGNING_PRIVATE_KEY
   }
 
-  const decoded = normalizeMinisignKey(value) ?? normalizeEncodedKey(value)
+  const decoded = normalizeMinisignKey(value)
+  if (decoded) {
+    process.env.TAURI_SIGNING_PRIVATE_KEY = encodeMinisignKey(decoded)
+    return process.env.TAURI_SIGNING_PRIVATE_KEY
+  }
 
-  if (!decoded) {
+  const encoded = normalizeEncodedKey(value)
+
+  if (!encoded) {
     throw new Error(
       "TAURI_SIGNING_PRIVATE_KEY must be a minisign private key or a path to one. The first line should start with 'untrusted comment:'.",
     )
   }
 
-  process.env.TAURI_SIGNING_PRIVATE_KEY = decoded
+  process.env.TAURI_SIGNING_PRIVATE_KEY = encodeMinisignKey(encoded)
   return process.env.TAURI_SIGNING_PRIVATE_KEY
 }
 
