@@ -111,7 +111,9 @@ function configuredPluginStateKey(spec: string) {
 
 function readPluginEnabledMap(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {}
-  return Object.fromEntries(Object.entries(value).filter((item): item is [string, boolean] => typeof item[1] === "boolean"))
+  return Object.fromEntries(
+    Object.entries(value).filter((item): item is [string, boolean] => typeof item[1] === "boolean"),
+  )
 }
 
 function configuredPluginEnabled(api: TuiPluginApi, spec: string) {

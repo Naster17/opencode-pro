@@ -635,7 +635,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       if (!model.id.includes("gpt") && !model.id.includes("gemini-3") && !model.id.includes("claude")) return {}
       return Object.fromEntries(
         (GPT5_FAMILY_RE.test(model.api.id.toLowerCase())
-          ? openaiReasoningEfforts(model.api.id, model.release_date) ?? WIDELY_SUPPORTED_EFFORTS
+          ? (openaiReasoningEfforts(model.api.id, model.release_date) ?? WIDELY_SUPPORTED_EFFORTS)
           : OPENAI_EFFORTS
         ).map((effort) => [effort, { reasoning: { effort } }]),
       )
@@ -714,7 +714,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       }
       return Object.fromEntries(
         (GPT5_FAMILY_RE.test(model.api.id.toLowerCase())
-          ? openaiReasoningEfforts(model.api.id, model.release_date) ?? WIDELY_SUPPORTED_EFFORTS
+          ? (openaiReasoningEfforts(model.api.id, model.release_date) ?? WIDELY_SUPPORTED_EFFORTS)
           : OPENAI_EFFORTS
         ).map((effort) => [effort, { reasoningEffort: effort }]),
       )
