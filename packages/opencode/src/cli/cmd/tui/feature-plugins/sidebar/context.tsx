@@ -2,7 +2,7 @@ import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plug
 import { createMemo } from "solid-js"
 import { formatAlignedRow, formatCompactTokens, money, summarizeUsage } from "@tui/util/usage"
 
-const id = "internal:sidebar-context"
+const id = "internal:sidebar-metrics"
 
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current

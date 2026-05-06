@@ -4,6 +4,18 @@
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 - Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
 
+## Git Sync And Merge Safety
+
+- When syncing with `origin` or `upstream`, preserve fork-specific behavior by default. Do not silently replace PRO/custom repo names, package names, release URLs, workflow wiring, branding, or fork-only features with upstream defaults unless the user explicitly asks for that.
+- Before non-trivial merges or rebases, create a local backup branch if git writes are allowed.
+- Fetch remotes explicitly and separately. Do not assume `origin` and `upstream` point to the same history or release setup.
+- Prefer merges over rebases for shared branch sync work unless the user explicitly asks for history rewriting.
+- Treat conflicts in fork-specific files as "local changes win" unless there is a strong reason to manually combine both sides.
+- For conflicted files that mix upstream fixes with local customizations, manually merge them so upstream bugfixes land without dropping local product behavior.
+- After merge resolution, run the most relevant typecheck/tests before pushing.
+- Do not delete, rename, or revert fork-specific features just to make an upstream sync easier. Escalate only if the upstream change genuinely conflicts with required local behavior.
+- If GitHub shows the fork is behind upstream, verify with local refs after `git fetch upstream` before making assumptions from the web UI banner alone.
+
 ## Style Guide
 
 ### General Principles

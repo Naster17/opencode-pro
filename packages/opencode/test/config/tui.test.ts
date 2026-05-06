@@ -603,7 +603,7 @@ test("merges plugin_enabled flags across config layers", async () => {
         path.join(Global.Path.config, "tui.json"),
         JSON.stringify({
           plugin_enabled: {
-            "internal:sidebar-context": false,
+            "internal:sidebar-metrics": false,
             "demo.plugin": true,
           },
         }),
@@ -622,7 +622,7 @@ test("merges plugin_enabled flags across config layers", async () => {
 
   const config = await getTuiConfig(tmp.path)
   expect(config.plugin_enabled).toEqual({
-    "internal:sidebar-context": false,
+    "internal:sidebar-metrics": false,
     "demo.plugin": false,
     "local.plugin": true,
   })

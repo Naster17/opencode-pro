@@ -615,7 +615,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     {
       title: "View usage",
       value: "opencode.usage",
-      description: "Inspect token usage, cost, session activity, model breakdowns, and code changes.",
       slash: {
         name: "usage",
       },
