@@ -73,12 +73,14 @@ test("toggles plugin runtime state by exported id", async () => {
     await expect(fs.readFile(tmp.extra.marker, "utf8")).resolves.toBe("start\n")
     expect(api.kv.get("plugin_enabled", {})).toEqual({
       "demo.toggle": true,
+      [`spec:${tmp.extra.spec}`]: true,
     })
 
     await expect(TuiPluginRuntime.deactivatePlugin("demo.toggle")).resolves.toBe(true)
     await expect(fs.readFile(tmp.extra.marker, "utf8")).resolves.toBe("start\nstop\n")
     expect(api.kv.get("plugin_enabled", {})).toEqual({
       "demo.toggle": false,
+      [`spec:${tmp.extra.spec}`]: false,
     })
 
     await expect(TuiPluginRuntime.activatePlugin("missing.id")).resolves.toBe(false)
@@ -147,6 +149,69 @@ test("kv plugin_enabled overrides tui config on startup", async () => {
       target: tmp.extra.spec,
       enabled: true,
       active: true,
+    })
+  } finally {
+    await TuiPluginRuntime.dispose()
+    cwd.mockRestore()
+    wait.mockRestore()
+    delete process.env.OPENCODE_PLUGIN_META_FILE
+  }
+})
+
+test("spec-based plugin_enabled state disables external plugin on startup", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "spec-plugin.ts")
+      const spec = pathToFileURL(file).href
+      const marker = path.join(dir, "spec.txt")
+
+      await Bun.write(
+        file,
+        `export default {
+  id: "demo.spec",
+  tui: async (_api, options) => {
+    await Bun.write(options.marker, "on")
+  },
+}
+`,
+      )
+
+      return {
+        spec,
+        marker,
+      }
+    },
+  })
+
+  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  const config: TuiConfig.Info = {
+    plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
+    plugin_origins: [
+      {
+        spec: [tmp.extra.spec, { marker: tmp.extra.marker }],
+        scope: "local",
+        source: path.join(tmp.path, "tui.json"),
+      },
+    ],
+  }
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+  const api = createTuiPluginApi()
+  api.kv.set("plugin_enabled", {
+    [`spec:${tmp.extra.spec}`]: false,
+  })
+
+  try {
+    await TuiPluginRuntime.init({ api, config })
+
+    await expect(fs.readFile(tmp.extra.marker, "utf8")).rejects.toThrow()
+    expect(TuiPluginRuntime.list().find((item) => item.id === "demo.spec")).toEqual({
+      id: "demo.spec",
+      source: "file",
+      spec: tmp.extra.spec,
+      target: tmp.extra.spec,
+      enabled: false,
+      active: false,
     })
   } finally {
     await TuiPluginRuntime.dispose()

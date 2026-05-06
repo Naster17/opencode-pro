@@ -21,33 +21,59 @@ describe("plugin manager list", () => {
       },
     })
 
-    expect(
-      configuredPlugins(api, 140, [
-        {
-          id: "acme-runtime",
-          source: "npm",
-          spec: "acme-runtime@1.0.0",
-          target: "/tmp/node_modules/acme-runtime/tui.js",
-          enabled: true,
-          active: true,
-        },
-      ]),
-    ).toEqual([
+    const items = configuredPlugins(api, 140, [
+      {
+        id: "acme-runtime",
+        source: "npm",
+        spec: "acme-runtime@1.0.0",
+        target: "/tmp/node_modules/acme-runtime/tui.js",
+        enabled: true,
+        active: true,
+      },
+    ])
+
+    expect(items).toHaveLength(2)
+    expect(items.map((item) => ({ ...item, footer: undefined }))).toEqual([
       {
         title: "acme-server",
         value: "config:acme-server",
         category: "Configured",
+        spec: "acme-server@1.0.0",
+        enabled: true,
         description: "No TUI entry: acme-server",
-        footer: "server-only or failed to load",
+        footer: undefined,
       },
       {
         title: "demo-tui",
         value: `config:${tuiOnly}`,
         category: "Configured",
+        spec: tuiOnly,
+        enabled: true,
         description: "No TUI entry: demo-tui.ts",
-        footer: "server-only or failed to load",
+        footer: undefined,
       },
     ])
+  })
+
+  test("uses persisted enabled state for configured plugins missing from runtime", () => {
+    const api = createTuiPluginApi({
+      state: {
+        config: {
+          plugin: ["acme-server@1.0.0"],
+        },
+      },
+      tuiConfig: {
+        plugin_enabled: {
+          "spec:acme-server": false,
+        },
+      },
+    })
+
+    const [item] = configuredPlugins(api, 140, [])
+    expect(item).toMatchObject({
+      value: "config:acme-server",
+      enabled: false,
+    })
   })
 
   test("keeps backend auth plugins at the end", () => {

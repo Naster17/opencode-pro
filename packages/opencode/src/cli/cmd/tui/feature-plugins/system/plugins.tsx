@@ -26,9 +26,13 @@ type ListedPlugin = {
   title: string
   value: string
   category: string
+  spec?: string
+  enabled?: boolean
   description?: string
   footer: JSX.Element | string
 }
+
+const PLUGIN_ENABLED_KEY = "plugin_enabled"
 
 const BACKEND_PLUGINS: BackendPluginInfo[] = [
   {
@@ -101,6 +105,22 @@ function pluginIdentity(spec: string) {
   return parsePluginSpecifier(spec).pkg
 }
 
+function configuredPluginStateKey(spec: string) {
+  return `spec:${pluginIdentity(spec)}`
+}
+
+function readPluginEnabledMap(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  return Object.fromEntries(Object.entries(value).filter((item): item is [string, boolean] => typeof item[1] === "boolean"))
+}
+
+function configuredPluginEnabled(api: TuiPluginApi, spec: string) {
+  const key = configuredPluginStateKey(spec)
+  const config = readPluginEnabledMap(api.tuiConfig.plugin_enabled)
+  const kv = readPluginEnabledMap(api.kv.get(PLUGIN_ENABLED_KEY, {}))
+  return kv[key] ?? config[key] ?? true
+}
+
 function pluginDescription(spec: string, width: number, label: string) {
   if (spec.startsWith("file://")) {
     const file = fileURLToPath(spec)
@@ -134,12 +154,15 @@ export function configuredPlugins(api: TuiPluginApi, width: number, list: Readon
     const identity = pluginIdentity(spec)
     if (seen.has(identity)) continue
     seen.add(identity)
+    const enabled = configuredPluginEnabled(api, spec)
     rows.push({
       title: pluginName(spec),
       value: `config:${identity}`,
       category: "Configured",
+      spec,
+      enabled,
       description: pluginDescription(spec, width, "No TUI entry"),
-      footer: "server-only or failed to load",
+      footer: enabled ? "enabled" : "disabled",
     })
   }
 
@@ -326,7 +349,12 @@ function View(props: { api: TuiPluginApi }) {
 
     return [
       ...tuiPlugins,
-      ...configuredPlugins(props.api, width, list()).map((item) => listedRow(props.api, item)),
+      ...configuredPlugins(props.api, width, list()).map((item) =>
+        listedRow(props.api, {
+          ...item,
+          footer: state(props.api, { enabled: item.enabled ?? true } as TuiPluginStatus),
+        }),
+      ),
       ...backendRows,
     ]
   })
@@ -374,9 +402,42 @@ function View(props: { api: TuiPluginApi }) {
       })
   }
 
+  const toggleConfigured = async (value: string) => {
+    const item = configuredPlugins(props.api, size().width, list()).find((entry) => entry.value === value)
+    if (!item?.spec) return
+
+    setLock(true)
+    const key = configuredPluginStateKey(item.spec)
+    const before = readPluginEnabledMap(props.api.kv.get(PLUGIN_ENABLED_KEY, {}))
+    const enabled = item.enabled ?? true
+    const next = {
+      ...before,
+      [key]: !enabled,
+    }
+    props.api.kv.set(PLUGIN_ENABLED_KEY, next)
+
+    if (!enabled) {
+      const ok = await props.api.plugins.add(item.spec)
+      if (!ok) {
+        props.api.ui.toast({
+          variant: "info",
+          message: `Enabled ${item.title}, but it still has no TUI entry or failed to load.`,
+        })
+      }
+    }
+
+    setList(props.api.plugins.list())
+    setLock(false)
+  }
+
   const flip = (x: string) => {
     if (x.startsWith("backend:")) {
       void toggleBackend(backendPluginProvider(x.replace("backend:", "")))
+      return
+    }
+    if (x.startsWith("config:")) {
+      if (lock()) return
+      void toggleConfigured(x)
       return
     }
     if (lock()) return

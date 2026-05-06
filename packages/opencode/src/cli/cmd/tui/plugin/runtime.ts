@@ -22,6 +22,7 @@ import {
   readPluginId,
   readV1Plugin,
   resolvePluginId,
+  parsePluginSpecifier,
   type PluginPackage,
   type PluginSource,
 } from "@/plugin/shared"
@@ -395,6 +396,11 @@ function readPluginEnabledMap(value: unknown) {
   )
 }
 
+function configuredPluginStateKey(spec: string) {
+  if (spec.startsWith("file://")) return `spec:${spec}`
+  return `spec:${parsePluginSpecifier(spec).pkg}`
+}
+
 function pluginEnabledState(state: RuntimeState, config: TuiConfig.Info) {
   return {
     ...readPluginEnabledMap(config.plugin_enabled),
@@ -406,6 +412,14 @@ function writePluginEnabledState(api: Api, id: string, enabled: boolean) {
   api.kv.set(KV_KEY, {
     ...readPluginEnabledMap(api.kv.get(KV_KEY, {})),
     [id]: enabled,
+  })
+}
+
+function writeExternalPluginEnabledState(api: Api, plugin: PluginEntry, enabled: boolean) {
+  api.kv.set(KV_KEY, {
+    ...readPluginEnabledMap(api.kv.get(KV_KEY, {})),
+    [plugin.id]: enabled,
+    [configuredPluginStateKey(plugin.load.spec)]: enabled,
   })
 }
 
@@ -422,7 +436,10 @@ function listPluginStatus(state: RuntimeState): TuiPluginStatus[] {
 
 async function deactivatePluginEntry(state: RuntimeState, plugin: PluginEntry, persist: boolean) {
   plugin.enabled = false
-  if (persist) writePluginEnabledState(state.api, plugin.id, false)
+  if (persist) {
+    if (plugin.load.source === "internal") writePluginEnabledState(state.api, plugin.id, false)
+    else writeExternalPluginEnabledState(state.api, plugin, false)
+  }
   if (!plugin.scope) return true
   const scope = plugin.scope
   plugin.scope = undefined
@@ -432,7 +449,10 @@ async function deactivatePluginEntry(state: RuntimeState, plugin: PluginEntry, p
 
 async function activatePluginEntry(state: RuntimeState, plugin: PluginEntry, persist: boolean) {
   plugin.enabled = true
-  if (persist) writePluginEnabledState(state.api, plugin.id, true)
+  if (persist) {
+    if (plugin.load.source === "internal") writePluginEnabledState(state.api, plugin.id, true)
+    else writeExternalPluginEnabledState(state.api, plugin, true)
+  }
   if (plugin.scope) return true
 
   const scope = createPluginScope(plugin.load, plugin.id)
@@ -583,7 +603,7 @@ function addPluginEntry(state: RuntimeState, plugin: PluginEntry) {
 function applyInitialPluginEnabledState(state: RuntimeState, config: TuiConfig.Info) {
   const map = pluginEnabledState(state, config)
   for (const plugin of state.plugins) {
-    const enabled = map[plugin.id]
+    const enabled = map[plugin.id] ?? map[configuredPluginStateKey(plugin.load.spec)]
     if (enabled === undefined) continue
     plugin.enabled = enabled
   }
