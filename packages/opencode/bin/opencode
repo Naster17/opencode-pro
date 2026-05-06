@@ -129,16 +129,14 @@ const names = (() => {
 
     if (musl) {
       if (arch === "x64") {
-        if (baseline)
-          return [`${binaryBase}-baseline-musl`, `${binaryBase}-musl`, `${binaryBase}-baseline`, binaryBase]
+        if (baseline) return [`${binaryBase}-baseline-musl`, `${binaryBase}-musl`, `${binaryBase}-baseline`, binaryBase]
         return [`${binaryBase}-musl`, `${binaryBase}-baseline-musl`, binaryBase, `${binaryBase}-baseline`]
       }
       return [`${binaryBase}-musl`, binaryBase]
     }
 
     if (arch === "x64") {
-      if (baseline)
-        return [`${binaryBase}-baseline`, binaryBase, `${binaryBase}-baseline-musl`, `${binaryBase}-musl`]
+      if (baseline) return [`${binaryBase}-baseline`, binaryBase, `${binaryBase}-baseline-musl`, `${binaryBase}-musl`]
       return [binaryBase, `${binaryBase}-baseline`, `${binaryBase}-musl`, `${binaryBase}-baseline-musl`]
     }
     return [binaryBase, `${binaryBase}-musl`]
