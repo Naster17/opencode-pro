@@ -33,6 +33,7 @@ import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel } from "@tui/component/dialog-model"
 import { useConnected } from "@tui/component/use-connected"
 import { DialogMcp } from "@tui/component/dialog-mcp"
+import { DialogCredentials } from "@tui/component/dialog-credentials"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogUsage } from "@tui/component/dialog-usage"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
@@ -600,6 +601,18 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           },
         ]
       : []),
+    {
+      title: "Credential manager",
+      value: "credentials.list",
+      slash: {
+        name: "credentials",
+        aliases: ["creds", "auth"],
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogCredentials />)
+      },
+      category: "Provider",
+    },
     {
       title: "View status",
       keybind: "status_view",
