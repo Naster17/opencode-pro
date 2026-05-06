@@ -121,7 +121,9 @@ async function resolveTauriSigningKey() {
     return process.env.TAURI_SIGNING_PRIVATE_KEY
   }
 
-  const inline = value.includes("\\n") ? value.replaceAll("\\n", "\n") : value
+  const inline = value.includes("\n") || value.includes("\\n")
+    ? value.replaceAll("\\n", "\n").replaceAll(" ", "")
+    : value
   const decoded =
     inline.startsWith("untrusted comment:")
       ? inline

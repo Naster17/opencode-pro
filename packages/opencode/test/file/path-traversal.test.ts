@@ -13,29 +13,33 @@ const run = <A, E>(eff: Effect.Effect<A, E, File.Service>) =>
   Effect.runPromise(provideInstance(Instance.directory)(eff.pipe(Effect.provide(File.defaultLayer))))
 const read = (file: string) => run(File.Service.use((svc) => svc.read(file)))
 const list = (dir?: string) => run(File.Service.use((svc) => svc.list(dir)))
+const root = process.platform === "win32" ? "C:/" : "/"
+const outside = (...parts: string[]) => path.join(root, ...parts)
+const project = outside("project")
+const projectSrc = path.join(project, "src")
 
 describe("Filesystem.contains", () => {
   test("allows paths within project", () => {
-    expect(Filesystem.contains("/project", "/project/src")).toBe(true)
-    expect(Filesystem.contains("/project", "/project/src/file.ts")).toBe(true)
-    expect(Filesystem.contains("/project", "/project")).toBe(true)
+    expect(Filesystem.contains(project, projectSrc)).toBe(true)
+    expect(Filesystem.contains(project, path.join(projectSrc, "file.ts"))).toBe(true)
+    expect(Filesystem.contains(project, project)).toBe(true)
   })
 
   test("blocks ../ traversal", () => {
-    expect(Filesystem.contains("/project", "/project/../etc")).toBe(false)
-    expect(Filesystem.contains("/project", "/project/src/../../etc")).toBe(false)
-    expect(Filesystem.contains("/project", "/etc/passwd")).toBe(false)
+    expect(Filesystem.contains(project, path.join(project, "..", "etc"))).toBe(false)
+    expect(Filesystem.contains(project, path.join(projectSrc, "..", "..", "etc"))).toBe(false)
+    expect(Filesystem.contains(project, outside("etc", "passwd"))).toBe(false)
   })
 
   test("blocks absolute paths outside project", () => {
-    expect(Filesystem.contains("/project", "/etc/passwd")).toBe(false)
-    expect(Filesystem.contains("/project", "/tmp/file")).toBe(false)
-    expect(Filesystem.contains("/home/user/project", "/home/user/other")).toBe(false)
+    expect(Filesystem.contains(project, outside("etc", "passwd"))).toBe(false)
+    expect(Filesystem.contains(project, outside("tmp", "file"))).toBe(false)
+    expect(Filesystem.contains(outside("home", "user", "project"), outside("home", "user", "other"))).toBe(false)
   })
 
   test("handles prefix collision edge cases", () => {
-    expect(Filesystem.contains("/project", "/project-other/file")).toBe(false)
-    expect(Filesystem.contains("/project", "/projectfile")).toBe(false)
+    expect(Filesystem.contains(project, outside("project-other", "file"))).toBe(false)
+    expect(Filesystem.contains(project, outside("projectfile"))).toBe(false)
   })
 })
 
@@ -156,12 +160,13 @@ describe("containsPath", () => {
 
   test("returns false for path outside both directory and worktree", async () => {
     await using tmp = await tmpdir({ git: true })
+    const sibling = path.join(path.dirname(tmp.path), "other-project")
 
     await WithInstance.provide({
       directory: tmp.path,
       fn: () => {
-        expect(containsPath("/etc/passwd", Instance.current)).toBe(false)
-        expect(containsPath("/tmp/other-project", Instance.current)).toBe(false)
+        expect(containsPath(path.join(sibling, "passwd"), Instance.current)).toBe(false)
+        expect(containsPath(sibling, Instance.current)).toBe(false)
       },
     })
   })
@@ -179,27 +184,28 @@ describe("containsPath", () => {
 
   test("handles directory === worktree (running from repo root)", async () => {
     await using tmp = await tmpdir({ git: true })
+    const sibling = path.join(path.dirname(tmp.path), "outside.txt")
 
     await WithInstance.provide({
       directory: tmp.path,
       fn: () => {
         expect(Instance.directory).toBe(Instance.worktree)
         expect(containsPath(path.join(tmp.path, "file.txt"), Instance.current)).toBe(true)
-        expect(containsPath("/etc/passwd", Instance.current)).toBe(false)
+        expect(containsPath(sibling, Instance.current)).toBe(false)
       },
     })
   })
 
-  test("non-git project does not allow arbitrary paths via worktree='/'", async () => {
+  test("non-git project does not allow arbitrary paths via sandbox worktree", async () => {
     await using tmp = await tmpdir() // no git: true
 
     await WithInstance.provide({
       directory: tmp.path,
       fn: () => {
-        // worktree is "/" for non-git projects, but containsPath should NOT allow all paths
+        const outsideWorktree = path.join(path.dirname(Instance.worktree), "outside")
         expect(containsPath(path.join(tmp.path, "file.txt"), Instance.current)).toBe(true)
-        expect(containsPath("/etc/passwd", Instance.current)).toBe(false)
-        expect(containsPath("/tmp/other", Instance.current)).toBe(false)
+        expect(containsPath(path.join(outsideWorktree, "passwd"), Instance.current)).toBe(false)
+        expect(containsPath(outsideWorktree, Instance.current)).toBe(false)
       },
     })
   })

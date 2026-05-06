@@ -156,13 +156,28 @@ export function windowsPath(p: string): string {
   )
 }
 export function overlaps(a: string, b: string) {
-  const relA = relative(a, b)
-  const relB = relative(b, a)
+  const left = process.platform === "win32" ? pathResolve(windowsPath(a)).toLowerCase() : pathResolve(a)
+  const right = process.platform === "win32" ? pathResolve(windowsPath(b)).toLowerCase() : pathResolve(b)
+  if (process.platform === "win32") {
+    const leftRoot = left.match(/^[a-z]:[\\/]/)?.[0]
+    const rightRoot = right.match(/^[a-z]:[\\/]/)?.[0]
+    if (leftRoot && rightRoot && leftRoot !== rightRoot) return false
+  }
+  const relA = relative(left, right)
+  const relB = relative(right, left)
   return !relA || !relA.startsWith("..") || !relB || !relB.startsWith("..")
 }
 
 export function contains(parent: string, child: string) {
-  return !relative(parent, child).startsWith("..")
+  const base = process.platform === "win32" ? pathResolve(windowsPath(parent)).toLowerCase() : pathResolve(parent)
+  const target = process.platform === "win32" ? pathResolve(windowsPath(child)).toLowerCase() : pathResolve(child)
+  if (process.platform === "win32") {
+    const baseRoot = base.match(/^[a-z]:[\\/]/)?.[0]
+    const targetRoot = target.match(/^[a-z]:[\\/]/)?.[0]
+    if (baseRoot && targetRoot && baseRoot !== targetRoot) return false
+  }
+  const rel = relative(base, target)
+  return rel === "" || (!rel.startsWith("..") && rel !== "..")
 }
 
 export async function findUp(
