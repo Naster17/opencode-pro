@@ -64,8 +64,8 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Run unit tests
-        run: bun turbo test:ci
-        timeout-minutes: 45
+        run: bun turbo test:ci --concurrency=${{ runner.os == 'Windows' && '1' || '4' }}
+        timeout-minutes: 60
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
