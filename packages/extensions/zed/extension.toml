@@ -1,36 +1,36 @@
 id = "opencode"
 name = "OpenCode"
 description = "The open source coding agent."
-version = "1.14.39"
+version = "1.14.49-PRO"
 schema_version = 1
 authors = ["Anomaly"]
-repository = "https://github.com/anomalyco/opencode"
+repository = "https://github.com/Naster17/opencode-pro"
 
 [agent_servers.opencode]
 name = "OpenCode"
 icon = "./icons/opencode.svg"
 
 [agent_servers.opencode.targets.darwin-aarch64]
-archive = "https://github.com/anomalyco/opencode/releases/download/v1.14.39/opencode-darwin-arm64.zip"
+archive = "https://github.com/Naster17/opencode-pro/releases/download/v1.14.49-PRO/opencode-darwin-arm64.zip"
 cmd = "./opencode"
 args = ["acp"]
 
 [agent_servers.opencode.targets.darwin-x86_64]
-archive = "https://github.com/anomalyco/opencode/releases/download/v1.14.39/opencode-darwin-x64.zip"
+archive = "https://github.com/Naster17/opencode-pro/releases/download/v1.14.49-PRO/opencode-darwin-x64.zip"
 cmd = "./opencode"
 args = ["acp"]
 
 [agent_servers.opencode.targets.linux-aarch64]
-archive = "https://github.com/anomalyco/opencode/releases/download/v1.14.39/opencode-linux-arm64.tar.gz"
+archive = "https://github.com/Naster17/opencode-pro/releases/download/v1.14.49-PRO/opencode-linux-arm64.tar.gz"
 cmd = "./opencode"
 args = ["acp"]
 
 [agent_servers.opencode.targets.linux-x86_64]
-archive = "https://github.com/anomalyco/opencode/releases/download/v1.14.39/opencode-linux-x64.tar.gz"
+archive = "https://github.com/Naster17/opencode-pro/releases/download/v1.14.49-PRO/opencode-linux-x64.tar.gz"
 cmd = "./opencode"
 args = ["acp"]
 
 [agent_servers.opencode.targets.windows-x86_64]
-archive = "https://github.com/anomalyco/opencode/releases/download/v1.14.39/opencode-windows-x64.zip"
+archive = "https://github.com/Naster17/opencode-pro/releases/download/v1.14.49-PRO/opencode-windows-x64.zip"
 cmd = "./opencode.exe"
 args = ["acp"]
