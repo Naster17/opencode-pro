@@ -1575,8 +1575,9 @@ export function Prompt(props: PromptProps) {
                       const message = createMemo(() => {
                         const r = retry()
                         if (!r) return
-                        if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                          return "gemini is way too hot right now"
+                        if (r.message.includes("exceeded your current quota") && r.message.includes("gemini")) {
+                          return "gemini quota exceeded"
+                        }
                         if (r.message.length > 80) return r.message.slice(0, 80) + "..."
                         return r.message
                       })
@@ -1667,11 +1668,9 @@ export function Prompt(props: PromptProps) {
                 </box>
               )}
             </Match>
-             <Match when={true}>
-                               {canRetryGeminiQuota()
-                                   ? <text fg={theme.textMuted}>Press Alt+r to retry immediately</text>
-                                   : props.hint ?? <text />}
-             </Match>
+            <Match when={true}>
+              {canRetryGeminiQuota() ? <text fg={theme.textMuted}>Press Ctrl+r to retry immediately</text> : props.hint ?? <text />}
+            </Match>
           </Switch>
           <Show when={status().type !== "retry"}>
             <box gap={2} flexDirection="row">

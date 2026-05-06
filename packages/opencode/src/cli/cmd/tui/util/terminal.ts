@@ -1,5 +1,3 @@
-import { writeSync } from "node:fs"
-
 const TUI_EXIT_RESET = [
   "\x1b[?1000l",
   "\x1b[?1002l",
@@ -15,33 +13,20 @@ const TUI_EXIT_RESET = [
   "\r",
 ].join("")
 
-function writeReset(fd: number, tty: boolean | undefined) {
-  if (!tty) return
-  try {
-    writeSync(fd, TUI_EXIT_RESET)
-  } catch {
-    // Ignore tty write failures during shutdown.
-  }
+function writeReset(output: Pick<NodeJS.WriteStream, "isTTY" | "write">) {
+  if (!output.isTTY) return
+  output.write(TUI_EXIT_RESET)
 }
 
 export function restoreTerminalState(
-  output: Pick<NodeJS.WriteStream, "isTTY" | "write"> & { fd?: number } = process.stdout,
-  input: Pick<NodeJS.ReadStream, "isTTY"> & Partial<Pick<NodeJS.ReadStream, "setRawMode">> = process.stdin,
+  output: Pick<NodeJS.WriteStream, "isTTY" | "write"> = process.stdout,
+  input: Pick<NodeJS.ReadStream, "isTTY"> & { setRawMode?: (mode: boolean) => unknown } = process.stdin,
 ) {
-  if (input.isTTY && typeof input.setRawMode === "function") {
-    try {
-      input.setRawMode(false)
-    } catch {
-      // Ignore stdin implementations that reject raw-mode changes during shutdown.
-    }
-  }
-
-  writeReset(process.stdout.fd, process.stdout.isTTY)
-  writeReset(process.stderr.fd, process.stderr.isTTY)
-
-  if (!output.isTTY) return
-  if (output.fd === process.stdout.fd || output.fd === process.stderr.fd) return
-  output.write(TUI_EXIT_RESET)
+  if (input.isTTY && input.setRawMode) input.setRawMode(false)
+  writeReset(process.stdout)
+  writeReset(process.stderr)
+  if (output === process.stdout || output === process.stderr) return
+  writeReset(output)
 }
 
 export { TUI_EXIT_RESET }
