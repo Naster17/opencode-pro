@@ -199,6 +199,12 @@ function DialogModelDetails(props: { providerID: string; modelID: string; parent
   const model = createMemo(() => provider()?.models[props.modelID])
   const height = createMemo(() => Math.max(12, dimensions().height - 12))
   const scrollStep = createMemo(() => Math.max(3, Math.floor(height() / 3)))
+  const width = createMemo(() => {
+    const currentProvider = provider()
+    const currentModel = model()
+    if (!currentProvider || !currentModel) return 68
+    return modelDetailsWidth(currentProvider, currentModel)
+  })
 
   function back() {
     dialog.replace(() => <DialogModel providerID={props.parentProviderID} />)
@@ -234,7 +240,8 @@ function DialogModelDetails(props: { providerID: string; modelID: string; parent
   })
 
   onMount(() => {
-    dialog.setSize("xlarge")
+    dialog.setSize("medium")
+    dialog.setWidth(width())
     dialog.setBeforeClose(() => {
       back()
       return false
@@ -255,17 +262,18 @@ function DialogModelDetails(props: { providerID: string; modelID: string; parent
         when={provider() && model()}
         fallback={<text fg={theme.error}>This model is no longer available in the current provider list.</text>}
       >
-        <scrollbox
-          paddingTop={1}
-          paddingRight={1}
-          paddingBottom={1}
-          maxHeight={height()}
-          ref={(value: ScrollBoxRenderable) => {
-            scroll = value
-          }}
-        >
-          <ModelDetailsContent provider={provider()!} model={model()!} />
-        </scrollbox>
+        <box paddingTop={1}>
+          <scrollbox
+            paddingRight={1}
+            paddingBottom={1}
+            maxHeight={height()}
+            ref={(value: ScrollBoxRenderable) => {
+              scroll = value
+            }}
+          >
+            <ModelDetailsContent provider={provider()!} model={model()!} />
+          </scrollbox>
+        </box>
       </Show>
       <text fg={theme.textMuted}>
         <span style={{ fg: theme.text }}>↑↓</span> scroll <span style={{ fg: theme.text }}>esc</span> back
@@ -422,4 +430,37 @@ function statusColor(theme: ReturnType<typeof useTheme>["theme"], status: Provid
   if (status === "beta") return theme.warning
   if (status === "alpha") return theme.primary
   return theme.error
+}
+
+function modelDetailsWidth(provider: ProviderInfo, model: ProviderModel) {
+  const lengths = [
+    `Model details`.length,
+    model.name.length,
+    `${provider.name} ${provider.id} / ${model.id}`.length,
+    `Context window: ${formatNumber(model.limit.context)}`.length,
+    `Max input: ${model.limit.input ? formatNumber(model.limit.input) : "Uses context window"}`.length,
+    `Max output: ${formatNumber(model.limit.output)}`.length,
+    `Temperature: ${yesNo(model.capabilities.temperature)}`.length,
+    `Reasoning: ${yesNo(model.capabilities.reasoning)}`.length,
+    `Tool calling: ${yesNo(model.capabilities.toolcall)}`.length,
+    `Attachments: ${yesNo(model.capabilities.attachment)}`.length,
+    `Interleaved: ${formatInterleaved(model.capabilities.interleaved)}`.length,
+    `Input modalities: ${enabledModalities(model.capabilities.input).join(", ")}`.length,
+    `Output modalities: ${enabledModalities(model.capabilities.output).join(", ")}`.length,
+    `Input: ${formatCost(model.cost.input, "input")}`.length,
+    `Output: ${formatCost(model.cost.output, "output")}`.length,
+    `Cache read: ${formatCost(model.cost.cache.read, "cache read")}`.length,
+    `Cache write: ${formatCost(model.cost.cache.write, "cache write")}`.length,
+    `SDK package: ${model.api.npm}`.length,
+    `Upstream model ID: ${model.api.id}`.length,
+    `Base URL: ${model.api.url || "Not set"}`.length,
+    `Provider source: ${provider.source}`.length,
+    `Family: ${model.family ?? "Unknown"}`.length,
+    `Release date: ${model.release_date || "Unknown"}`.length,
+    `Variant keys: ${sortBy(Object.keys(model.variants ?? {}), (item) => item).join(", ") || "None"}`.length,
+    `Headers: ${formatObjectEntries(model.headers)}`.length,
+    `Options: ${formatObjectEntries(model.options)}`.length,
+  ].sort((a, b) => a - b)
+  const target = lengths[Math.max(0, Math.floor(lengths.length * 0.8) - 1)] ?? 68
+  return Math.max(60, Math.min(108, target + 10))
 }

@@ -10,6 +10,7 @@ import * as Selection from "@tui/util/selection"
 export function Dialog(
   props: ParentProps<{
     size?: "medium" | "large" | "xlarge"
+    width?: number
     onClose: () => void
   }>,
 ) {
@@ -19,6 +20,7 @@ export function Dialog(
 
   let dismiss = false
   const width = () => {
+    if (props.width) return props.width
     if (props.size === "xlarge") return 116
     if (props.size === "large") return 68
     return 60
@@ -70,6 +72,7 @@ function init() {
       beforeClose?: (evt: { name: string; ctrl?: boolean }) => boolean | void
     }[],
     size: "medium" as "medium" | "large" | "xlarge",
+    width: undefined as number | undefined,
   })
 
   const renderer = useRenderer()
@@ -121,6 +124,7 @@ function init() {
       }
       batch(() => {
         setStore("size", "medium")
+        setStore("width", undefined)
         setStore("stack", [])
       })
       refocus()
@@ -134,6 +138,7 @@ function init() {
         if (item.onClose) item.onClose()
       }
       setStore("size", "medium")
+      setStore("width", undefined)
       setStore("stack", [
         {
           element: input,
@@ -151,8 +156,14 @@ function init() {
     get size() {
       return store.size
     },
+    get width() {
+      return store.width
+    },
     setSize(size: "medium" | "large" | "xlarge") {
       setStore("size", size)
+    },
+    setWidth(width?: number) {
+      setStore("width", width)
     },
   }
 }
@@ -182,9 +193,9 @@ export function DialogProvider(props: ParentProps) {
         onMouseUp={
           !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? () => Selection.copy(renderer, toast) : undefined
         }
-      >
-        <Show when={value.stack.length}>
-          <Dialog onClose={() => value.clear()} size={value.size}>
+        >
+          <Show when={value.stack.length}>
+          <Dialog onClose={() => value.clear()} size={value.size} width={value.width}>
             {value.stack.at(-1)!.element}
           </Dialog>
         </Show>
