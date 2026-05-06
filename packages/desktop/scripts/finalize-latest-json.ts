@@ -121,18 +121,16 @@ async function resolveTauriSigningKey() {
     return process.env.TAURI_SIGNING_PRIVATE_KEY
   }
 
-  const inline = value.includes("\n") || value.includes("\\n")
-    ? value.replaceAll("\\n", "\n").replaceAll(" ", "")
-    : value
-  const decoded =
-    inline.startsWith("untrusted comment:")
-      ? inline
-      : (() => {
-          const normalized = inline.replaceAll("-", "+").replaceAll("_", "/")
-          const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=")
-          const text = Buffer.from(padded, "base64").toString("utf8")
-          return text.startsWith("untrusted comment:") ? text : inline
-        })()
+  const inline =
+    value.includes("\n") || value.includes("\\n") ? value.replaceAll("\\n", "\n").replaceAll(" ", "") : value
+  const decoded = inline.startsWith("untrusted comment:")
+    ? inline
+    : (() => {
+        const normalized = inline.replaceAll("-", "+").replaceAll("_", "/")
+        const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=")
+        const text = Buffer.from(padded, "base64").toString("utf8")
+        return text.startsWith("untrusted comment:") ? text : inline
+      })()
 
   if (!decoded.startsWith("untrusted comment:")) {
     throw new Error(
