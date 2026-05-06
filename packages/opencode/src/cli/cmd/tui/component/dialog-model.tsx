@@ -120,7 +120,7 @@ export function DialogModel(props: { providerID?: string }) {
 
     if (needle) {
       return [
-        ...fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
+        ...fuzzysort.go(needle, providerOptions, { keys: ["title", "category", "footer"] }).map((x) => x.obj),
         ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
       ]
     }

@@ -310,6 +310,8 @@ export function Session() {
   useKeyboard((evt) => {
     if (!session()?.parentID) return
     if (keybind.match("app_exit", evt)) {
+      evt.preventDefault()
+      evt.stopPropagation()
       void exit()
     }
   })

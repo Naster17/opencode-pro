@@ -97,6 +97,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
         ...m,
         name: m.name.replace("(latest)", "").trim(),
         latest: m.name.includes("(latest)"),
+        free: m.provider.id === "opencode" && (!m.cost || m.cost.input === 0) ? "Free" : undefined,
       })),
     )
 
