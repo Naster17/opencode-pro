@@ -1,6 +1,6 @@
 import type { Model as ProviderModel, Provider as ProviderInfo } from "@opencode-ai/sdk/v2"
-import { TextAttributes } from "@opentui/core"
-import { useTerminalDimensions } from "@opentui/solid"
+import { ScrollBoxRenderable, TextAttributes } from "@opentui/core"
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal, onMount, Show, type JSX } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
@@ -193,14 +193,45 @@ function DialogModelDetails(props: { providerID: string; modelID: string; parent
   const sync = useSync()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
+  let scroll: ScrollBoxRenderable | undefined
 
   const provider = createMemo(() => sync.data.provider.find((item) => item.id === props.providerID))
   const model = createMemo(() => provider()?.models[props.modelID])
   const height = createMemo(() => Math.max(12, dimensions().height - 12))
+  const scrollStep = createMemo(() => Math.max(3, Math.floor(height() / 3)))
 
   function back() {
     dialog.replace(() => <DialogModel providerID={props.parentProviderID} />)
   }
+
+  useKeyboard((evt) => {
+    if (!scroll) return
+    if (evt.name === "up") {
+      scroll.scrollBy(-1)
+      evt.preventDefault()
+      evt.stopPropagation()
+    }
+    if (evt.name === "down") {
+      scroll.scrollBy(1)
+      evt.preventDefault()
+      evt.stopPropagation()
+    }
+    if (evt.name === "pageup") {
+      scroll.scrollBy(-scrollStep())
+      evt.preventDefault()
+      evt.stopPropagation()
+    }
+    if (evt.name === "pagedown") {
+      scroll.scrollBy(scrollStep())
+      evt.preventDefault()
+      evt.stopPropagation()
+    }
+    if (evt.name === "home") {
+      scroll.scrollTo(0)
+      evt.preventDefault()
+      evt.stopPropagation()
+    }
+  })
 
   onMount(() => {
     dialog.setSize("xlarge")
@@ -211,7 +242,7 @@ function DialogModelDetails(props: { providerID: string; modelID: string; parent
   })
 
   return (
-    <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
+    <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={0}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           Model details
@@ -224,12 +255,20 @@ function DialogModelDetails(props: { providerID: string; modelID: string; parent
         when={provider() && model()}
         fallback={<text fg={theme.error}>This model is no longer available in the current provider list.</text>}
       >
-        <scrollbox paddingRight={1} scrollbarOptions={{ visible: false }} maxHeight={height()}>
+        <scrollbox
+          paddingTop={1}
+          paddingRight={1}
+          paddingBottom={1}
+          maxHeight={height()}
+          ref={(value: ScrollBoxRenderable) => {
+            scroll = value
+          }}
+        >
           <ModelDetailsContent provider={provider()!} model={model()!} />
         </scrollbox>
       </Show>
       <text fg={theme.textMuted}>
-        Press <span style={{ fg: theme.text }}>esc</span> to return to the model list.
+        <span style={{ fg: theme.text }}>↑↓</span> scroll <span style={{ fg: theme.text }}>esc</span> back
       </text>
     </box>
   )
@@ -242,15 +281,15 @@ function ModelDetailsContent(props: { provider: ProviderInfo; model: ProviderMod
   const outputModalities = createMemo(() => enabledModalities(props.model.capabilities.output))
 
   return (
-    <box gap={1}>
-      <box gap={1}>
+    <box gap={0}>
+      <box gap={0}>
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           {props.model.name}
         </text>
         <text fg={theme.textMuted}>
           {props.provider.name} <span style={{ fg: theme.accent }}>{props.provider.id}</span> / {props.model.id}
         </text>
-        <box flexDirection="row" flexWrap="wrap" gap={1}>
+        <box flexDirection="row" flexWrap="wrap" gap={1} paddingTop={1} paddingBottom={1}>
           <DetailBadge label={props.model.status} color={statusColor(theme, props.model.status)} />
           <DetailBadge label={props.model.capabilities.reasoning ? "Reasoning" : "No reasoning"} color={theme.primary} />
           <DetailBadge label={props.model.capabilities.toolcall ? "Tool calling" : "No tools"} color={theme.success} />
@@ -262,7 +301,6 @@ function ModelDetailsContent(props: { provider: ProviderInfo; model: ProviderMod
         <DetailRow label="Context window" value={formatNumber(props.model.limit.context)} />
         <DetailRow label="Max input" value={props.model.limit.input ? formatNumber(props.model.limit.input) : "Uses context window"} />
         <DetailRow label="Max output" value={formatNumber(props.model.limit.output)} />
-        <DetailRow label="Reasoning efforts" value={reasoningEfforts().length > 0 ? reasoningEfforts().join(", ") : "Not exposed"} />
       </DetailSection>
 
       <DetailSection title="Capabilities">
@@ -270,21 +308,21 @@ function ModelDetailsContent(props: { provider: ProviderInfo; model: ProviderMod
         <DetailRow label="Reasoning" value={yesNo(props.model.capabilities.reasoning)} />
         <DetailRow label="Tool calling" value={yesNo(props.model.capabilities.toolcall)} />
         <DetailRow label="Attachments" value={yesNo(props.model.capabilities.attachment)} />
-        <DetailRow label="Interleaved output" value={formatInterleaved(props.model.capabilities.interleaved)} />
+        <DetailRow label="Interleaved" value={formatInterleaved(props.model.capabilities.interleaved)} />
         <DetailRow label="Input modalities" value={inputModalities().join(", ")} />
         <DetailRow label="Output modalities" value={outputModalities().join(", ")} />
       </DetailSection>
 
       <DetailSection title="Pricing">
-        <DetailRow label="Input" value={formatCost(props.model.cost.input)} />
-        <DetailRow label="Output" value={formatCost(props.model.cost.output)} />
-        <DetailRow label="Cache read" value={formatCost(props.model.cost.cache.read)} />
-        <DetailRow label="Cache write" value={formatCost(props.model.cost.cache.write)} />
+        <DetailRow label="Input" value={formatCost(props.model.cost.input, "input")} />
+        <DetailRow label="Output" value={formatCost(props.model.cost.output, "output")} />
+        <DetailRow label="Cache read" value={formatCost(props.model.cost.cache.read, "cache read")} />
+        <DetailRow label="Cache write" value={formatCost(props.model.cost.cache.write, "cache write")} />
         <Show when={props.model.cost.experimentalOver200K}>
-          <DetailRow label="200k+ input" value={formatCost(props.model.cost.experimentalOver200K!.input)} />
-          <DetailRow label="200k+ output" value={formatCost(props.model.cost.experimentalOver200K!.output)} />
-          <DetailRow label="200k+ cache read" value={formatCost(props.model.cost.experimentalOver200K!.cache.read)} />
-          <DetailRow label="200k+ cache write" value={formatCost(props.model.cost.experimentalOver200K!.cache.write)} />
+          <DetailRow label="200k+ input" value={formatCost(props.model.cost.experimentalOver200K!.input, "input")} />
+          <DetailRow label="200k+ output" value={formatCost(props.model.cost.experimentalOver200K!.output, "output")} />
+          <DetailRow label="200k+ cache read" value={formatCost(props.model.cost.experimentalOver200K!.cache.read, "cache read")} />
+          <DetailRow label="200k+ cache write" value={formatCost(props.model.cost.experimentalOver200K!.cache.write, "cache write")} />
         </Show>
       </DetailSection>
 
@@ -309,11 +347,11 @@ function ModelDetailsContent(props: { provider: ProviderInfo; model: ProviderMod
 function DetailSection(props: { title: string; children: JSX.Element }) {
   const { theme } = useTheme()
   return (
-    <box gap={1}>
+    <box gap={0} paddingBottom={1}>
       <text fg={theme.accent} attributes={TextAttributes.BOLD}>
         {props.title}
       </text>
-      <box paddingLeft={1} gap={0}>
+      <box paddingLeft={1}>
         {props.children}
       </box>
     </box>
@@ -366,9 +404,9 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(value)
 }
 
-function formatCost(value: number) {
+function formatCost(value: number, unit: string) {
   if (value === 0) return "Free"
-  return `$${trimNumber(value)} / 1M tokens`
+  return `$${trimNumber(value)} / 1M ${unit} tokens`
 }
 
 function trimNumber(value: number) {
