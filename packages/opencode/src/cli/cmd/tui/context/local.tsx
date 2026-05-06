@@ -361,9 +361,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
         return THINKING_LEVELS.filter((level) => {
           if (level === "off") {
-            return Boolean(
-              thinking.levelVariant.off || thinking.baseLevel === "off" || thinking.defaultLevel === "off",
-            )
+            return Boolean(thinking.levelVariant.off || thinking.baseLevel === "off" || thinking.defaultLevel === "off")
           }
           return Boolean(thinking.levelVariant[level] || thinking.levels.includes(level))
         })
