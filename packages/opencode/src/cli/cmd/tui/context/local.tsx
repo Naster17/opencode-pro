@@ -12,6 +12,7 @@ import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
+import { compareThinkingVariantOrder, normalizeThinkingLevel, THINKING_LEVELS, type ThinkingLevel, type ThinkingState } from "./thinking"
 
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
@@ -21,28 +22,19 @@ export function parseModel(model: string) {
   }
 }
 
-const THINKING_LEVELS = ["off", "low", "medium", "high"] as const
 export const THINKING_DISPLAY_VARIANTS = new Set([
   "default",
   "off",
   "none",
   "disabled",
+  "minimal",
   "low",
   "medium",
   "high",
+  "xhigh",
+  "max",
   "thinking",
 ])
-type ThinkingLevel = (typeof THINKING_LEVELS)[number]
-type ThinkingState = ThinkingLevel | "thinking" | "inherit"
-
-function normalizeThinkingLevel(value: string | undefined) {
-  if (!value) return
-  if (["none", "off", "disabled"].includes(value)) return "off" as const
-  if (["minimal", "low"].includes(value)) return "low" as const
-  if (value === "medium") return "medium" as const
-  if (value === "thinking") return "thinking" as const
-  if (["high", "xhigh", "max", "on", "enabled", "adaptive"].includes(value)) return "high" as const
-}
 
 function toggleThinkingState(value: boolean | undefined, variantName?: string): ThinkingState | undefined {
   if (value === undefined) return
@@ -294,7 +286,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           variants.find((item) => item.level === level)?.level as ThinkingLevel | undefined
         const hasThinkingToggle = variants.some((item) => item.level === "thinking")
         const defaultLevel: ThinkingLevel =
-          findLevel("off") ?? findLevel("low") ?? findLevel("medium") ?? findLevel("high") ?? "off"
+          findLevel("off") ??
+          findLevel("low") ??
+          findLevel("medium") ??
+          findLevel("high") ??
+          findLevel("xhigh") ??
+          findLevel("max") ??
+          "off"
         const currentVariant = current ? variantMap[current] : undefined
         const currentLevel =
           !currentVariant || currentVariant.level === "inherit"
@@ -334,6 +332,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           cycleVariants,
         }
       }
+      const thinkingModes = (): Array<ThinkingLevel | "thinking"> => {
+        const thinking = resolveThinking()
+        if (!thinking) return []
+        if (thinking.hasThinkingToggle && thinking.levelVariant.high === "thinking") {
+          return ["off", "thinking"]
+        }
+        return THINKING_LEVELS.filter((level) => {
+          if (level === "off") {
+            return Boolean(thinking.levelVariant.off || thinking.baseLevel === "off" || thinking.defaultLevel === "off")
+          }
+          return Boolean(thinking.levelVariant[level] || thinking.levels.includes(level))
+        })
+      }
       const defaultVariantTitle = () => {
         const thinking = resolveThinking()
         if (!thinking) return "default"
@@ -353,20 +364,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (variants.length === 0) return false
         return variants.every(([name, options]) => thinkingState(options, name) !== "inherit")
       }
-      const thinkingLevels = () => {
-        const thinking = resolveThinking()
-        if (!thinking) return []
-        if (thinking.hasThinkingToggle && thinking.levelVariant.high === "thinking") {
-          return ["off", "high"] as ThinkingLevel[]
-        }
-        return THINKING_LEVELS.filter((level) => {
-          if (level === "off") {
-            return Boolean(thinking.levelVariant.off || thinking.baseLevel === "off" || thinking.defaultLevel === "off")
-          }
-          return Boolean(thinking.levelVariant[level] || thinking.levels.includes(level))
-        })
-      }
-
       return {
         current: currentModel,
         get ready() {
@@ -494,15 +491,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         variant: {
           options() {
+            const variants = variantList().map(([name], index) => ({
+              value: name,
+              title: name,
+              index,
+            }))
             return [
               {
                 value: "default",
                 title: defaultVariantTitle(),
               },
-              ...variantList().map(([name]) => ({
-                value: name,
-                title: name,
-              })),
+              ...variants.toSorted((left, right) => compareThinkingVariantOrder(left.value, right.value) || left.index - right.index),
             ]
           },
           selected() {
@@ -582,11 +581,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             return thinking.activeLevel
           },
           supportsThinking() {
-            return thinkingLevels().length > 1
+            return thinkingModes().length > 1
           },
           cycleThinking() {
-            const thinking = resolveThinking()
-            if (!thinking) {
+            const modes = thinkingModes()
+            if (modes.length === 0) {
               toast.show({
                 variant: "info",
                 message: "Current model does not support thinking mode",
@@ -594,13 +593,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               })
               return
             }
-            const levels = thinkingLevels()
-            if (levels.length === 0) return
-            const index = levels.indexOf(thinking.activeLevel)
-            const next = levels[(index + 1) % levels.length] ?? levels[0]
+            const current = this.thinking()
+            const index = modes.indexOf(current)
+            const next = modes[(index + 1) % modes.length] ?? modes[0]
             this.setThinking(next)
           },
-          setThinking(level: ThinkingLevel) {
+          setThinking(level: ThinkingLevel | "thinking") {
             const thinking = resolveThinking()
             if (!thinking) {
               toast.show({
@@ -614,7 +612,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               this.set(undefined)
               return
             }
-            const variant = thinking.levelVariant[level]
+            if (level === "thinking") {
+              const variant = thinking.levelVariant.high
+              if (variant === "thinking") {
+                this.set(variant)
+                return
+              }
+            }
+            const variant = level === "thinking" ? undefined : thinking.levelVariant[level]
             if (variant) {
               this.set(variant)
               return
@@ -636,7 +641,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               return
             }
             if (thinking.activeLevel === "off") {
-              const next = thinking.levels.find((level) => level !== "off")
+              const next = thinkingModes().find((level) => level !== "off")
               if (next) {
                 this.setThinking(next)
                 return

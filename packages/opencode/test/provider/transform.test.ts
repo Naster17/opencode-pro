@@ -3215,7 +3215,7 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
     })
 
-    test("dotted gpt-5.x ids include 'minimal' (regression: matcher used to miss gpt-5.4)", () => {
+    test("dotted gpt-5.x ids skip 'minimal' because upstream rejects it", () => {
       const model = createMockModel({
         id: "gpt-5.4",
         providerID: "openai",
@@ -3227,7 +3227,7 @@ describe("ProviderTransform.variants", () => {
         release_date: "2026-03-05",
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
     })
 
     test("gpt-50 (lookalike) does not get gpt-5 family treatment", () => {
@@ -3709,7 +3709,7 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(cfModel("openai/gpt-5.4", "2026-03-05"))
       expect(result.xhigh).toEqual({ reasoningEffort: "xhigh" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
-      expect(Object.keys(result)).toContain("minimal")
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
     })
 
     test("openai gpt-5.2-codex includes xhigh", () => {

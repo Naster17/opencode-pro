@@ -542,6 +542,10 @@ const OPENAI_XHIGH_EFFORT_RELEASE_DATE = "2025-12-04"
 // Anchored to start-of-string or "/" so it doesn't false-match "gpt-50" or "gpt-5o".
 const GPT5_FAMILY_RE = /(?:^|\/)gpt-5(?:[.-]|$)/
 
+// `minimal` is only accepted on the base/hyphenated GPT-5 ids. Newer dotted
+// revisions like `gpt-5.4` reject it and only allow none|low|medium|high|xhigh.
+const GPT5_MINIMAL_EFFORT_RE = /(?:^|\/)gpt-5(?:-|$)/
+
 // Computes the reasoning_effort tiers an OpenAI (or OpenAI-compatible upstream
 // routed through it, e.g. cf-ai-gateway) model exposes. Returns null for models
 // with no tunable effort knob (gpt-5-pro). Effort order: weakest to strongest.
@@ -553,7 +557,7 @@ function openaiReasoningEfforts(apiId: string, releaseDate: string): string[] | 
     return [...WIDELY_SUPPORTED_EFFORTS]
   }
   const efforts = [...WIDELY_SUPPORTED_EFFORTS]
-  if (GPT5_FAMILY_RE.test(id)) efforts.unshift("minimal")
+  if (GPT5_MINIMAL_EFFORT_RE.test(id)) efforts.unshift("minimal")
   if (releaseDate >= OPENAI_NONE_EFFORT_RELEASE_DATE) efforts.unshift("none")
   if (releaseDate >= OPENAI_XHIGH_EFFORT_RELEASE_DATE) efforts.push("xhigh")
   return efforts
@@ -629,7 +633,12 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   switch (model.api.npm) {
     case "@openrouter/ai-sdk-provider":
       if (!model.id.includes("gpt") && !model.id.includes("gemini-3") && !model.id.includes("claude")) return {}
-      return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoning: { effort } }]))
+      return Object.fromEntries(
+        (GPT5_FAMILY_RE.test(model.api.id.toLowerCase())
+          ? openaiReasoningEfforts(model.api.id, model.release_date) ?? WIDELY_SUPPORTED_EFFORTS
+          : OPENAI_EFFORTS
+        ).map((effort) => [effort, { reasoning: { effort } }]),
+      )
 
     case "ai-gateway-provider": {
       // Cloudflare AI Gateway routes every upstream through its OpenAI-compatible
@@ -703,7 +712,12 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           ]),
         )
       }
-      return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+      return Object.fromEntries(
+        (GPT5_FAMILY_RE.test(model.api.id.toLowerCase())
+          ? openaiReasoningEfforts(model.api.id, model.release_date) ?? WIDELY_SUPPORTED_EFFORTS
+          : OPENAI_EFFORTS
+        ).map((effort) => [effort, { reasoningEffort: effort }]),
+      )
 
     case "@ai-sdk/github-copilot":
       if (model.id.includes("gemini")) {
@@ -1172,7 +1186,7 @@ export function smallOptions(model: Provider.Model) {
     model.api.npm === "@ai-sdk/github-copilot"
   ) {
     if (model.api.id.includes("gpt-5")) {
-      if (model.api.id.includes("5.") || model.api.id.includes("5-mini")) {
+      if (!GPT5_MINIMAL_EFFORT_RE.test(model.api.id.toLowerCase()) || model.api.id.includes("5-mini")) {
         return { store: false, reasoningEffort: "low" }
       }
       return { store: false, reasoningEffort: "minimal" }
@@ -1190,7 +1204,10 @@ export function smallOptions(model: Provider.Model) {
     if (model.api.id.includes("google")) {
       return { reasoning: { enabled: false } }
     }
-    return { reasoningEffort: "minimal" }
+    if (GPT5_MINIMAL_EFFORT_RE.test(model.api.id.toLowerCase())) {
+      return { reasoningEffort: "minimal" }
+    }
+    return { reasoningEffort: "low" }
   }
 
   if (model.providerID === "venice") {

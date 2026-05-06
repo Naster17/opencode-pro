@@ -40,6 +40,7 @@ nix run github:Naster17/opencode-pro
 | Better Local Reasoning Support | Improved handling for llama.cpp and OpenAI-compatible reasoning models, including toggle-style thinking providers.                |
 | Privacy-First Hardening        | Telemetry is stripped back, session sharing is permanently disabled, and remote workspace sync cannot be re-enabled by env flags. |
 | Lightweight `/help` Base       | A clean in-app help entrypoint is already wired in as the foundation for a fuller guided help experience next.                    |
+| Model Details View             | Press `Tab` in model picker (`/models` or `Ctrl+P`) to view full model metadata: context limits, reasoning efforts, capabilities, pricing, API details, and more. `Esc` returns to the list. |
 
 ### Desktop App (BETA)
 

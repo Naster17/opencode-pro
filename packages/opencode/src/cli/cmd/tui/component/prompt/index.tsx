@@ -4,6 +4,7 @@ import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
 import { Filesystem } from "@/util/filesystem"
+import { resolveVisibleVariantLabel } from "./model-meta"
 import { THINKING_DISPLAY_VARIANTS, useLocal } from "@tui/context/local"
 import { tint, useTheme } from "@tui/context/theme"
 import { EmptyBorder, SplitBorder } from "@tui/component/border"
@@ -187,6 +188,8 @@ export function Prompt(props: PromptProps) {
     if (thinkingLevel() === "low") return theme.success
     if (thinkingLevel() === "medium") return theme.warning
     if (thinkingLevel() === "high") return theme.error
+    if (thinkingLevel() === "xhigh") return theme.error
+    if (thinkingLevel() === "max") return theme.primary
     if (thinkingLevel() === "thinking") return theme.primary
     return theme.text
   })
@@ -367,6 +370,7 @@ export function Prompt(props: PromptProps) {
     if (showThinking() && THINKING_DISPLAY_VARIANTS.has(value.toLowerCase())) return
     return value
   })
+  const visibleFooterVariantLabel = createMemo(() => resolveVisibleVariantLabel(thinkingLabel(), visibleVariantLabel()))
 
   createEffect(
     on(
@@ -1477,11 +1481,11 @@ export function Prompt(props: PromptProps) {
                             {local.model.parsed().model}
                           </text>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
-                          <Show when={showVariant()}>
+                          <Show when={showVariant() && visibleFooterVariantLabel()}>
                             <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
                             <text>
                               <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
-                                {visibleVariantLabel()}
+                                {visibleFooterVariantLabel()}
                               </span>
                             </text>
                           </Show>
