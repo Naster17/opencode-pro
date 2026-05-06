@@ -14,7 +14,8 @@ import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/inst
 import { NpmConfig } from "@opencode-ai/core/npm-config"
 
 const log = Log.create({ service: "installation" })
-const RELEASE_REPO = process.env.OPENCODE_GH_REPO || process.env.GH_REPO || process.env.GITHUB_REPOSITORY || "Naster17/opencode-pro"
+const RELEASE_REPO =
+  process.env.OPENCODE_GH_REPO || process.env.GH_REPO || process.env.GITHUB_REPOSITORY || "Naster17/opencode-pro"
 
 export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
 
