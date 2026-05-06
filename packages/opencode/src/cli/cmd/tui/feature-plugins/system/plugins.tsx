@@ -30,12 +30,32 @@ type ListedPlugin = {
 }
 
 const BACKEND_PLUGINS: BackendPluginInfo[] = [
-  { id: "codex", name: "OpenAI Codex", description: "ChatGPT Pro/Plus OAuth authentication for GPT models", provider: "openai" },
-  { id: "github-copilot", name: "GitHub Copilot", description: "GitHub Copilot authentication for GPT models", provider: "github-copilot" },
+  {
+    id: "codex",
+    name: "OpenAI Codex",
+    description: "ChatGPT Pro/Plus OAuth authentication for GPT models",
+    provider: "openai",
+  },
+  {
+    id: "github-copilot",
+    name: "GitHub Copilot",
+    description: "GitHub Copilot authentication for GPT models",
+    provider: "github-copilot",
+  },
   { id: "gitlab", name: "GitLab Duo", description: "GitLab Duo authentication", provider: "gitlab" },
   { id: "poe", name: "Poe", description: "Poe platform authentication", provider: "poe" },
-  { id: "cloudflare-workers", name: "Cloudflare Workers AI", description: "Cloudflare Workers AI gateway", provider: "cloudflare-workers" },
-  { id: "cloudflare-aigateway", name: "Cloudflare AI Gateway", description: "Cloudflare AI Gateway authentication", provider: "cloudflare-aigateway" },
+  {
+    id: "cloudflare-workers",
+    name: "Cloudflare Workers AI",
+    description: "Cloudflare Workers AI gateway",
+    provider: "cloudflare-workers",
+  },
+  {
+    id: "cloudflare-aigateway",
+    name: "Cloudflare AI Gateway",
+    description: "Cloudflare AI Gateway authentication",
+    provider: "cloudflare-aigateway",
+  },
   { id: "azure", name: "Azure OpenAI", description: "Azure OpenAI Service authentication", provider: "azure" },
 ]
 
@@ -99,10 +119,7 @@ function pluginDescription(spec: string, width: number, label: string) {
 
 export function configuredPlugins(api: TuiPluginApi, width: number, list: ReadonlyArray<TuiPluginStatus>) {
   const seen = new Set(list.map((item) => pluginIdentity(item.spec)))
-  const specs = [
-    ...(api.state.config.plugin ?? []),
-    ...(api.tuiConfig.plugin ?? []),
-  ]
+  const specs = [...(api.state.config.plugin ?? []), ...(api.tuiConfig.plugin ?? [])]
   const rows: ListedPlugin[] = []
 
   for (const item of specs) {
