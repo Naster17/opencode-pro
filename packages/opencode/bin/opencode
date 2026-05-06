@@ -4,6 +4,7 @@ const childProcess = require("child_process")
 const fs = require("fs")
 const path = require("path")
 const os = require("os")
+const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8"))
 
 function run(target) {
   const result = childProcess.spawnSync(target, process.argv.slice(2), {
@@ -50,8 +51,8 @@ let arch = archMap[os.arch()]
 if (!arch) {
   arch = os.arch()
 }
-const base = "opencode-" + platform + "-" + arch
 const binary = platform === "windows" ? "opencode.exe" : "opencode"
+const binaryBase = `${packageJson.name}-${platform}-${arch}`
 
 function supportsAvx2() {
   if (arch !== "x64") return false
@@ -128,24 +129,26 @@ const names = (() => {
 
     if (musl) {
       if (arch === "x64") {
-        if (baseline) return [`${base}-baseline-musl`, `${base}-musl`, `${base}-baseline`, base]
-        return [`${base}-musl`, `${base}-baseline-musl`, base, `${base}-baseline`]
+        if (baseline)
+          return [`${binaryBase}-baseline-musl`, `${binaryBase}-musl`, `${binaryBase}-baseline`, binaryBase]
+        return [`${binaryBase}-musl`, `${binaryBase}-baseline-musl`, binaryBase, `${binaryBase}-baseline`]
       }
-      return [`${base}-musl`, base]
+      return [`${binaryBase}-musl`, binaryBase]
     }
 
     if (arch === "x64") {
-      if (baseline) return [`${base}-baseline`, base, `${base}-baseline-musl`, `${base}-musl`]
-      return [base, `${base}-baseline`, `${base}-musl`, `${base}-baseline-musl`]
+      if (baseline)
+        return [`${binaryBase}-baseline`, binaryBase, `${binaryBase}-baseline-musl`, `${binaryBase}-musl`]
+      return [binaryBase, `${binaryBase}-baseline`, `${binaryBase}-musl`, `${binaryBase}-baseline-musl`]
     }
-    return [base, `${base}-musl`]
+    return [binaryBase, `${binaryBase}-musl`]
   }
 
   if (arch === "x64") {
-    if (baseline) return [`${base}-baseline`, base]
-    return [base, `${base}-baseline`]
+    if (baseline) return [`${binaryBase}-baseline`, binaryBase]
+    return [binaryBase, `${binaryBase}-baseline`]
   }
-  return [base]
+  return [binaryBase]
 })()
 
 function findBinary(startDir) {

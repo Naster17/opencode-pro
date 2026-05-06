@@ -9,6 +9,7 @@ process.chdir(dir)
 
 const npmPackagePrefix = process.env.OPENCODE_NPM_PACKAGE_PREFIX || Script.repoName
 const publishedMetaName = npmPackagePrefix
+const publishedCommandName = Script.repoName
 const previewPublishAuthError =
   /npm error code E403|Two-factor authentication|bypass 2fa enabled|required to publish packages/i
 
@@ -64,7 +65,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
     {
       name: publishedMetaName,
       bin: {
-        [pkg.name]: `./bin/${pkg.name}`,
+        [publishedCommandName]: `./bin/${pkg.name}`,
       },
       scripts: {
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
