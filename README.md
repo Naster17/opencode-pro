@@ -31,7 +31,7 @@ nix run github:Naster17/opencode-pro
 
 | Feature                        | Description                                                                                                                       |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| Plugin Manager                 | Toggle Backend/Auth and TUI plugins. Install npm plugins in-app.                                                      |
+| Plugin Manager                 | Toggle Backend/Auth and TUI plugins. Install npm plugins in-app.                                                                  |
 | Sidebar Metrics                | Live session metrics in the sidebar with context usage, token totals, cache, tool calls, compactions, speed, and spend.           |
 | `/usage` Dashboard             | Interactive usage analytics with Overview, Sessions, and Models views across Today, 7d, 30d, or all-time history.                 |
 | Accurate Full-History Totals   | Usage and metrics are calculated across full session history, without the old 100-message cap skewing totals.                     |

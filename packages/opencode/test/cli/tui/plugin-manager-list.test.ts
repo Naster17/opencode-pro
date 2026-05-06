@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { pathToFileURL } from "url"
-import { configuredPlugins, backendPluginProvider, backendPlugins } from "../../../src/cli/cmd/tui/feature-plugins/system/plugins"
+import {
+  configuredPlugins,
+  backendPluginProvider,
+  backendPlugins,
+} from "../../../src/cli/cmd/tui/feature-plugins/system/plugins"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 
 describe("plugin manager list", () => {

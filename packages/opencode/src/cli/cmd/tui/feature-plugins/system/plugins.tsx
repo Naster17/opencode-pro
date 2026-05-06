@@ -337,7 +337,9 @@ function View(props: { api: TuiPluginApi }) {
     const beforeDisabled = sync.data.config.disabled_providers ?? []
     const beforeEnabled = sync.data.config.enabled_providers
     const active = backendEnabled(props.api, provider)
-    const nextDisabled = active ? [...new Set([...beforeDisabled, provider])] : beforeDisabled.filter((item) => item !== provider)
+    const nextDisabled = active
+      ? [...new Set([...beforeDisabled, provider])]
+      : beforeDisabled.filter((item) => item !== provider)
     const nextEnabled =
       beforeEnabled === undefined
         ? undefined
