@@ -18,11 +18,11 @@ export function ErrorComponent(props: {
   const [copied, setCopied] = createSignal(false)
 
   const handleExit = async () => {
-    await props.onBeforeExit?.()
     renderer.setTerminalTitle("")
     renderer.destroy()
     restoreTerminalState()
     win32FlushInputBuffer()
+    await props.onBeforeExit?.()
     await props.onExit()
   }
 

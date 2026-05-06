@@ -1,3 +1,5 @@
+import { writeSync } from "node:fs"
+
 const TUI_EXIT_RESET = [
   "\x1b[?1000l",
   "\x1b[?1002l",
@@ -13,8 +15,17 @@ const TUI_EXIT_RESET = [
   "\r",
 ].join("")
 
+function writeReset(fd: number, tty: boolean | undefined) {
+  if (!tty) return
+  try {
+    writeSync(fd, TUI_EXIT_RESET)
+  } catch {
+    // Ignore tty write failures during shutdown.
+  }
+}
+
 export function restoreTerminalState(
-  output: Pick<NodeJS.WriteStream, "isTTY" | "write"> = process.stdout,
+  output: Pick<NodeJS.WriteStream, "isTTY" | "write"> & { fd?: number } = process.stdout,
   input: Pick<NodeJS.ReadStream, "isTTY"> & Partial<Pick<NodeJS.ReadStream, "setRawMode">> = process.stdin,
 ) {
   if (input.isTTY && typeof input.setRawMode === "function") {
@@ -25,7 +36,11 @@ export function restoreTerminalState(
     }
   }
 
+  writeReset(process.stdout.fd, process.stdout.isTTY)
+  writeReset(process.stderr.fd, process.stderr.isTTY)
+
   if (!output.isTTY) return
+  if (output.fd === process.stdout.fd || output.fd === process.stderr.fd) return
   output.write(TUI_EXIT_RESET)
 }
 

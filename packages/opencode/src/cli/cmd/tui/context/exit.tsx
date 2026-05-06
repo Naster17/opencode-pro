@@ -34,12 +34,12 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
       (reason?: unknown) => {
         if (task) return task
         task = (async () => {
-          await input.onBeforeExit?.()
           // Reset window title before destroying renderer
           renderer.setTerminalTitle("")
           renderer.destroy()
           restoreTerminalState()
           win32FlushInputBuffer()
+          await input.onBeforeExit?.()
           if (reason) {
             const formatted = FormatError(reason) ?? FormatUnknownError(reason)
             if (formatted) {
