@@ -17,6 +17,7 @@ export interface DialogSelectProps<T> {
   title: string
   placeholder?: string
   options: DialogSelectOption<T>[]
+  footerLeft?: JSX.Element
   flat?: boolean
   ref?: (ref: DialogSelectRef<T>) => void
   onMove?: (option: DialogSelectOption<T>) => void
@@ -375,6 +376,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           paddingTop={1}
         >
           <box flexDirection="row" gap={2}>
+            <Show when={props.footerLeft}>
+              <text fg={theme.textMuted}>{props.footerLeft}</text>
+            </Show>
             <For each={left()}>
               {(item) => (
                 <text>

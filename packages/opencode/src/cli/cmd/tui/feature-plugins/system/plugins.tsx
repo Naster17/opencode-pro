@@ -3,9 +3,10 @@ import { ConfigPlugin } from "@/config/plugin"
 import { parsePluginSpecifier } from "@/plugin/shared"
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule, TuiPluginStatus } from "@opencode-ai/plugin/tui"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { useSync } from "@tui/context/sync"
 import { fileURLToPath } from "url"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
-import { Show, createEffect, createMemo, createSignal } from "solid-js"
+import { Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
 
 const id = "internal:plugin-manager"
 const key = Keybind.parse("space").at(0)
@@ -25,8 +26,8 @@ type ListedPlugin = {
   title: string
   value: string
   category: string
-  description: string
-  footer: string
+  description?: string
+  footer: JSX.Element | string
 }
 
 const BACKEND_PLUGINS: BackendPluginInfo[] = [
@@ -61,14 +62,10 @@ const BACKEND_PLUGINS: BackendPluginInfo[] = [
 
 function state(api: TuiPluginApi, item: TuiPluginStatus) {
   if (!item.enabled) {
-    return <span style={{ fg: api.theme.current.textMuted }}>disabled</span>
+    return <span style={{ fg: api.theme.current.error }}>disabled</span>
   }
 
-  return (
-    <span style={{ fg: item.active ? api.theme.current.success : api.theme.current.error }}>
-      {item.active ? "active" : "inactive"}
-    </span>
-  )
+  return <span style={{ fg: api.theme.current.success }}>enabled</span>
 }
 
 function source(spec: string) {
@@ -77,13 +74,11 @@ function source(spec: string) {
 }
 
 function meta(item: TuiPluginStatus, width: number) {
-  if (item.source === "internal") {
-    if (width >= 120) return "Built-in plugin"
-    return "Built-in"
-  }
+  if (item.source === "internal") return "built-in plugin"
   const next = source(item.spec)
-  if (next) return next
-  return item.spec
+  if (next) return width >= 120 ? next : next.split("/").at(-1)
+  if (item.source === "npm") return parsePluginSpecifier(item.spec).pkg
+  return width >= 120 ? item.spec : pluginName(item.spec)
 }
 
 function pluginName(spec: string) {
@@ -109,12 +104,24 @@ function pluginIdentity(spec: string) {
 function pluginDescription(spec: string, width: number, label: string) {
   if (spec.startsWith("file://")) {
     const file = fileURLToPath(spec)
-    if (width >= 120) return `${label}: ${file}`
-    return file
+    if (width >= 120) return `${label}: ${file.split("/").at(-1) ?? file}`
+    return label.toLowerCase()
   }
 
-  if (width >= 100) return `${label}: ${spec}`
-  return spec
+  if (width >= 100) return `${label}: ${parsePluginSpecifier(spec).pkg}`
+  return label.toLowerCase()
+}
+
+function backendEnabled(api: TuiPluginApi, id: string) {
+  const disabled = new Set(api.state.config.disabled_providers ?? [])
+  if (disabled.has(id)) return false
+  const enabled = api.state.config.enabled_providers
+  if (!enabled) return true
+  return enabled.includes(id)
+}
+
+export function backendPluginProvider(id: string) {
+  return BACKEND_PLUGINS.find((plugin) => plugin.id === id)?.provider ?? id
 }
 
 export function configuredPlugins(api: TuiPluginApi, width: number, list: ReadonlyArray<TuiPluginStatus>) {
@@ -144,8 +151,8 @@ export function backendPlugins(width: number) {
     title: plugin.name,
     value: `backend:${plugin.id}`,
     category: "Backend/Auth",
-    description: width >= 80 ? `${plugin.description} (${plugin.provider})` : plugin.provider,
-    footer: "built-in auth plugin",
+    description: width >= 96 ? plugin.provider : undefined,
+    footer: "",
   }))
 }
 
@@ -266,7 +273,7 @@ function listedRow(api: TuiPluginApi, item: ListedPlugin): DialogSelectOption<st
     value: item.value,
     category: item.category,
     description: item.description,
-    footer: <span style={{ fg: api.theme.current.textMuted }}>{item.footer}</span>,
+    footer: item.footer,
   }
 }
 
@@ -276,6 +283,7 @@ function showInstall(api: TuiPluginApi) {
 
 function View(props: { api: TuiPluginApi }) {
   const size = useTerminalDimensions()
+  const sync = useSync()
   const [list, setList] = createSignal(props.api.plugins.list())
   const [cur, setCur] = createSignal<string | undefined>()
   const [lock, setLock] = createSignal(false)
@@ -304,14 +312,71 @@ function View(props: { api: TuiPluginApi }) {
       })
       .map((item) => row(props.api, item, width))
 
+    const backendRows = backendPlugins(width).map((item) => {
+      const enabled = backendEnabled(props.api, backendPluginProvider(item.value.replace("backend:", "")))
+      return listedRow(props.api, {
+        ...item,
+        footer: (
+          <span style={{ fg: enabled ? props.api.theme.current.success : props.api.theme.current.error }}>
+            {enabled ? "enabled" : "disabled"}
+          </span>
+        ),
+      })
+    })
+
     return [
       ...tuiPlugins,
       ...configuredPlugins(props.api, width, list()).map((item) => listedRow(props.api, item)),
-      ...backendPlugins(width).map((item) => listedRow(props.api, item)),
+      ...backendRows,
     ]
   })
 
+  const toggleBackend = async (provider: string) => {
+    if (lock()) return
+    setLock(true)
+    const beforeDisabled = sync.data.config.disabled_providers ?? []
+    const beforeEnabled = sync.data.config.enabled_providers
+    const active = backendEnabled(props.api, provider)
+    const nextDisabled = active ? [...new Set([...beforeDisabled, provider])] : beforeDisabled.filter((item) => item !== provider)
+    const nextEnabled =
+      beforeEnabled === undefined
+        ? undefined
+        : active
+          ? beforeEnabled.filter((item) => item !== provider)
+          : [...new Set([...beforeEnabled, provider])]
+
+    sync.set("config", "disabled_providers", nextDisabled)
+    if (nextEnabled !== undefined) sync.set("config", "enabled_providers", nextEnabled)
+
+    await props.api.client.global.config
+      .update({
+        config: {
+          disabled_providers: nextDisabled,
+          ...(nextEnabled !== undefined ? { enabled_providers: nextEnabled } : {}),
+        },
+      })
+      .then(async (result) => {
+        if (result.error) throw result.error
+        await sync.bootstrap({ fatal: false })
+      })
+      .catch((error) => {
+        sync.set("config", "disabled_providers", beforeDisabled)
+        if (beforeEnabled !== undefined) sync.set("config", "enabled_providers", beforeEnabled)
+        props.api.ui.toast({
+          variant: "error",
+          message: error instanceof Error ? error.message : `Failed to update provider ${provider}`,
+        })
+      })
+      .finally(() => {
+        setLock(false)
+      })
+  }
+
   const flip = (x: string) => {
+    if (x.startsWith("backend:")) {
+      void toggleBackend(backendPluginProvider(x.replace("backend:", "")))
+      return
+    }
     if (lock()) return
     const item = list().find((entry) => entry.id === x)
     if (!item) return
@@ -336,6 +401,11 @@ function View(props: { api: TuiPluginApi }) {
     <DialogSelect
       title="Plugins"
       options={rows()}
+      footerLeft={
+        <>
+          <span style={{ fg: props.api.theme.current.text }}>{"↑↓"}</span> navigate
+        </>
+      }
       current={cur()}
       onMove={(item) => setCur(item.value)}
       keybind={[

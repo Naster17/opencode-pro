@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { pathToFileURL } from "url"
-import { configuredPlugins, backendPlugins } from "../../../src/cli/cmd/tui/feature-plugins/system/plugins"
+import { configuredPlugins, backendPluginProvider, backendPlugins } from "../../../src/cli/cmd/tui/feature-plugins/system/plugins"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 
 describe("plugin manager list", () => {
@@ -33,14 +33,14 @@ describe("plugin manager list", () => {
         title: "acme-server",
         value: "config:acme-server",
         category: "Configured",
-        description: "No TUI entry: acme-server@1.0.0",
+        description: "No TUI entry: acme-server",
         footer: "server-only or failed to load",
       },
       {
         title: "demo-tui",
         value: `config:${tuiOnly}`,
         category: "Configured",
-        description: `No TUI entry: /tmp/demo-tui.ts`,
+        description: "No TUI entry: demo-tui.ts",
         footer: "server-only or failed to load",
       },
     ])
@@ -56,5 +56,11 @@ describe("plugin manager list", () => {
       "backend:cloudflare-aigateway",
       "backend:azure",
     ])
+  })
+
+  test("maps backend plugin ids to provider ids for config toggles", () => {
+    expect(backendPluginProvider("codex")).toBe("openai")
+    expect(backendPluginProvider("github-copilot")).toBe("github-copilot")
+    expect(backendPluginProvider("missing-provider")).toBe("missing-provider")
   })
 })
