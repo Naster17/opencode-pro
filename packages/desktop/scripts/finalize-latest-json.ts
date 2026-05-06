@@ -114,33 +114,51 @@ async function resolveTauriSigningKey() {
   const value = process.env.TAURI_SIGNING_PRIVATE_KEY
   if (!value) throw new Error("TAURI_SIGNING_PRIVATE_KEY is required")
 
+  const normalizeMinisignKey = (input: string) => {
+    const lines = input
+      .replaceAll("\r\n", "\n")
+      .replaceAll("\\n", "\n")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+    const comment = lines[0]
+    if (!comment?.startsWith("untrusted comment:")) return
+    const body = lines.slice(1).join("").replaceAll(/\s+/g, "")
+    if (!body) return
+    return `${comment}\n${body}\n`
+  }
+
+  const normalizeEncodedKey = (input: string) => {
+    const compact = input.replaceAll(/\s+/g, "")
+    if (!compact) return
+    if (!/^[A-Za-z0-9+/_=-]+$/.test(compact)) return
+    const normalized = compact.replaceAll("-", "+").replaceAll("_", "/")
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=")
+    const decoded = Buffer.from(padded, "base64").toString("utf8")
+    return normalizeMinisignKey(decoded)
+  }
+
   const file = Bun.file(value)
   if (await file.exists()) {
-    const text = await file.text()
-    process.env.TAURI_SIGNING_PRIVATE_KEY = text.endsWith("\n") ? text : `${text}\n`
+    const text = normalizeMinisignKey(await file.text())
+    if (!text) {
+      throw new Error(
+        "TAURI_SIGNING_PRIVATE_KEY file must contain a minisign private key. The first line should start with 'untrusted comment:'.",
+      )
+    }
+    process.env.TAURI_SIGNING_PRIVATE_KEY = text
     return process.env.TAURI_SIGNING_PRIVATE_KEY
   }
 
-  const inline = value.includes("\n") || value.includes("\\n")
-    ? value.replaceAll("\\n", "\n").replaceAll(" ", "")
-    : value
-  const decoded =
-    inline.startsWith("untrusted comment:")
-      ? inline
-      : (() => {
-          const normalized = inline.replaceAll("-", "+").replaceAll("_", "/")
-          const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=")
-          const text = Buffer.from(padded, "base64").toString("utf8")
-          return text.startsWith("untrusted comment:") ? text : inline
-        })()
+  const decoded = normalizeMinisignKey(value) ?? normalizeEncodedKey(value)
 
-  if (!decoded.startsWith("untrusted comment:")) {
+  if (!decoded) {
     throw new Error(
       "TAURI_SIGNING_PRIVATE_KEY must be a minisign private key or a path to one. The first line should start with 'untrusted comment:'.",
     )
   }
 
-  process.env.TAURI_SIGNING_PRIVATE_KEY = decoded.endsWith("\n") ? decoded : `${decoded}\n`
+  process.env.TAURI_SIGNING_PRIVATE_KEY = decoded
   return process.env.TAURI_SIGNING_PRIVATE_KEY
 }
 
