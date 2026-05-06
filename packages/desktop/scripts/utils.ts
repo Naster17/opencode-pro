@@ -1,7 +1,8 @@
 import { $ } from "bun"
 
 export type Channel = "dev" | "beta" | "prod"
-const assetBaseName = (Bun.env.GH_REPO || Bun.env.GITHUB_REPOSITORY || "Naster17/opencode-pro").split("/", 2)[1] || "opencode-pro"
+const assetBaseName =
+  (Bun.env.GH_REPO || Bun.env.GITHUB_REPOSITORY || "Naster17/opencode-pro").split("/", 2)[1] || "opencode-pro"
 
 export function resolveChannel(): Channel {
   const raw = Bun.env.OPENCODE_CHANNEL
