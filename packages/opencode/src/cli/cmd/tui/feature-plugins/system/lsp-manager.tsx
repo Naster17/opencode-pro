@@ -1,8 +1,8 @@
-import { TextAttributes } from "@opentui/core"
+import { ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { Keybind } from "@/util/keybind"
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { isRecord } from "@/util/record"
@@ -87,37 +87,59 @@ function globalFooter(api: TuiPluginApi, item: ListedGlobal) {
   return item.enabled ? footer(api, "enabled", "success") : footer(api, "disabled", "error")
 }
 
-function binaryDetails(item: ListedServer) {
-  const resolved = LSPCatalog.resolvedBinaries(item.spec)
-  if (resolved.length) {
-    return [
-      "Resolved binaries:",
-      ...resolved.map((item) => `  ${item.candidate}: ${item.path}${item.source === "managed" ? " (managed)" : ""}`),
-    ]
-  }
-  if (!item.spec.binaries.length) return ["Resolved binaries: none declared"]
-  return ["Resolved binaries:", ...item.spec.binaries.map((candidate) => `  ${candidate}: not found`)]
-}
-
-function noteDetails(item: ListedServer) {
-  if (item.id === "ruby-lsp") {
-    return [
-      "Launch note: this entry is backed by rubocop --lsp.",
-      "That means opencode may find Ruby/rubocop even if you do not have a separate ruby-lsp binary installed.",
-    ]
-  }
-  return []
-}
-
 function DetailsDialog(props: {
-  title: string
-  message: string
+  item: ListedServer
+  status: ServerStatus
+  roots: string[]
   onBack: () => void
 }) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const size = useTerminalDimensions()
+  let scroll: ScrollBoxRenderable | undefined
+
+  const resolved = createMemo(() => LSPCatalog.resolvedBinaries(props.item.spec))
+  const maxContentHeight = createMemo(() => Math.max(10, size().height - 18))
+  const scrollStep = createMemo(() => Math.max(3, Math.floor(maxContentHeight() / 3)))
+  const manager = createMemo(() => LSPCatalog.manager(props.item.spec.id) ?? props.item.spec.id)
+  const width = createMemo(() =>
+    Math.min(size().width - 4, lspDetailsWidth(props.item, props.status, props.roots, resolved(), manager())),
+  )
+  const contentLines = createMemo(
+    () =>
+      9 +
+      6 +
+      3 +
+      Math.max(1, resolved().length) +
+      (props.item.spec.kind === "custom" && props.item.spec.command.length ? 1 : 0),
+  )
+  const shouldScroll = createMemo(() => contentLines() > maxContentHeight())
 
   useKeyboard((evt) => {
+    if (evt.name === "up" && scroll) {
+      scroll.scrollBy(-1)
+      evt.preventDefault()
+      evt.stopPropagation()
+      return
+    }
+    if (evt.name === "down" && scroll) {
+      scroll.scrollBy(1)
+      evt.preventDefault()
+      evt.stopPropagation()
+      return
+    }
+    if (evt.name === "pageup" && scroll) {
+      scroll.scrollBy(-scrollStep())
+      evt.preventDefault()
+      evt.stopPropagation()
+      return
+    }
+    if (evt.name === "pagedown" && scroll) {
+      scroll.scrollBy(scrollStep())
+      evt.preventDefault()
+      evt.stopPropagation()
+      return
+    }
     if (evt.name !== "return") return
     evt.preventDefault()
     evt.stopPropagation()
@@ -135,26 +157,187 @@ function DetailsDialog(props: {
     dialog.setBeforeClose(undefined)
   })
 
+  createEffect(() => {
+    dialog.setSize("medium")
+    dialog.setWidth(width())
+  })
+
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1}>
+    <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={0}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          {props.title}
+          {props.item.spec.title}
         </text>
         <text fg={theme.textMuted} onMouseUp={props.onBack}>
           esc
         </text>
       </box>
-      <box paddingBottom={1}>
-        <text fg={theme.textMuted}>{props.message}</text>
+      <text fg={theme.textMuted}>
+        {props.item.spec.id} <span style={{ fg: theme.accent }}>• {manager()}</span>
+      </text>
+      <box flexDirection="row" flexWrap="wrap" gap={1} paddingTop={1} paddingBottom={1}>
+        <DetailBadge label={props.status} color={statusColor(theme, props.status)} />
+        <DetailBadge label={props.item.installed ? "installed" : "not installed"} color={props.item.installed ? theme.success : theme.textMuted} />
+        <DetailBadge label={props.item.managed ? "managed" : "system"} color={props.item.managed ? theme.primary : theme.textMuted} />
+        <Show when={props.item.active}>
+          <DetailBadge label="connected" color={theme.accent} />
+        </Show>
       </box>
-      <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
-        <box paddingLeft={3} paddingRight={3} backgroundColor={theme.primary} onMouseUp={props.onBack}>
-          <text fg={theme.selectedListItemText}>ok</text>
-        </box>
-      </box>
+      <Show
+        when={shouldScroll()}
+        fallback={<DetailsContent item={props.item} status={props.status} roots={props.roots} resolved={resolved()} />}
+      >
+        <scrollbox
+          paddingRight={1}
+          maxHeight={maxContentHeight()}
+          scrollX={false}
+          scrollY={true}
+          verticalScrollbarOptions={{ visible: true }}
+          horizontalScrollbarOptions={{ visible: false }}
+          ref={(value: ScrollBoxRenderable) => {
+            scroll = value
+          }}
+        >
+          <DetailsContent item={props.item} status={props.status} roots={props.roots} resolved={resolved()} />
+        </scrollbox>
+      </Show>
     </box>
   )
+}
+
+function DetailsContent(props: {
+  item: ListedServer
+  status: ServerStatus
+  roots: string[]
+  resolved: ReturnType<typeof LSPCatalog.resolvedBinaries>
+}) {
+  const { theme } = useTheme()
+  const manager = createMemo(() => LSPCatalog.manager(props.item.spec.id) ?? props.item.spec.id)
+
+  return (
+    <box gap={0}>
+      <DetailSection title="Server">
+        <DetailRow label="ID">{props.item.spec.id}</DetailRow>
+        <DetailRow label="Manager" valueColor={theme.accent}>
+          {manager()}
+        </DetailRow>
+        <DetailRow label="Source">{props.item.spec.kind}</DetailRow>
+        <DetailRow label="Status" valueColor={statusColor(theme, props.status)}>
+          {props.status}
+        </DetailRow>
+        <DetailRow label="Installed" valueColor={props.item.installed ? theme.success : theme.error}>
+          {props.item.installed ? "yes" : "no"}
+        </DetailRow>
+        <DetailRow label="Managed install" valueColor={props.item.managed ? theme.primary : theme.textMuted}>
+          {props.item.managed ? "yes" : "no"}
+        </DetailRow>
+      </DetailSection>
+
+      <DetailSection title="Files">
+        <DetailRow label="Extensions">{props.item.spec.extensions.join(", ") || "(all files)"}</DetailRow>
+        <DetailRow label="Connected roots">{props.roots.join(", ") || "none"}</DetailRow>
+      </DetailSection>
+
+      <DetailSection title="Launch">
+        <DetailRow label="Declared binaries">{props.item.spec.binaries.join(", ") || "none declared"}</DetailRow>
+        <Show when={props.resolved.length > 0} fallback={<DetailRow label="Resolved binaries">not found</DetailRow>}>
+          <DetailRows
+            label="Resolved binaries"
+            lines={props.resolved.map((item) => `${item.candidate}: ${item.path}${item.source === "managed" ? " (managed)" : ""}`)}
+          />
+        </Show>
+        <Show when={props.item.spec.kind === "custom" && props.item.spec.command.length}>
+          <DetailRow label="Command">{props.item.spec.kind === "custom" ? props.item.spec.command.join(" ") : ""}</DetailRow>
+        </Show>
+      </DetailSection>
+    </box>
+  )
+}
+
+function statusColor(theme: TuiPluginApi["theme"]["current"], status: ServerStatus) {
+  if (status === "enabled") return theme.success
+  if (status === "disabled") return theme.error
+  if (status === "installing") return theme.primary
+  if (status === "deleting") return theme.warning
+  return theme.textMuted
+}
+
+function DetailSection(props: { title: string; children: JSX.Element }) {
+  const { theme } = useTheme()
+  return (
+    <box gap={0} paddingBottom={1}>
+      <text fg={theme.accent} attributes={TextAttributes.BOLD}>
+        {props.title}
+      </text>
+      <box paddingLeft={1}>{props.children}</box>
+    </box>
+  )
+}
+
+function DetailRow(props: {
+  label: string
+  children: JSX.Element
+  valueColor?: TuiPluginApi["theme"]["current"]["text"]
+}) {
+  const { theme } = useTheme()
+  return (
+    <text fg={theme.textMuted} wrapMode="char" width="100%">
+      <span style={{ fg: theme.text, bold: true }}>{props.label}</span>:{" "}
+      <span style={{ fg: props.valueColor ?? theme.textMuted }}>{props.children}</span>
+    </text>
+  )
+}
+
+function DetailRows(props: { label: string; lines: string[] }) {
+  return (
+    <>
+      <DetailRow label={props.label}>{props.lines.at(0) ?? ""}</DetailRow>
+      <For each={props.lines.slice(1)}>
+        {(line) => (
+          <text fg={useTheme().theme.textMuted} wrapMode="char" width="100%">
+            <span style={{ fg: useTheme().theme.textMuted }}>{line}</span>
+          </text>
+        )}
+      </For>
+    </>
+  )
+}
+
+function DetailBadge(props: { label: string; color: TuiPluginApi["theme"]["current"]["text"] }) {
+  return (
+    <text>
+      <span style={{ fg: props.color, bold: true }}>[{props.label}]</span>
+    </text>
+  )
+}
+
+function lspDetailsWidth(
+  item: ListedServer,
+  status: ServerStatus,
+  roots: string[],
+  resolved: ReturnType<typeof LSPCatalog.resolvedBinaries>,
+  manager: string,
+) {
+  const lengths = [
+    item.spec.title.length,
+    `${item.spec.id} • ${manager}`.length,
+    `[${status}] [${item.installed ? "installed" : "not installed"}] [${item.managed ? "managed" : "system"}]`.length,
+    `ID: ${item.spec.id}`.length,
+    `Manager: ${manager}`.length,
+    `Source: ${item.spec.kind}`.length,
+    `Status: ${status}`.length,
+    `Installed: ${item.installed ? "yes" : "no"}`.length,
+    `Managed install: ${item.managed ? "yes" : "no"}`.length,
+    `Extensions: ${item.spec.extensions.join(", ") || "(all files)"}`.length,
+    `Connected roots: ${roots.join(", ") || "none"}`.length,
+    `Declared binaries: ${item.spec.binaries.join(", ") || "none declared"}`.length,
+    ...(resolved.length
+      ? resolved.map((entry) => `Resolved binaries: ${entry.candidate}: ${entry.path}${entry.source === "managed" ? " (managed)" : ""}`.length)
+      : [`Resolved binaries: not found`.length]),
+    ...(item.spec.kind === "custom" && item.spec.command.length ? [`Command: ${item.spec.command.join(" ")}`.length] : []),
+  ].sort((a, b) => a - b)
+  const target = lengths[Math.max(0, Math.floor(lengths.length * 0.8) - 1)] ?? 60
+  return Math.max(56, Math.min(72, target + 8))
 }
 
 function row(api: TuiPluginApi, item: ListedItem, globalEnabled: boolean): DialogSelectOption<string> {
@@ -201,7 +384,7 @@ function View(props: { api: TuiPluginApi; initialCurrent?: string }) {
         return {
           kind: "server",
           id: spec.id,
-          title: LSPCatalog.displayTitle(spec),
+          title: spec.title,
           description: undefined,
           enabled,
           installed:
@@ -270,24 +453,8 @@ function View(props: { api: TuiPluginApi; initialCurrent?: string }) {
       .filter((entry) => entry.id === item.id && entry.status === "connected")
       .map((entry) => entry.root)
     const status = serverStatus(item, globalEnabled())
-    const message = [
-      `ID: ${item.spec.id}`,
-      `Manager: ${LSPCatalog.manager(item.spec.id) ?? item.spec.id}`,
-      `Source: ${item.spec.kind}`,
-      `Status: ${status}`,
-      `Installed: ${item.installed ? "yes" : "no"}`,
-      `Managed install: ${item.managed ? "yes" : "no"}`,
-      `Extensions: ${item.spec.extensions.join(", ") || "(all files)"}`,
-      `Binaries: ${item.spec.binaries.join(", ") || "none declared"}`,
-      ...binaryDetails(item),
-      ...(item.spec.kind === "custom" && item.spec.command.length
-        ? [`Command: ${item.spec.command.join(" ")}`]
-        : []),
-      ...noteDetails(item),
-      `Connected roots: ${roots.join(", ") || "none"}`,
-    ].join("\n")
     props.api.ui.dialog.replace(() => (
-      <DetailsDialog title={LSPCatalog.displayTitle(item.spec)} message={message} onBack={() => show(props.api, item.id)} />
+      <DetailsDialog item={item} status={status} roots={roots} onBack={() => show(props.api, item.id)} />
     ))
   }
 
