@@ -1363,6 +1363,16 @@ export class Agent implements ACPAgent {
     if (!current) {
       this.sessionManager.setModel(session.id, model)
     }
+
+    // If a variant is provided in the request, set it on the session
+    // This allows sub-agents to inherit the parent's variant
+    if ("variant" in params) {
+      const variant = params.variant
+      if (typeof variant === "string") {
+        this.sessionManager.setVariant(sessionID, variant)
+      }
+    }
+
     const agent = session.modeId ?? (await AppRuntime.runPromise(AgentModule.Service.use((svc) => svc.defaultAgent())))
 
     const parts: Array<
