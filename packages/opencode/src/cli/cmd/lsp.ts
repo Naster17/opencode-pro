@@ -51,7 +51,7 @@ export const LspCommand = effectCmd({
               : "not-installed"
         return {
           id: spec.id,
-          title: spec.title,
+          title: LSPCatalog.displayTitle(spec),
           status,
           extensions: spec.extensions,
           command: spec.kind === "custom" ? spec.command : undefined,

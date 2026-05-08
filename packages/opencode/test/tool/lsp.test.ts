@@ -36,6 +36,8 @@ const lsp = Layer.succeed(
   LSP.Service.of({
     init: () => Effect.void,
     status: () => Effect.succeed([]),
+    install: () => Effect.succeed({ ok: false, message: "" }),
+    uninstall: () => Effect.succeed({ ok: false, message: "" }),
     hasClients: () => Effect.succeed(true),
     touchFile: () => Effect.void,
     diagnostics: () => Effect.succeed({}),

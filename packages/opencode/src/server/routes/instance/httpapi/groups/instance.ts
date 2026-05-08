@@ -23,6 +23,14 @@ export const VcsDiffQuery = Schema.Struct({
   mode: Vcs.Mode,
 })
 
+export const LSPInstallPayload = Schema.Struct({
+  id: Schema.String,
+})
+
+export const LSPUninstallPayload = Schema.Struct({
+  id: Schema.String,
+})
+
 export const InstancePaths = {
   dispose: "/instance/dispose",
   path: "/path",
@@ -32,6 +40,8 @@ export const InstancePaths = {
   agent: "/agent",
   skill: "/skill",
   lsp: "/lsp",
+  lspInstall: "/lsp/install",
+  lspUninstall: "/lsp/uninstall",
   formatter: "/formatter",
 } as const
 
@@ -112,6 +122,26 @@ export const InstanceApi = HttpApi.make("instance")
             identifier: "lsp.status",
             summary: "Get LSP status",
             description: "Get LSP server status",
+          }),
+        ),
+        HttpApiEndpoint.post("lspInstall", InstancePaths.lspInstall, {
+          payload: LSPInstallPayload,
+          success: described(LSP.InstallResult, "LSP install result"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "lsp.install",
+            summary: "Install LSP",
+            description: "Install a supported LSP server for the current OpenCode instance.",
+          }),
+        ),
+        HttpApiEndpoint.post("lspUninstall", InstancePaths.lspUninstall, {
+          payload: LSPUninstallPayload,
+          success: described(LSP.InstallResult, "LSP uninstall result"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "lsp.uninstall",
+            summary: "Uninstall LSP",
+            description: "Remove a managed LSP server install for the current OpenCode instance.",
           }),
         ),
         HttpApiEndpoint.get("formatter", InstancePaths.formatter, {

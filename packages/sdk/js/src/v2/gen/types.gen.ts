@@ -1522,6 +1522,11 @@ export type LspStatus = {
   status: "connected" | "error"
 }
 
+export type LspInstallResult = {
+  ok: boolean
+  message: string
+}
+
 export type FormatterStatus = {
   name: string
   extensions: Array<string>
@@ -4120,6 +4125,48 @@ export type LspStatusResponses = {
 }
 
 export type LspStatusResponse = LspStatusResponses[keyof LspStatusResponses]
+
+export type LspInstallData = {
+  body?: {
+    id: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/lsp/install"
+}
+
+export type LspInstallResponses = {
+  /**
+   * LSP install result
+   */
+  200: LspInstallResult
+}
+
+export type LspInstallResponse = LspInstallResponses[keyof LspInstallResponses]
+
+export type LspUninstallData = {
+  body?: {
+    id: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/lsp/uninstall"
+}
+
+export type LspUninstallResponses = {
+  /**
+   * LSP uninstall result
+   */
+  200: LspInstallResult
+}
+
+export type LspUninstallResponse = LspUninstallResponses[keyof LspUninstallResponses]
 
 export type FormatterStatusData = {
   body?: never

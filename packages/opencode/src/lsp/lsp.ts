@@ -73,6 +73,14 @@ export const Status = Schema.Struct({
   .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type Status = typeof Status.Type
 
+export const InstallResult = Schema.Struct({
+  ok: Schema.Boolean,
+  message: Schema.String,
+})
+  .annotate({ identifier: "LSPInstallResult" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type InstallResult = typeof InstallResult.Type
+
 enum SymbolKind {
   File = 1,
   Module = 2,
@@ -138,6 +146,8 @@ interface State {
 export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly status: () => Effect.Effect<Status[]>
+  readonly install: (id: string) => Effect.Effect<InstallResult>
+  readonly uninstall: (id: string) => Effect.Effect<InstallResult>
   readonly hasClients: (file: string) => Effect.Effect<boolean>
   readonly touchFile: (input: string, diagnostics?: "document" | "full") => Effect.Effect<void>
   readonly diagnostics: () => Effect.Effect<Record<string, LSPClient.Diagnostic[]>>
@@ -344,6 +354,28 @@ export const layer = Layer.effect(
       return result
     })
 
+    const install = Effect.fn("LSP.install")(function* (id: string) {
+      const ctx = yield* InstanceState.context
+      const s = yield* InstanceState.get(state)
+      return yield* Effect.promise(async () => {
+        const result = await LSPServer.install(id, ctx)
+        if (!result.ok) return result
+        for (const key of [...s.broken]) {
+          if (key.endsWith(id)) s.broken.delete(key)
+        }
+        return result
+      })
+    })
+
+    const uninstall = Effect.fn("LSP.uninstall")(function* (id: string) {
+      const ctx = yield* InstanceState.context
+      return yield* Effect.promise(async () => {
+        const result = await LSPServer.uninstall(id, ctx)
+        if (result.ok) await Bus.publish(Event.Updated, {})
+        return result
+      })
+    })
+
     const hasClients = Effect.fn("LSP.hasClients")(function* (file: string) {
       const ctx = yield* InstanceState.context
       const s = yield* InstanceState.get(state)
@@ -501,6 +533,8 @@ export const layer = Layer.effect(
     return Service.of({
       init,
       status,
+      install,
+      uninstall,
       hasClients,
       touchFile,
       diagnostics,

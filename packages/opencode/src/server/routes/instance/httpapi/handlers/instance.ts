@@ -9,6 +9,7 @@ import { Skill } from "@/skill"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
+import { LSPInstallPayload, LSPUninstallPayload } from "../groups/instance"
 import { markInstanceForDisposal } from "../lifecycle"
 
 export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance", (handlers) =>
@@ -61,6 +62,16 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
       return yield* lsp.status()
     })
 
+    const installLsp = Effect.fn("InstanceHttpApi.lspInstall")(function* (ctx: { payload: typeof LSPInstallPayload.Type }) {
+      return yield* lsp.install(ctx.payload.id)
+    })
+
+    const uninstallLsp = Effect.fn("InstanceHttpApi.lspUninstall")(function* (ctx: {
+      payload: typeof LSPUninstallPayload.Type
+    }) {
+      return yield* lsp.uninstall(ctx.payload.id)
+    })
+
     const getFormatter = Effect.fn("InstanceHttpApi.formatter")(function* () {
       return yield* format.status()
     })
@@ -74,6 +85,8 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
       .handle("agent", getAgent)
       .handle("skill", getSkill)
       .handle("lsp", getLsp)
+      .handle("lspInstall", installLsp)
+      .handle("lspUninstall", uninstallLsp)
       .handle("formatter", getFormatter)
   }),
 )

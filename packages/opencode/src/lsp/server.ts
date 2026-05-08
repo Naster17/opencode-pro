@@ -1,6 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from "child_process"
 import path from "path"
 import os from "os"
+import fsSync from "fs"
 import { Global } from "@opencode-ai/core/global"
 import * as Log from "@opencode-ai/core/util/log"
 import { text } from "node:stream/consumers"
@@ -14,6 +15,7 @@ import { which } from "../util/which"
 import { Module } from "@opencode-ai/core/util/module"
 import { spawn } from "./launch"
 import { Npm } from "@opencode-ai/core/npm"
+import { sanitize as sanitizeNpmPackage } from "@opencode-ai/core/npm"
 
 const log = Log.create({ service: "lsp.server" })
 const pathExists = async (p: string) =>
@@ -23,6 +25,7 @@ const pathExists = async (p: string) =>
     .catch(() => false)
 const run = (cmd: string[], opts: Process.RunOptions = {}) => Process.run(cmd, { ...opts, nothrow: true })
 const output = (cmd: string[], opts: Process.RunOptions = {}) => Process.text(cmd, { ...opts, nothrow: true })
+const pathExistsSync = (p: string) => fsSync.existsSync(p)
 
 export interface Handle {
   process: ChildProcessWithoutNullStreams
@@ -61,6 +64,11 @@ export interface Info {
   global?: boolean
   root: RootFunction
   spawn(root: string, ctx: InstanceContext): Promise<Handle | undefined>
+}
+
+export interface InstallResult {
+  ok: boolean
+  message: string
 }
 
 export const Deno: Info = {
@@ -2061,4 +2069,196 @@ export const JuliaLS: Info = {
       }),
     }
   },
+}
+
+const npmInstallable = new Map<
+  string,
+  {
+    pkg: string
+    bin: string
+  }
+>([
+  ["astro", { pkg: "@astrojs/language-server", bin: "astro-ls" }],
+  ["bash", { pkg: "bash-language-server", bin: "bash-language-server" }],
+  ["biome", { pkg: "biome", bin: "biome" }],
+  ["dockerfile", { pkg: "dockerfile-language-server-nodejs", bin: "docker-langserver" }],
+  ["php intelephense", { pkg: "intelephense", bin: "intelephense" }],
+  ["pyright", { pkg: "pyright", bin: "pyright-langserver" }],
+  ["svelte", { pkg: "svelte-language-server", bin: "svelteserver" }],
+  ["typescript", { pkg: "typescript-language-server", bin: "typescript-language-server" }],
+  ["vue", { pkg: "@vue/language-server", bin: "vue-language-server" }],
+  ["yaml-ls", { pkg: "yaml-language-server", bin: "yaml-language-server" }],
+])
+
+const spawnInstallable = new Map<string, Info>([
+  ["clangd", Clangd],
+  ["elixir-ls", ElixirLS],
+  ["fsharp", FSharp],
+  ["gopls", Gopls],
+  ["jdtls", JDTLS],
+  ["kotlin-ls", KotlinLS],
+  ["lua-ls", LuaLS],
+  ["ruby-lsp", Rubocop],
+  ["terraform", TerraformLS],
+  ["texlab", TexLab],
+  ["tinymist", Tinymist],
+  ["zls", Zls],
+])
+
+export function managedInstallExists(id: string) {
+  const npm = npmInstallable.get(id)
+  if (npm) return pathExistsSync(npmCacheDirectory(npm.pkg))
+
+  if (id === "csharp" || id === "razor") {
+    return Boolean(roslynLanguageServerGlobalPathSync())
+  }
+
+  return managedPaths(id).some(pathExistsSync)
+}
+
+async function installBySpawning(id: string, server: Info, ctx: InstanceContext): Promise<InstallResult> {
+  const handle = await server.spawn(ctx.directory, ctx)
+  if (!handle) {
+    return {
+      ok: false,
+      message: `Failed to install ${id} LSP. Check logs and required runtimes.`,
+    }
+  }
+  await Process.stop(handle.process)
+  return {
+    ok: true,
+    message: `Installed ${id} LSP`,
+  }
+}
+
+async function uninstallManaged(id: string) {
+  const npm = npmInstallable.get(id)
+  if (npm) {
+    await fs.rm(npmCacheDirectory(npm.pkg), { force: true, recursive: true })
+    return true
+  }
+
+  if (id === "csharp" || id === "razor") {
+    if (!roslynLanguageServerGlobalPathSync()) return false
+    if (!which("dotnet")) return false
+    const result = await run(["dotnet", "tool", "uninstall", "--global", "roslyn-language-server"])
+    return result.code === 0
+  }
+
+  const targets = managedPaths(id)
+  if (!targets.length) return false
+  await Promise.all(targets.map((target) => fs.rm(target, { force: true, recursive: true })))
+  return true
+}
+
+export async function install(id: string, ctx: InstanceContext): Promise<InstallResult> {
+  if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) {
+    return {
+      ok: false,
+      message: "LSP downloads are disabled by OPENCODE_DISABLE_LSP_DOWNLOAD",
+    }
+  }
+
+  const npm = npmInstallable.get(id)
+  if (npm) {
+    const resolved = await Npm.which(npm.pkg, npm.bin)
+    if (!resolved) {
+      return {
+        ok: false,
+        message: `Failed to install ${id} LSP. Check logs and required runtimes.`,
+      }
+    }
+    return {
+      ok: true,
+      message: `Installed ${id} LSP`,
+    }
+  }
+
+  if (id === "csharp" || id === "razor") {
+    const resolved = await getRoslynLanguageServer()
+    if (!resolved) {
+      return {
+        ok: false,
+        message: `Failed to install ${id} LSP. Check logs and required runtimes.`,
+      }
+    }
+    return {
+      ok: true,
+      message: `Installed ${id} LSP`,
+    }
+  }
+
+  const server = spawnInstallable.get(id)
+  if (server) return installBySpawning(id, server, ctx)
+
+  return {
+    ok: false,
+    message: `Automatic install is not available for ${id}. Install it manually and reopen /lsp.`,
+  }
+}
+
+export async function uninstall(id: string, _ctx: InstanceContext): Promise<InstallResult> {
+  if (!managedInstallExists(id)) {
+    return {
+      ok: false,
+      message: `No managed install found for ${id}. If it is coming from your system PATH, remove it manually.`,
+    }
+  }
+
+  const ok = await uninstallManaged(id)
+  if (!ok) {
+    return {
+      ok: false,
+      message: `Failed to delete ${id} LSP. Check logs and required runtimes.`,
+    }
+  }
+
+  return {
+    ok: true,
+    message: `Deleted ${id} LSP`,
+  }
+}
+
+function managedPaths(id: string) {
+  const ext = process.platform === "win32" ? ".exe" : ""
+  if (id === "clangd") {
+    return [
+      path.join(Global.Path.bin, "clangd" + ext),
+      ...fsSync
+        .readdirSync(Global.Path.bin, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() && entry.name.startsWith("clangd_"))
+        .map((entry) => path.join(Global.Path.bin, entry.name)),
+    ]
+  }
+  if (id === "elixir-ls") return [path.join(Global.Path.bin, "elixir-ls-master"), path.join(Global.Path.bin, "elixir-ls")]
+  if (id === "fsharp") return [path.join(Global.Path.bin, "fsautocomplete" + ext)]
+  if (id === "gopls") return [path.join(Global.Path.bin, "gopls" + ext)]
+  if (id === "jdtls") return [path.join(Global.Path.bin, "jdtls")]
+  if (id === "kotlin-ls") return [path.join(Global.Path.bin, "kotlin-ls")]
+  if (id === "lua-ls") {
+    return fsSync
+      .readdirSync(Global.Path.bin, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith("lua-language-server-"))
+      .map((entry) => path.join(Global.Path.bin, entry.name))
+  }
+  if (id === "ruby-lsp") return [path.join(Global.Path.bin, "rubocop" + ext)]
+  if (id === "terraform") return [path.join(Global.Path.bin, "terraform-ls" + ext)]
+  if (id === "texlab") return [path.join(Global.Path.bin, "texlab" + ext)]
+  if (id === "tinymist") return [path.join(Global.Path.bin, "tinymist" + ext)]
+  if (id === "zls") return [path.join(Global.Path.bin, "zls" + ext)]
+  return []
+}
+
+function npmCacheDirectory(pkg: string) {
+  return path.join(Global.Path.cache, "packages", sanitizeNpmPackage(pkg))
+}
+
+function roslynLanguageServerGlobalPathSync() {
+  const bin = path.join(
+    process.env.DOTNET_CLI_HOME ?? os.homedir(),
+    ".dotnet",
+    "tools",
+    "roslyn-language-server" + (process.platform === "win32" ? ".cmd" : ""),
+  )
+  return pathExistsSync(bin) ? bin : undefined
 }
