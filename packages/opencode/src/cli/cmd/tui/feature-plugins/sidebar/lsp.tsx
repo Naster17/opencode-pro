@@ -1,13 +1,20 @@
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
-import { createMemo, For, Show, createSignal } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
+import { LSPOverride } from "@/lsp/override"
 
 const id = "internal:sidebar-lsp"
 
 function View(props: { api: TuiPluginApi }) {
   const [open, setOpen] = createSignal(true)
+  const [override, setOverride] = createSignal<boolean | undefined>()
   const theme = () => props.api.theme.current
   const list = createMemo(() => props.api.state.lsp())
-  const off = createMemo(() => props.api.state.config.lsp === false)
+  const off = createMemo(() => !LSPOverride.resolveEnabled(props.api.state.config.lsp, override()))
+
+  createEffect(() => {
+    props.api.state.config.lsp
+    void LSPOverride.readGlobalOverride().then(setOverride)
+  })
 
   return (
     <box>

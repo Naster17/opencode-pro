@@ -8,6 +8,7 @@ import * as LSPServer from "./server"
 import z from "zod"
 import { Config } from "@/config/config"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { Global } from "@opencode-ai/core/global"
 import { Process } from "@/util/process"
 import { spawn as lspspawn } from "./launch"
 import { Effect, Layer, Context, Schema } from "effect"
@@ -15,6 +16,8 @@ import { InstanceState } from "@/effect/instance-state"
 import { containsPath } from "@/project/instance-context"
 import { NonNegativeInt, withStatics } from "@/util/schema"
 import { zod, ZodOverride } from "@/util/effect-zod"
+import { LSPCatalog } from "./catalog"
+import { LSPOverride } from "./override"
 
 const log = Log.create({ service: "lsp" })
 
@@ -157,22 +160,26 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
 
     const state = yield* InstanceState.make<State>(
-      Effect.fn("LSP.state")(function* (ctx) {
+      Effect.fn("LSP.state")(function* () {
         const cfg = yield* config.get()
+        const enabledOverride = yield* Effect.promise(() => LSPOverride.readGlobalOverride())
+        const lsp = LSPOverride.resolveConfig(cfg.lsp, enabledOverride)
 
         const servers: Record<string, LSPServer.Info> = {}
 
-        if (!cfg.lsp) {
-          log.info("all LSPs are disabled")
+        if (!lsp) {
+          log.info("all LSPs are disabled", {
+            source: enabledOverride === undefined ? "config" : Global.Path.state,
+          })
         } else {
-          for (const server of Object.values(LSPServer)) {
+          for (const server of LSPCatalog.listBuiltinServers()) {
             servers[server.id] = server
           }
 
           filterExperimentalServers(servers)
 
-          if (cfg.lsp !== true) {
-            for (const [name, item] of Object.entries(cfg.lsp)) {
+          if (lsp !== true) {
+            for (const [name, item] of Object.entries(lsp)) {
               const existing = servers[name]
               if (item.disabled) {
                 log.info(`LSP server ${name} is disabled`)

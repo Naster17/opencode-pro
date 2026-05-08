@@ -341,8 +341,8 @@ function globalConfigFile() {
   return candidates[0]
 }
 
-function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
-  if (!isRecord(patch)) {
+function patchJsonc(input: string, patch: unknown, path: string[] = [], replaceObject = false): string {
+  if (replaceObject || !isRecord(patch)) {
     const edits = modify(input, path, patch, {
       formattingOptions: {
         insertSpaces: true,
@@ -353,6 +353,19 @@ function patchJsonc(input: string, patch: unknown, path: string[] = []): string 
   }
 
   return Object.entries(patch).reduce((result, [key, value]) => patchJsonc(result, value, [...path, key]), input)
+}
+
+function mergeConfigForWrite(existing: Info, patch: Info) {
+  const merged = mergeDeep(writable(existing), patch)
+  if ("lsp" in patch) merged.lsp = patch.lsp
+  return merged
+}
+
+function patchConfigJsonc(input: string, patch: Info) {
+  return Object.entries(patch).reduce((result, [key, value]) => {
+    if (key === "lsp") return patchJsonc(result, value, [key], true)
+    return patchJsonc(result, value, [key])
+  }, input)
 }
 
 function writable(info: Info) {
@@ -780,7 +793,7 @@ export const layer = Layer.effect(
       const file = path.join(dir, "config.json")
       const existing = yield* loadFile(file)
       yield* fs
-        .writeFileString(file, JSON.stringify(mergeDeep(writable(existing), writable(config)), null, 2))
+        .writeFileString(file, JSON.stringify(mergeConfigForWrite(existing, writable(config)), null, 2))
         .pipe(Effect.orDie)
     })
 
@@ -797,13 +810,13 @@ export const layer = Layer.effect(
       let changed: boolean
       if (!file.endsWith(".jsonc")) {
         const existing = ConfigParse.effectSchema(Info, ConfigParse.jsonc(before, file), file)
-        const merged = mergeDeep(writable(existing), patch)
+        const merged = mergeConfigForWrite(existing, patch)
         const serialized = JSON.stringify(merged, null, 2)
         changed = serialized !== before
         if (changed) yield* fs.writeFileString(file, serialized).pipe(Effect.orDie)
         next = merged
       } else {
-        const updated = patchJsonc(before, patch)
+        const updated = patchConfigJsonc(before, patch)
         next = ConfigParse.effectSchema(Info, ConfigParse.jsonc(updated, file), file)
         changed = updated !== before
         if (changed) yield* fs.writeFileString(file, updated).pipe(Effect.orDie)

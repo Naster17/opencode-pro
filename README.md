@@ -31,16 +31,15 @@ nix run github:Naster17/opencode-pro
 
 | Feature                        | Description                                                                                                                                                                                  |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Plugin Manager                 | Toggle Backend/Auth and TUI plugins. Install npm plugins in-app.                                                                                                                             |
+| Plugin Manager                 | Toggle Backend/Auth and TUI plugins directly from the app. Install npm plugins in-app with hot-plug support — no restart needed.                                                            |
+| Credential Manager             | Manage API keys and auth tokens per provider (Claude, OpenAI, Gemini, etc.) via `/credentials` command. Supports add, view, and delete operations.                                          |
+| LSP Manager                    | Toggle Language Server Protocol servers globally or per-server (`typescript`, `python`, `rust-analyzer`, etc.) from the `/lsp` command. View server status, installed binaries, and active roots. |
+| Model Picker Tab View          | Press `Tab` in model picker (`/models` or `Ctrl+P`) to view full model metadata: context limits, reasoning efforts, capabilities, pricing, API details, and more. `Esc` returns to the list. |
 | Sidebar Metrics                | Live session metrics in the sidebar with context usage, token totals, cache, tool calls, compactions, speed, and spend.                                                                      |
 | `/usage` Dashboard             | Interactive usage analytics with Overview, Sessions, and Models views across Today, 7d, 30d, or all-time history.                                                                            |
-| Accurate Full-History Totals   | Usage and metrics are calculated across full session history, without the old 100-message cap skewing totals.                                                                                |
 | Smarter Thinking Controls      | Refined thinking mode UX with visible levels, cleaner variant labels, and faster cycling for reasoning-capable models.                                                                       |
 | `Ctrl+T` Variant Flow          | `Ctrl+T` cycles model variants cleanly, while `Ctrl+Shift+T` or `F3` steps through supported thinking levels.                                                                                |
-| Better Local Reasoning Support | Improved handling for llama.cpp and OpenAI-compatible reasoning models, including toggle-style thinking providers.                                                                           |
 | Privacy-First Hardening        | Telemetry is stripped back, session sharing is permanently disabled, and remote workspace sync cannot be re-enabled by env flags.                                                            |
-| Lightweight `/help` Base       | A clean in-app help entrypoint is already wired in as the foundation for a fuller guided help experience next.                                                                               |
-| Model Details View             | Press `Tab` in model picker (`/models` or `Ctrl+P`) to view full model metadata: context limits, reasoning efforts, capabilities, pricing, API details, and more. `Esc` returns to the list. |
 
 ### Desktop App (BETA)
 

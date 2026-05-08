@@ -3,7 +3,7 @@ export * as ConfigLSP from "./lsp"
 import { Schema } from "effect"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
-import * as LSPServer from "../lsp/server"
+import { LSPCatalog } from "../lsp/catalog"
 
 export const Disabled = Schema.Struct({
   disabled: Schema.Literal(true),
@@ -29,10 +29,9 @@ export const requiresExtensionsForCustomServers = Schema.makeFilter<
   boolean | Record<string, Schema.Schema.Type<typeof Entry>>
 >((data) => {
   if (typeof data === "boolean") return undefined
-  const serverIds = new Set(Object.values(LSPServer).map((server) => server.id))
   const ok = Object.entries(data).every(([id, config]) => {
     if ("disabled" in config && config.disabled) return true
-    if (serverIds.has(id)) return true
+    if (LSPCatalog.isBuiltin(id)) return true
     return "extensions" in config && Boolean(config.extensions)
   })
   return ok ? undefined : "For custom LSP servers, 'extensions' array is required."

@@ -261,6 +261,83 @@ test("updates global config and omits empty shell key in jsonc", async () => {
   }
 })
 
+test("updates global config and replaces lsp map in json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        lsp: {
+          typescript: { disabled: true },
+          pyright: { disabled: true },
+        },
+      })
+    },
+  })
+
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = tmp.path
+  await clear(true)
+
+  try {
+    await saveGlobal({
+      lsp: {
+        pyright: { disabled: true },
+      },
+    })
+
+    const writtenConfig = await Filesystem.readJson<{ lsp?: Record<string, { disabled: true }> }>(
+      path.join(tmp.path, "opencode.json"),
+    )
+    expect(writtenConfig.lsp).toEqual({
+      pyright: { disabled: true },
+    })
+  } finally {
+    ;(Global.Path as { config: string }).config = prev
+    await clear(true)
+  }
+})
+
+test("updates global config and replaces lsp map in jsonc", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, "opencode.jsonc"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          model: "test/model",
+          lsp: {
+            typescript: { disabled: true },
+            pyright: { disabled: true },
+          },
+        }),
+      )
+    },
+  })
+
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = tmp.path
+  await clear(true)
+
+  try {
+    await saveGlobal({
+      lsp: {
+        pyright: { disabled: true },
+      },
+    })
+
+    const file = path.join(tmp.path, "opencode.jsonc")
+    const writtenConfig = await Filesystem.readText(file)
+    const parsed = ConfigParse.schema(Config.Info.zod, ConfigParse.jsonc(writtenConfig, file), file)
+    expect(parsed.model).toBe("test/model")
+    expect(parsed.lsp).toEqual({
+      pyright: { disabled: true },
+    })
+  } finally {
+    ;(Global.Path as { config: string }).config = prev
+    await clear(true)
+  }
+})
+
 test("loads formatter boolean config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
