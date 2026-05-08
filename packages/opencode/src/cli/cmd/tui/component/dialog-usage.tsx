@@ -106,7 +106,7 @@ export function DialogUsage() {
     const rootSessions = sessionData()
       .filter((d) => !d.session.parentID)
       .map((d) => summarizeUsage(d.sessions, sync.data.provider, { start: ranges[sessionsRange()].start() }))
-    
+
     // This is tricky because summarizeUsage returns a single object.
     // The DialogUsage expects sessionsUsage().session_usage to be a list.
     // Let's just aggregate all for now to be safe.

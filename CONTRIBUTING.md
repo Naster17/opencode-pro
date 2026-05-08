@@ -57,13 +57,13 @@ bun dev .
 
 For development, use `bun dev`. For production-ready builds, several shortcuts are available from the repository root:
 
-| Target | Command | Description |
-| :--- | :--- | :--- |
-| **CLI (Full)** | `bun run build:cli` | Standard production build of the CLI |
-| **CLI (Fast)** | `bun run build:cli:fast` | Quick standalone build (skips Web UI embed & install) |
-| **Web App** | `bun run build:web` | Build the web interface |
-| **Desktop App** | `bun run build:desktop` | Build the Electron app |
-| **Desktop Package** | `bun run package:desktop` | Package the Electron app for distribution |
+| Target              | Command                   | Description                                           |
+| :------------------ | :------------------------ | :---------------------------------------------------- |
+| **CLI (Full)**      | `bun run build:cli`       | Standard production build of the CLI                  |
+| **CLI (Fast)**      | `bun run build:cli:fast`  | Quick standalone build (skips Web UI embed & install) |
+| **Web App**         | `bun run build:web`       | Build the web interface                               |
+| **Desktop App**     | `bun run build:desktop`   | Build the Electron app                                |
+| **Desktop Package** | `bun run package:desktop` | Package the Electron app for distribution             |
 
 ### Building a "localcode"
 

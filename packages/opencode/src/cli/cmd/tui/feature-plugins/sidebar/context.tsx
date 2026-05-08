@@ -38,7 +38,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const usage = createMemo(() => {
     const rootSession = allSessions().find((s) => s.id === props.session_id)
     const rootMessages = props.api.state.session.messages(props.session_id)
-    
+
     const descendantSessionsList = descendantSessions().map((id) => ({
       session: allSessions().find((s) => s.id === id),
       messages: props.api.state.session.messages(id),
@@ -59,11 +59,16 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     ]
 
     const aggregated = summarizeUsage(sessions, props.api.state.provider)
-    const rootOnly = summarizeUsage([{
-      session: rootSession,
-      messages: rootMessages,
-      getParts: props.api.state.part,
-    }], props.api.state.provider)
+    const rootOnly = summarizeUsage(
+      [
+        {
+          session: rootSession,
+          messages: rootMessages,
+          getParts: props.api.state.part,
+        },
+      ],
+      props.api.state.provider,
+    )
 
     return {
       ...aggregated,
@@ -75,7 +80,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const totalStats = createMemo(() => {
     const leftLabels = ["ctx", "in", "total", "tools", "spent", "code"]
     const rightLabels = ["out", "cached", "compact", "avg.gen"]
-    
+
     const leftWidth = Math.max(...leftLabels.map((l) => l.length))
     const rightWidth = Math.max(...rightLabels.map((l) => l.length))
 
