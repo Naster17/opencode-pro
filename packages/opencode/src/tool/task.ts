@@ -108,12 +108,14 @@ export const TaskTool = Tool.define(
         modelID: msg.info.modelID,
         providerID: msg.info.providerID,
       }
+      const variant = next.variant ?? msg.info.variant
 
       yield* ctx.metadata({
         title: params.description,
         metadata: {
           sessionId: nextSession.id,
           model,
+          variant,
         },
       })
 
@@ -142,6 +144,7 @@ export const TaskTool = Tool.define(
                 modelID: model.modelID,
                 providerID: model.providerID,
               },
+              variant,
               agent: next.name,
               tools: {
                 ...(canTodo ? {} : { todowrite: false }),
