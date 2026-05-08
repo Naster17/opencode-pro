@@ -38,15 +38,47 @@ export function DialogUsage() {
   const [modelsRange, setModelsRange] = createSignal(0)
   const [sessionIndex, setSessionIndex] = createSignal(0)
   const [modelIndex, setModelIndex] = createSignal(0)
-  const sessionData = createMemo(() =>
-    sync.data.session.map((session) => ({
-      session,
-      messages: sync.data.message[session.id] ?? [],
-      getParts: (messageID: string) => sync.data.part[messageID] ?? [],
-      additions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.additions, 0),
-      deletions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.deletions, 0),
-    })),
-  )
+  const sessionData = createMemo(() => {
+    const all = sync.data.session
+    return all.map((session) => {
+      // Find all descendants of this session
+      const descendants: string[] = []
+      const queue = [session.id]
+      const visited = new Set<string>([session.id])
+      while (queue.length > 0) {
+        const parentID = queue.shift()!
+        for (const s of all) {
+          if (s.parentID === parentID && !visited.has(s.id)) {
+            visited.add(s.id)
+            descendants.push(s.id)
+            queue.push(s.id)
+          }
+        }
+      }
+
+      const sessions = [
+        {
+          session,
+          messages: sync.data.message[session.id] ?? [],
+          getParts: (messageID: string) => sync.data.part[messageID] ?? [],
+          additions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.additions, 0),
+          deletions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.deletions, 0),
+        },
+        ...descendants.map((id) => ({
+          session: all.find((s) => s.id === id),
+          messages: sync.data.message[id] ?? [],
+          getParts: (messageID: string) => sync.data.part[messageID] ?? [],
+          additions: sync.data.session_diff[id]?.reduce((sum, item) => sum + item.additions, 0),
+          deletions: sync.data.session_diff[id]?.reduce((sum, item) => sum + item.deletions, 0),
+        })),
+      ]
+
+      return {
+        session,
+        sessions,
+      }
+    })
+  })
 
   onMount(() => {
     dialog.setSize("large")
@@ -65,15 +97,26 @@ export function DialogUsage() {
     dialog.setBeforeClose(undefined)
   })
 
-  const overviewUsage = createMemo(() =>
-    summarizeUsage(sessionData(), sync.data.provider, { start: ranges[overviewRange()].start() }),
-  )
-  const sessionsUsage = createMemo(() =>
-    summarizeUsage(sessionData(), sync.data.provider, { start: ranges[sessionsRange()].start() }),
-  )
-  const modelsUsage = createMemo(() =>
-    summarizeUsage(sessionData(), sync.data.provider, { start: ranges[modelsRange()].start() }),
-  )
+  const overviewUsage = createMemo(() => {
+    const allSessions = sessionData().flatMap((d) => d.sessions)
+    return summarizeUsage(allSessions, sync.data.provider, { start: ranges[overviewRange()].start() })
+  })
+  const sessionsUsage = createMemo(() => {
+    // For individual session list, we might want to show the aggregated metrics per root session
+    const rootSessions = sessionData()
+      .filter((d) => !d.session.parentID)
+      .map((d) => summarizeUsage(d.sessions, sync.data.provider, { start: ranges[sessionsRange()].start() }))
+    
+    // This is tricky because summarizeUsage returns a single object.
+    // The DialogUsage expects sessionsUsage().session_usage to be a list.
+    // Let's just aggregate all for now to be safe.
+    const allSessions = sessionData().flatMap((d) => d.sessions)
+    return summarizeUsage(allSessions, sync.data.provider, { start: ranges[sessionsRange()].start() })
+  })
+  const modelsUsage = createMemo(() => {
+    const allSessions = sessionData().flatMap((d) => d.sessions)
+    return summarizeUsage(allSessions, sync.data.provider, { start: ranges[modelsRange()].start() })
+  })
 
   const rows = createMemo(() => {
     const left = {

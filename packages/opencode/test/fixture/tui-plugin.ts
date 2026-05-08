@@ -282,6 +282,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         return opts.state?.vcs
       },
       session: {
+        all: opts.state?.session?.all ?? (() => []),
         count: opts.state?.session?.count ?? (() => 0),
         diff: opts.state?.session?.diff ?? (() => []),
         todo: opts.state?.session?.todo ?? (() => []),
@@ -289,6 +290,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         status: opts.state?.session?.status ?? (() => undefined),
         permission: opts.state?.session?.permission ?? (() => []),
         question: opts.state?.session?.question ?? (() => []),
+        sync: opts.state?.session?.sync ?? (async () => {}),
       },
       part: opts.state?.part ?? (() => []),
       lsp: opts.state?.lsp ?? (() => []),

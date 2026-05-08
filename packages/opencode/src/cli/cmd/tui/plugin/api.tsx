@@ -146,6 +146,9 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
       }
     },
     session: {
+      all() {
+        return sync.data.session
+      },
       count() {
         return sync.data.session.length
       },
@@ -166,6 +169,9 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
       },
       question(sessionID) {
         return sync.data.question[sessionID] ?? []
+      },
+      async sync(sessionID) {
+        await sync.session.sync(sessionID, { fullHistory: true })
       },
     },
     part(messageID) {
