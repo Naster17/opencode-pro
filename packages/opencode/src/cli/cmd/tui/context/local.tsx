@@ -12,7 +12,13 @@ import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
-import { compareThinkingVariantOrder, normalizeThinkingLevel, THINKING_LEVELS, type ThinkingLevel, type ThinkingState } from "./thinking"
+import {
+  compareThinkingVariantOrder,
+  normalizeThinkingLevel,
+  THINKING_LEVELS,
+  type ThinkingLevel,
+  type ThinkingState,
+} from "./thinking"
 
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
@@ -502,7 +508,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
                 value: "default",
                 title: defaultVariantTitle(),
               },
-              ...variants.toSorted((left, right) => compareThinkingVariantOrder(left.value, right.value) || left.index - right.index),
+              ...variants.toSorted(
+                (left, right) => compareThinkingVariantOrder(left.value, right.value) || left.index - right.index,
+              ),
             ]
           },
           selected() {

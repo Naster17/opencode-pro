@@ -146,7 +146,11 @@ export function Prompt(props: PromptProps) {
   const fileContextEnabled = createMemo(() => kv.get("file_context_enabled", true))
   const canRetryGeminiQuota = createMemo(() => {
     const current = status()
-    return current.type === "retry" && current.message.includes("exceeded your current quota") && current.message.includes("gemini")
+    return (
+      current.type === "retry" &&
+      current.message.includes("exceeded your current quota") &&
+      current.message.includes("gemini")
+    )
   })
   const [dismissedEditorSelectionKey, setDismissedEditorSelectionKey] = createSignal<string>()
   const editorContext = createMemo(() => {
@@ -1669,7 +1673,11 @@ export function Prompt(props: PromptProps) {
               )}
             </Match>
             <Match when={true}>
-              {canRetryGeminiQuota() ? <text fg={theme.textMuted}>Press Ctrl+r to retry immediately</text> : props.hint ?? <text />}
+              {canRetryGeminiQuota() ? (
+                <text fg={theme.textMuted}>Press Ctrl+r to retry immediately</text>
+              ) : (
+                (props.hint ?? <text />)
+              )}
             </Match>
           </Switch>
           <Show when={status().type !== "retry"}>

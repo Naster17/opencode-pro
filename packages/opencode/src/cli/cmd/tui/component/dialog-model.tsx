@@ -299,15 +299,24 @@ function ModelDetailsContent(props: { provider: ProviderInfo; model: ProviderMod
         </text>
         <box flexDirection="row" flexWrap="wrap" gap={1} paddingTop={1} paddingBottom={1}>
           <DetailBadge label={props.model.status} color={statusColor(theme, props.model.status)} />
-          <DetailBadge label={props.model.capabilities.reasoning ? "Reasoning" : "No reasoning"} color={theme.primary} />
+          <DetailBadge
+            label={props.model.capabilities.reasoning ? "Reasoning" : "No reasoning"}
+            color={theme.primary}
+          />
           <DetailBadge label={props.model.capabilities.toolcall ? "Tool calling" : "No tools"} color={theme.success} />
-          <DetailBadge label={props.model.capabilities.attachment ? "Attachments" : "Text only"} color={theme.warning} />
+          <DetailBadge
+            label={props.model.capabilities.attachment ? "Attachments" : "Text only"}
+            color={theme.warning}
+          />
         </box>
       </box>
 
       <DetailSection title="Limits">
         <DetailRow label="Context window" value={formatNumber(props.model.limit.context)} />
-        <DetailRow label="Max input" value={props.model.limit.input ? formatNumber(props.model.limit.input) : "Uses context window"} />
+        <DetailRow
+          label="Max input"
+          value={props.model.limit.input ? formatNumber(props.model.limit.input) : "Uses context window"}
+        />
         <DetailRow label="Max output" value={formatNumber(props.model.limit.output)} />
       </DetailSection>
 
@@ -329,8 +338,14 @@ function ModelDetailsContent(props: { provider: ProviderInfo; model: ProviderMod
         <Show when={props.model.cost.experimentalOver200K}>
           <DetailRow label="200k+ input" value={formatCost(props.model.cost.experimentalOver200K!.input, "input")} />
           <DetailRow label="200k+ output" value={formatCost(props.model.cost.experimentalOver200K!.output, "output")} />
-          <DetailRow label="200k+ cache read" value={formatCost(props.model.cost.experimentalOver200K!.cache.read, "cache read")} />
-          <DetailRow label="200k+ cache write" value={formatCost(props.model.cost.experimentalOver200K!.cache.write, "cache write")} />
+          <DetailRow
+            label="200k+ cache read"
+            value={formatCost(props.model.cost.experimentalOver200K!.cache.read, "cache read")}
+          />
+          <DetailRow
+            label="200k+ cache write"
+            value={formatCost(props.model.cost.experimentalOver200K!.cache.write, "cache write")}
+          />
         </Show>
       </DetailSection>
 
@@ -344,7 +359,10 @@ function ModelDetailsContent(props: { provider: ProviderInfo; model: ProviderMod
       <DetailSection title="Extra metadata">
         <DetailRow label="Family" value={props.model.family ?? "Unknown"} />
         <DetailRow label="Release date" value={props.model.release_date || "Unknown"} />
-        <DetailRow label="Variant keys" value={reasoningEfforts().length > 0 ? reasoningEfforts().join(", ") : "None"} />
+        <DetailRow
+          label="Variant keys"
+          value={reasoningEfforts().length > 0 ? reasoningEfforts().join(", ") : "None"}
+        />
         <DetailRow label="Headers" value={formatObjectEntries(props.model.headers)} />
         <DetailRow label="Options" value={formatObjectEntries(props.model.options)} />
       </DetailSection>
@@ -359,9 +377,7 @@ function DetailSection(props: { title: string; children: JSX.Element }) {
       <text fg={theme.accent} attributes={TextAttributes.BOLD}>
         {props.title}
       </text>
-      <box paddingLeft={1}>
-        {props.children}
-      </box>
+      <box paddingLeft={1}>{props.children}</box>
     </box>
   )
 }
@@ -383,7 +399,9 @@ function DetailBadge(props: { label: string; color: ReturnType<typeof useTheme>[
   )
 }
 
-function enabledModalities(modalities: ProviderModel["capabilities"]["input"] | ProviderModel["capabilities"]["output"]) {
+function enabledModalities(
+  modalities: ProviderModel["capabilities"]["input"] | ProviderModel["capabilities"]["output"],
+) {
   const result = Object.entries(modalities)
     .filter((item) => item[1])
     .map((item) => item[0])

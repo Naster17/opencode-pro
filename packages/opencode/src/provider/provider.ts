@@ -167,7 +167,10 @@ function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean) {
   return sdk.languageModel(modelID)
 }
 
-function googleDiscoveredModel(provider: Info, model: NonNullable<GoogleModelListResponse["models"]>[number]): Model | undefined {
+function googleDiscoveredModel(
+  provider: Info,
+  model: NonNullable<GoogleModelListResponse["models"]>[number],
+): Model | undefined {
   const id = model.baseModelId ?? model.name?.replace(/^models\//, "")
   if (!id) return
 
