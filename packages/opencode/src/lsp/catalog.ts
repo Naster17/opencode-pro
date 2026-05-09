@@ -266,7 +266,26 @@ function isString(value: unknown): value is string {
 }
 
 function npmBinCandidates(pkg: string, bin: string) {
-  const dir = path.join(Global.Path.cache, "packages", sanitizeNpmPackage(pkg), "node_modules", ".bin")
+  const dir = path.join(Global.Path.cache, "packages", sanitizeNpmPackage(pkg))
+  const binDir = path.join(dir, "node_modules", ".bin")
   const windows = process.platform === "win32" ? [".cmd", ".ps1", ".exe"] : []
-  return [path.join(dir, bin), ...windows.map((ext) => path.join(dir, bin + ext))]
+  const candidates = [path.join(binDir, bin), ...windows.map((ext) => path.join(binDir, bin + ext))]
+
+  // Fallback to internal package bin if .bin is missing
+  try {
+    const pkgJsonPath = path.join(dir, "node_modules", pkg, "package.json")
+    if (fs.existsSync(pkgJsonPath)) {
+      const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8"))
+      if (pkgJson.bin) {
+        const binPath = typeof pkgJson.bin === "string" ? pkgJson.bin : pkgJson.bin[bin] || Object.values(pkgJson.bin)[0]
+        if (binPath) {
+          candidates.push(path.resolve(path.join(dir, "node_modules", pkg), binPath))
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return candidates
 }

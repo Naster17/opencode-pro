@@ -75,7 +75,7 @@ export type Status = typeof Status.Type
 
 export const InstallResult = Schema.Struct({
   ok: Schema.Boolean,
-  message: Schema.String,
+  message: Schema.optional(Schema.String),
 })
   .annotate({ identifier: "LSPInstallResult" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))

@@ -470,6 +470,66 @@ function View(props: { api: TuiPluginApi; initialCurrent?: string }) {
       return { ...prev, [itemID]: action }
     })
 
+  const syncServerState = async (item: ListedServer) => {
+    await sync.bootstrap({ fatal: false }).catch(() => {})
+    return {
+      installed: LSPCatalog.detectInstalled(item.spec),
+      managed: LSPServer.managedInstallExists(item.id),
+    }
+  }
+
+  const resultMessage = (result: { data?: { message?: string }; error?: unknown } | undefined) => {
+    if (result?.data?.message) return result.data.message
+    if (result?.error instanceof Error) return result.error.message
+    if (typeof result?.error === "string") return result.error
+  }
+
+  const installToast = (
+    item: ListedServer,
+    state: { installed: boolean; managed: boolean },
+    failed: boolean,
+    message?: string,
+  ) => {
+    if (state.installed) {
+      props.api.ui.toast({
+        variant: "success",
+        message: state.managed
+          ? `Successfully installed ${item.title}`
+          : `Successfully installed ${item.title} and detected it from your system`,
+      })
+      return
+    }
+
+    props.api.ui.toast({
+      variant: failed ? "error" : "warning",
+      message: failed ? message ?? `Failed to install ${item.id} LSP` : `Finished installing ${item.title}, but it is still not detected in system`,
+    })
+  }
+
+  const deleteToast = (
+    item: ListedServer,
+    state: { installed: boolean; managed: boolean },
+    failed: boolean,
+    message?: string,
+  ) => {
+    if (!state.managed) {
+      props.api.ui.toast({
+        variant: state.installed ? "warning" : "success",
+        message: state.installed
+          ? `Deleted managed ${item.title}, but another version was found on your system`
+          : `Successfully deleted ${item.title}`,
+      })
+      return
+    }
+
+    props.api.ui.toast({
+      variant: "error",
+      message: failed
+        ? message ?? `Failed to delete ${item.id} LSP`
+        : `Failed to fully delete ${item.title}. Managed files are still present.`,
+    })
+  }
+
   const flipGlobal = () => {
     if (busy()) return
     const enabled = !globalEnabled()
@@ -544,34 +604,18 @@ function View(props: { api: TuiPluginApi; initialCurrent?: string }) {
     void props.api.client.lsp
       .install({ id: item.id })
       .then(async (result) => {
-        if (!result.data) {
-          props.api.ui.toast({
-            variant: "error",
-            message: `Failed to install ${item.id} LSP`,
-          })
-          return
-        }
-        if (!result.data.ok) {
-          props.api.ui.toast({
-            variant: "warning",
-            message: result.data.message,
-          })
-          return
-        }
-        await sync.bootstrap({ fatal: false })
-        const installed = LSPCatalog.detectInstalled(item.spec)
-        props.api.ui.toast({
-          variant: installed ? "success" : "warning",
-          message: installed
-            ? `Installed ${item.title}`
-            : `Finished installing ${item.title}, but it is still not detected`,
-        })
+        const state = await syncServerState(item)
+        const failed = result?.data?.ok === false || Boolean(result?.error)
+        installToast(
+          item,
+          state,
+          failed,
+          resultMessage(result),
+        )
       })
-      .catch((error: unknown) => {
-        props.api.ui.toast({
-          variant: "error",
-          message: error instanceof Error ? error.message : `Failed to install ${item.id} LSP`,
-        })
+      .catch(async (error: unknown) => {
+        const state = await syncServerState(item)
+        installToast(item, state, true, error instanceof Error ? `Installation error: ${error.message}` : `Failed to install ${item.id} LSP`)
       })
       .finally(() => {
         setPendingState(item.id)
@@ -588,34 +632,18 @@ function View(props: { api: TuiPluginApi; initialCurrent?: string }) {
     void props.api.client.lsp
       .uninstall({ id: item.id })
       .then(async (result) => {
-        if (!result.data) {
-          props.api.ui.toast({
-            variant: "error",
-            message: `Failed to delete ${item.id} LSP`,
-          })
-          return
-        }
-        if (!result.data.ok) {
-          props.api.ui.toast({
-            variant: "warning",
-            message: result.data.message,
-          })
-          return
-        }
-        await sync.bootstrap({ fatal: false })
-        const installed = LSPCatalog.detectInstalled(item.spec)
-        props.api.ui.toast({
-          variant: installed ? "warning" : "success",
-          message: installed
-            ? `Deleted managed ${item.title}, but another binary is still available`
-            : `Deleted ${item.title}`,
-        })
+        const state = await syncServerState(item)
+        const failed = result?.data?.ok === false || Boolean(result?.error)
+        deleteToast(
+          item,
+          state,
+          failed,
+          resultMessage(result),
+        )
       })
-      .catch((error: unknown) => {
-        props.api.ui.toast({
-          variant: "error",
-          message: error instanceof Error ? error.message : `Failed to delete ${item.id} LSP`,
-        })
+      .catch(async (error: unknown) => {
+        const state = await syncServerState(item)
+        deleteToast(item, state, true, error instanceof Error ? `Deletion error: ${error.message}` : `Failed to delete ${item.id} LSP`)
       })
       .finally(() => {
         setPendingState(item.id)

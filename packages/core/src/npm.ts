@@ -207,10 +207,16 @@ export const layer = Layer.effect(
           if (parsed?.bin) {
             const unscoped = pkg.startsWith("@") ? pkg.split("/")[1] : pkg
             const parsedBin = parsed.bin
-            if (typeof parsedBin === "string") return Option.some(unscoped)
-            const keys = Object.keys(parsedBin)
-            if (keys.length === 1) return Option.some(keys[0])
-            return parsedBin[unscoped] ? Option.some(unscoped) : Option.some(keys[0])
+            const binName = typeof parsedBin === "string" ? unscoped : parsedBin[unscoped] ? unscoped : Object.keys(parsedBin)[0]
+            const binRelativePath = typeof parsedBin === "string" ? parsedBin : parsedBin[binName]
+
+            if (binName && files.includes(binName)) return Option.some(binName)
+
+            // If not in .bin, try direct path
+            if (binRelativePath) {
+              const directPath = path.resolve(path.join(dir, "node_modules", pkg), binRelativePath)
+              return Option.some(path.relative(binDir, directPath))
+            }
           }
         }
 

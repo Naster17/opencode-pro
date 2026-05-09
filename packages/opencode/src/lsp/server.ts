@@ -68,7 +68,7 @@ export interface Info {
 
 export interface InstallResult {
   ok: boolean
-  message: string
+  message?: string
 }
 
 export const Deno: Info = {
@@ -2107,13 +2107,20 @@ const spawnInstallable = new Map<string, Info>([
 
 export function managedInstallExists(id: string) {
   const npm = npmInstallable.get(id)
-  if (npm) return pathExistsSync(npmCacheDirectory(npm.pkg))
+  if (npm) {
+    const dir = npmCacheDirectory(npm.pkg)
+    if (!pathExistsSync(dir)) return false
+    const pkgJson = path.join(dir, "node_modules", npm.pkg, "package.json")
+    if (pathExistsSync(pkgJson)) return true
+    return fsSync.readdirSync(dir, { withFileTypes: true }).length > 0
+  }
 
   if (id === "csharp" || id === "razor") {
     return Boolean(roslynLanguageServerGlobalPathSync())
   }
 
-  return managedPaths(id).some(pathExistsSync)
+  const paths = managedPaths(id)
+  return paths.length > 0 && paths.some(pathExistsSync)
 }
 
 async function installBySpawning(id: string, server: Info, ctx: InstanceContext): Promise<InstallResult> {
@@ -2134,20 +2141,31 @@ async function installBySpawning(id: string, server: Info, ctx: InstanceContext)
 async function uninstallManaged(id: string) {
   const npm = npmInstallable.get(id)
   if (npm) {
-    await fs.rm(npmCacheDirectory(npm.pkg), { force: true, recursive: true })
+    const dir = npmCacheDirectory(npm.pkg)
+    if (pathExistsSync(dir)) {
+      await fs.rm(dir, { force: true, recursive: true })
+    }
     return true
   }
 
   if (id === "csharp" || id === "razor") {
-    if (!roslynLanguageServerGlobalPathSync()) return false
+    if (!roslynLanguageServerGlobalPathSync()) return true // Already gone
     if (!which("dotnet")) return false
     const result = await run(["dotnet", "tool", "uninstall", "--global", "roslyn-language-server"])
     return result.code === 0
   }
 
   const targets = managedPaths(id)
-  if (!targets.length) return false
-  await Promise.all(targets.map((target) => fs.rm(target, { force: true, recursive: true })))
+  if (targets.length > 0) {
+    await Promise.all(
+      targets.map((target) => {
+        if (pathExistsSync(target)) {
+          return fs.rm(target, { force: true, recursive: true })
+        }
+        return Promise.resolve()
+      }),
+    )
+  }
   return true
 }
 
@@ -2161,16 +2179,24 @@ export async function install(id: string, ctx: InstanceContext): Promise<Install
 
   const npm = npmInstallable.get(id)
   if (npm) {
-    const resolved = await Npm.which(npm.pkg, npm.bin)
-    if (!resolved) {
+    try {
+      await Npm.add(npm.pkg)
+      const resolved = await Npm.which(npm.pkg, npm.bin)
+      if (!resolved) {
+        return {
+          ok: false,
+          message: `Failed to verify ${id} LSP after installation.`,
+        }
+      }
+      return {
+        ok: true,
+        message: `Installed ${id} LSP`,
+      }
+    } catch (error) {
       return {
         ok: false,
-        message: `Failed to install ${id} LSP. Check logs and required runtimes.`,
+        message: `Failed to install ${id} LSP: ${error instanceof Error ? error.message : "Unknown error"}`,
       }
-    }
-    return {
-      ok: true,
-      message: `Installed ${id} LSP`,
     }
   }
 
@@ -2198,24 +2224,42 @@ export async function install(id: string, ctx: InstanceContext): Promise<Install
 }
 
 export async function uninstall(id: string, _ctx: InstanceContext): Promise<InstallResult> {
-  if (!managedInstallExists(id)) {
+  try {
+    // Check if it's actually a managed install first
+    const isManaged = managedInstallExists(id)
+
+    if (!isManaged) {
+      return {
+        ok: false,
+        message: `No managed install found for ${id}. If it is coming from your system PATH, remove it manually.`,
+      }
+    }
+
+    const ok = await uninstallManaged(id)
+    if (!ok) {
+      return {
+        ok: false,
+        message: `Failed to delete ${id} LSP. Check logs and required runtimes.`,
+      }
+    }
+
+    // Double check that it's actually gone
+    if (managedInstallExists(id)) {
+      return {
+        ok: false,
+        message: `Failed to completely remove ${id} LSP files. Some files may be locked.`,
+      }
+    }
+
+    return {
+      ok: true,
+      message: `Deleted ${id} LSP`,
+    }
+  } catch (error) {
     return {
       ok: false,
-      message: `No managed install found for ${id}. If it is coming from your system PATH, remove it manually.`,
+      message: `Failed to delete ${id} LSP: ${error instanceof Error ? error.message : "Unknown error"}`,
     }
-  }
-
-  const ok = await uninstallManaged(id)
-  if (!ok) {
-    return {
-      ok: false,
-      message: `Failed to delete ${id} LSP. Check logs and required runtimes.`,
-    }
-  }
-
-  return {
-    ok: true,
-    message: `Deleted ${id} LSP`,
   }
 }
 
