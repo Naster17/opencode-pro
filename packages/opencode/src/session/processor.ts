@@ -24,6 +24,7 @@ import { EventV2 } from "@/v2/event"
 import { SessionEvent } from "@/v2/session-event"
 import { Modelv2 } from "@/v2/model"
 import * as DateTime from "effect/DateTime"
+import { ProviderError } from "@/provider/error"
 
 const DOOM_LOOP_THRESHOLD = 3
 const log = Log.create({ service: "session.processor" })
@@ -646,7 +647,7 @@ export const layer: Layer.Layer<
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
         slog.error("process", { error: errorMessage(e), stack: e instanceof Error ? e.stack : undefined })
         const error = parse(e)
-        if (MessageV2.ContextOverflowError.isInstance(error)) {
+        if (MessageV2.ContextOverflowError.isInstance(error) || ProviderError.isOverflow(errorMessage(e))) {
           if ((yield* config.get()).compaction?.auto === false) {
             ctx.assistantMessage.error = error
             yield* bus.publish(Session.Event.Error, { sessionID: ctx.assistantMessage.sessionID, error })

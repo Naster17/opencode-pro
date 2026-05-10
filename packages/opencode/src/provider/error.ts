@@ -36,7 +36,7 @@ function isOpenAiErrorRetryable(e: APICallError) {
 
 // Providers not reliably handled in this function:
 // - z.ai: can accept overflow silently (needs token-count/context-window checks)
-function isOverflow(message: string) {
+export function isOverflow(message: string) {
   if (OVERFLOW_PATTERNS.some((p) => p.test(message))) return true
 
   // Providers/status patterns handled outside of regex list:
@@ -121,15 +121,19 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
   if (!body) return
 
   const responseBody = JSON.stringify(body)
+  const m = typeof body.message === "string" ? body.message : (typeof body.error?.message === "string" ? body.error.message : "")
+  
+  if (isOverflow(m) || body?.error?.code === "context_length_exceeded") {
+    return {
+      type: "context_overflow",
+      message: m || "Input exceeds context window of this model",
+      responseBody,
+    }
+  }
+
   if (body.type !== "error") return
 
   switch (body?.error?.code) {
-    case "context_length_exceeded":
-      return {
-        type: "context_overflow",
-        message: "Input exceeds context window of this model",
-        responseBody,
-      }
     case "insufficient_quota":
       return {
         type: "api_error",

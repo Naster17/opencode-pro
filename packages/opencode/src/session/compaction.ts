@@ -107,7 +107,7 @@ function filePlaceholder(part: MessageV2.FilePart): MessageV2.TextPart | undefin
 function compactionMessages(messages: MessageV2.WithParts[]) {
   return messages.flatMap((message): MessageV2.WithParts[] => {
     if (message.info.role === "user") {
-      const parts = message.parts.flatMap((part): MessageV2.TextPart[] => {
+      const parts = message.parts.flatMap((part): MessageV2.Part[] => {
         if (part.type === "text" && !part.ignored && !part.synthetic && part.text.trim()) return [part]
         if (part.type === "file") return filePlaceholder(part) ? [filePlaceholder(part)!] : []
         return []
@@ -127,8 +127,22 @@ function compactionMessages(messages: MessageV2.WithParts[]) {
       ]
     }
 
-    const parts = message.parts.flatMap((part): MessageV2.TextPart[] => {
+    const parts = message.parts.flatMap((part): MessageV2.Part[] => {
       if (part.type === "text" && part.text.trim()) return [part]
+      if (part.type === "tool") {
+        const status = part.state.status
+        const result = status === "completed" ? "success" : status === "error" ? "error" : status
+        return [
+          {
+            id: part.id,
+            sessionID: part.sessionID,
+            messageID: part.messageID,
+            type: "text",
+            text: `[Action: ${part.tool} | Result: ${result}]`,
+            synthetic: true,
+          } as MessageV2.TextPart,
+        ]
+      }
       if (part.type !== "reasoning" || !part.text.trim()) return []
       return [
         {
@@ -420,7 +434,7 @@ export const layer: Layer.Layer<
         | undefined
       if (input.overflow) {
         const idx = input.messages.findIndex((m) => m.info.id === input.parentID)
-        for (let i = idx - 1; i >= 0; i--) {
+        for (let i = idx; i >= 0; i--) {
           const msg = input.messages[i]
           if (msg.info.role === "user" && !msg.parts.some((p) => p.type === "compaction")) {
             replay = { info: msg.info, parts: msg.parts }
@@ -430,9 +444,8 @@ export const layer: Layer.Layer<
         }
         const hasContent =
           replay && messages.some((m) => m.info.role === "user" && !m.parts.some((p) => p.type === "compaction"))
-        if (!hasContent) {
-          replay = undefined
-          messages = input.messages
+        if (!hasContent && replay) {
+          messages = input.messages.slice(0, idx)
         }
       }
 

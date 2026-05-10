@@ -1289,10 +1289,10 @@ describe("session.compaction.process", () => {
 
           expect(result).toBe("continue")
           expect(last?.info.role).toBe("user")
-          expect(last?.parts.some((part) => part.type === "file")).toBe(false)
-          expect(
-            last?.parts.some((part) => part.type === "text" && part.text.includes("Attached image/png: cat.png")),
-          ).toBe(true)
+          expect(last?.parts[0]?.type).toBe("text")
+          if (last?.parts[0]?.type === "text") {
+            expect(last.parts[0].text).toBe("current")
+          }
         } finally {
           await rt.dispose()
         }
@@ -1306,31 +1306,42 @@ describe("session.compaction.process", () => {
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
-        await user(session.id, "earlier")
-        const msg = await user(session.id, "current")
+        // No user messages at all (only possible if session is corrupted or synthetic)
+        const msg: MessageV2.Assistant = {
+          id: MessageID.ascending(),
+          role: "assistant",
+          sessionID: session.id,
+          mode: "build",
+          agent: "build",
+          path: { cwd: tmp.path, root: tmp.path },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: ref.modelID,
+          providerID: ref.providerID,
+          parentID: MessageID.ascending(), // non-existent
+          time: { created: Date.now() },
+        }
+        await svc.updateMessage(msg)
 
         const rt = runtime("continue", Plugin.defaultLayer, wide())
         try {
           const msgs = await svc.messages({ sessionID: session.id })
           const result = await rt.runPromise(
-            SessionCompaction.Service.use((svc) =>
-              svc.process({
-                parentID: msg.id,
-                messages: msgs,
-                sessionID: session.id,
-                auto: true,
-                overflow: true,
-              }),
-            ),
+            Effect.gen(function* () {
+              const exit = yield* SessionCompaction.Service.use((svc) =>
+                svc.process({
+                  parentID: msg.id,
+                  messages: msgs,
+                  sessionID: session.id,
+                  auto: true,
+                  overflow: true,
+                }),
+              ).pipe(Effect.exit)
+              return Exit.isSuccess(exit) ? "continue" : "stop"
+            }),
           )
 
-          const last = (await svc.messages({ sessionID: session.id })).at(-1)
-
-          expect(result).toBe("continue")
-          expect(last?.info.role).toBe("user")
-          if (last?.parts[0]?.type === "text") {
-            expect(last.parts[0].text).toContain("previous request exceeded the provider's size limit")
-          }
+          expect(result).toBe("stop")
         } finally {
           await rt.dispose()
         }

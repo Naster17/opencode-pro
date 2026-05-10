@@ -123,9 +123,15 @@ export function summarizeUsage(
   const totals = sessions.reduce(
     (sum, session) => {
       const active = session.session ? (options.start ? session.session.time.updated >= options.start : true) : true
-      const messages = options.start
+      let messages = options.start
         ? session.messages.filter((item) => item.time.created >= options.start!)
         : session.messages
+
+      const revertID = session.session?.revert?.messageID
+      if (revertID) {
+        messages = messages.filter((m) => m.id < revertID)
+      }
+
       const parts = messages.flatMap((message) =>
         session.getParts(message.id).map((part) => ({
           message,

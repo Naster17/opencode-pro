@@ -39,6 +39,8 @@ nix run github:Naster17/opencode-pro
 | `/usage` Dashboard             | Interactive usage analytics with Overview, Sessions, and Models views across Today, 7d, 30d, or all-time history.                                                                            |
 | Smarter Thinking Controls      | Refined thinking mode UX with visible levels, cleaner variant labels, and faster cycling for reasoning-capable models.                                                                       |
 | `Ctrl+T` Variant Flow          | `Ctrl+T` cycles model variants cleanly, while `Ctrl+Shift+T` or `F3` steps through supported thinking levels.                                                                                |
+| Seamless Context Recovery      | Automatic detection of context overflow errors. Triggers silent history compaction and retries the request without interrupting your workflow. Improved summaries include tool call results for better continuity. |
+| Reactive Context Metrics       | Metrics in the sidebar and prompt footer now update instantly after Undo (`Ctrl+X` `u`) or Redo (`Ctrl+X` `r`) operations, accurately reflecting the usable context size.                      |
 | Privacy-First Hardening        | Telemetry is stripped back, session sharing is permanently disabled, and remote workspace sync cannot be re-enabled by env flags.                                                            |
 
 ### Desktop App (BETA)
