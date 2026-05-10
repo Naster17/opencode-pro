@@ -65,8 +65,14 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       getParts: props.api.state.part,
     }], props.api.state.provider)
 
+    const reasoning = aggregated.reasoning > 0 ? aggregated.reasoning : rootMessages.reduce((sum, msg) => {
+      if (msg.role !== "assistant") return sum
+      return sum + (msg.tokens.reasoning ?? 0)
+    }, 0)
+
     return {
       ...aggregated,
+      reasoning,
       context_tokens_formatted: Locale.number(rootOnly.context_tokens),
       average_context_percent: rootOnly.average_context_percent,
     }
@@ -74,7 +80,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
 
   const totalStats = createMemo(() => {
     const leftLabels = ["ctx", "in", "total", "tools", "spent", "code"]
-    const rightLabels = ["out", "cached", "compact", "avg.gen"]
+    const rightLabels = ["reason", "out", "cached", "compact", "avg.gen"]
     
     const leftWidth = Math.max(...leftLabels.map((l) => l.length))
     const rightWidth = Math.max(...rightLabels.map((l) => l.length))
@@ -88,6 +94,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
 
     return {
       ctx: formatRow("ctx", usage().context_tokens_formatted, leftWidth),
+      reason: formatRow("reason", Locale.number(usage().reasoning), rightWidth),
       in: formatRow("in", Locale.number(usage().input), leftWidth),
       out: formatRow("out", Locale.number(usage().output), rightWidth),
       total: formatRow("total", Locale.number(usage().tokens), leftWidth),
@@ -113,7 +120,10 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       <text fg={theme().text}>
         <b>Metrics</b>
       </text>
-      {totalStats().ctx}
+      <box flexDirection="row">
+        <box width={totalStats().columnGap}>{totalStats().ctx}</box>
+        <Show when={usage().reasoning > 0}>{totalStats().reason}</Show>
+      </box>
       <box flexDirection="row">
         <box width={totalStats().columnGap}>{totalStats().in}</box>
         {totalStats().out}

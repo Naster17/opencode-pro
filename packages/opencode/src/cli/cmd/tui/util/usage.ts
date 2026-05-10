@@ -158,6 +158,21 @@ export function summarizeUsage(
           { output: 0, duration: 0 },
         )
       const cost = assistants.reduce((acc, item) => acc + (item.cost ?? 0), 0)
+
+      const reasoningTokens = assistants.reduce((acc, item) => {
+        let tokens = item.tokens.reasoning
+        // Fallback for models that don't report reasoning tokens but have reasoning parts
+        if (tokens === 0) {
+          const reasoningParts = session.getParts(item.id).filter((p) => p.type === "reasoning")
+          for (const part of reasoningParts) {
+            if ("text" in part) {
+              tokens += Math.ceil(part.text.length / 4)
+            }
+          }
+        }
+        return acc + tokens
+      }, 0)
+
       const session_tokens = assistants.reduce(
         (acc, item) =>
           acc +
@@ -219,7 +234,7 @@ export function summarizeUsage(
       return {
         input: sum.input + assistants.reduce((acc, item) => acc + item.tokens.input, 0),
         output: sum.output + assistants.reduce((acc, item) => acc + item.tokens.output, 0),
-        reasoning: sum.reasoning + assistants.reduce((acc, item) => acc + item.tokens.reasoning, 0),
+        reasoning: sum.reasoning + reasoningTokens,
         cache_read: sum.cache_read + assistants.reduce((acc, item) => acc + item.tokens.cache.read, 0),
         cache_write: sum.cache_write + assistants.reduce((acc, item) => acc + item.tokens.cache.write, 0),
         cost: sum.cost + cost,
