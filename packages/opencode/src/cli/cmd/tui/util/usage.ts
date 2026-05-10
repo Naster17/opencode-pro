@@ -169,13 +169,7 @@ export function summarizeUsage(
         0,
       )
       const last = assistants.findLast((item) => item.tokens.output > 0)
-      const context_tokens = last
-        ? last.tokens.input +
-          last.tokens.output +
-          last.tokens.reasoning +
-          last.tokens.cache.read +
-          last.tokens.cache.write
-        : 0
+      const context_tokens = last ? last.tokens.input + last.tokens.cache.read + last.tokens.cache.write : 0
       const context_percent =
         last && context_tokens > 0
           ? (() => {

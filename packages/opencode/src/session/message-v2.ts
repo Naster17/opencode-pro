@@ -36,6 +36,8 @@ interface FetchDecompressionError extends Error {
 }
 
 export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached image(s) from tool result:"
+export const COMPACTION_CONTEXT_PROMPT =
+  "Use the following assistant summary as the conversation context carried forward from the previous chat."
 export { isMedia }
 
 export const OutputLengthError = namedSchemaError("MessageOutputLengthError", {})
@@ -824,7 +826,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         if (part.type === "compaction") {
           userMessage.parts.push({
             type: "text",
-            text: "What did we do so far?",
+            text: COMPACTION_CONTEXT_PROMPT,
           })
         }
         if (part.type === "subtask") {
@@ -1081,56 +1083,20 @@ export function get(input: { sessionID: SessionID; messageID: MessageID }): With
 }
 
 export function filterCompacted(msgs: Iterable<WithParts>) {
-  const result = [] as WithParts[]
+  const result = Array.from(msgs).reverse()
   const completed = new Set<string>()
-  let retain: MessageID | undefined
-  for (const msg of msgs) {
-    result.push(msg)
-    if (retain) {
-      if (msg.info.id === retain) break
-      continue
-    }
-    if (msg.info.role === "user" && completed.has(msg.info.id)) {
-      const part = msg.parts.find((item): item is CompactionPart => item.type === "compaction")
-      if (!part) continue
-      if (!part.tail_start_id) break
-      retain = part.tail_start_id
-      if (msg.info.id === retain) break
-      continue
-    }
-    if (msg.info.role === "user" && completed.has(msg.info.id) && msg.parts.some((part) => part.type === "compaction"))
-      break
-    if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish && !msg.info.error)
-      completed.add(msg.info.parentID)
+  for (const msg of result) {
+    if (msg.info.role !== "assistant" || !msg.info.summary || !msg.info.finish || msg.info.error) continue
+    completed.add(msg.info.parentID)
   }
-  result.reverse()
-  const compactionIndex = result.findLastIndex(
+  const latest = result.findLastIndex(
     (msg) =>
       msg.info.role === "user" &&
-      msg.parts.some((item): item is CompactionPart => item.type === "compaction" && item.tail_start_id !== undefined),
+      completed.has(msg.info.id) &&
+      msg.parts.some((part): part is CompactionPart => part.type === "compaction"),
   )
-  const compaction = result[compactionIndex]
-  const part = compaction?.parts.find(
-    (item): item is CompactionPart => item.type === "compaction" && item.tail_start_id !== undefined,
-  )
-  const summaryIndex = compaction
-    ? result.findIndex(
-        (msg, index) =>
-          index > compactionIndex &&
-          msg.info.role === "assistant" &&
-          msg.info.summary &&
-          msg.info.parentID === compaction.info.id,
-      )
-    : -1
-  const tailIndex = part?.tail_start_id ? result.findIndex((msg) => msg.info.id === part.tail_start_id) : -1
-  if (tailIndex >= 0 && tailIndex < compactionIndex && summaryIndex > compactionIndex) {
-    return [
-      ...result.slice(compactionIndex, summaryIndex + 1),
-      ...result.slice(tailIndex, compactionIndex),
-      ...result.slice(summaryIndex + 1),
-    ]
-  }
-  return result
+  if (latest < 0) return result
+  return result.slice(latest)
 }
 
 export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: SessionID) {

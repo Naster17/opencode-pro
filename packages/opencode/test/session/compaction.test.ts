@@ -1136,7 +1136,7 @@ describe("session.compaction.process", () => {
     })
   })
 
-  test("retains a split turn suffix when a later message fits the preserve token budget", async () => {
+  test("summarizes the full visible segment before starting a fresh compacted segment", async () => {
     await using tmp = await tmpdir({ git: true })
     const stub = llm()
     let captured = ""
@@ -1194,13 +1194,14 @@ describe("session.compaction.process", () => {
           expect(part?.type).toBe("compaction")
           expect(part?.tail_start_id).toBe(keep.id)
           expect(captured).toContain("zzzz")
-          expect(captured).not.toContain("keep tail")
+          expect(captured).toContain("keep tail")
 
           const filtered = MessageV2.filterCompacted(MessageV2.stream(session.id))
-          expect(filtered.map((msg) => msg.info.id).slice(0, 3)).toEqual([parent!, expect.any(String), keep.id])
+          expect(filtered.map((msg) => msg.info.id)).toEqual([parent!, expect.any(String)])
           expect(filtered[1]?.info.role).toBe("assistant")
           expect(filtered[1]?.info.role === "assistant" ? filtered[1].info.summary : false).toBe(true)
           expect(filtered.map((msg) => msg.info.id)).not.toContain(large.id)
+          expect(filtered.map((msg) => msg.info.id)).not.toContain(keep.id)
         } finally {
           await rt.dispose()
         }
@@ -1569,7 +1570,7 @@ describe("session.compaction.process", () => {
     })
   })
 
-  test("summarizes only the head while keeping recent tail out of summary input", async () => {
+  test("summarizes the full visible segment input without injecting the compaction seed prompt", async () => {
     const stub = llm()
     let captured = ""
     stub.push(
@@ -1610,9 +1611,83 @@ describe("session.compaction.process", () => {
           )
 
           expect(captured).toContain("older context")
-          expect(captured).not.toContain("keep this turn")
-          expect(captured).not.toContain("and this one too")
-          expect(captured).not.toContain("What did we do so far?")
+          expect(captured).toContain("keep this turn")
+          expect(captured).toContain("and this one too")
+          expect(captured).not.toContain("Use the following assistant summary as the conversation context carried forward from the previous chat.")
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("excludes tool output from compaction summary input", async () => {
+    const stub = llm()
+    let captured = ""
+    stub.push(
+      reply("summary", (input) => {
+        captured = JSON.stringify(input.messages)
+      }),
+    )
+
+    await using tmp = await tmpdir({ git: true })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await svc.create({})
+        const first = await user(session.id, "run something")
+        const replyMsg = await assistant(session.id, first.id, tmp.path)
+        await svc.updatePart({
+          id: PartID.ascending(),
+          messageID: replyMsg.id,
+          sessionID: session.id,
+          type: "text",
+          text: "Ran the command",
+        })
+        await svc.updatePart({
+          id: PartID.ascending(),
+          messageID: replyMsg.id,
+          sessionID: session.id,
+          type: "tool",
+          callID: crypto.randomUUID(),
+          tool: "bash",
+          state: {
+            status: "completed",
+            input: { cmd: "echo hi" },
+            output: "SECRET_TOOL_OUTPUT",
+            title: "done",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+        await user(session.id, "continue")
+        await SessionCompaction.create({
+          sessionID: session.id,
+          agent: "build",
+          model: ref,
+          auto: false,
+        })
+
+        const rt = liveRuntime(stub.layer, wide())
+        try {
+          const msgs = await svc.messages({ sessionID: session.id })
+          const parent = msgs.at(-1)?.info.id
+          expect(parent).toBeTruthy()
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: parent!,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              }),
+            ),
+          )
+
+          expect(captured).toContain("run something")
+          expect(captured).toContain("Ran the command")
+          expect(captured).toContain("continue")
+          expect(captured).not.toContain("SECRET_TOOL_OUTPUT")
         } finally {
           await rt.dispose()
         }
@@ -1694,7 +1769,7 @@ describe("session.compaction.process", () => {
     })
   })
 
-  test("keeps recent pre-compaction turns across repeated compactions", async () => {
+  test("repeated compactions keep only the latest compacted segment visible", async () => {
     const stub = llm()
     stub.push(reply("summary one"))
     stub.push(reply("summary two"))
@@ -1756,8 +1831,9 @@ describe("session.compaction.process", () => {
 
           expect(ids).not.toContain(u1.id)
           expect(ids).not.toContain(u2.id)
-          expect(ids).toContain(u3.id)
-          expect(ids).toContain(u4.id)
+          expect(ids).not.toContain(u3.id)
+          expect(ids).not.toContain(u4.id)
+          expect(ids).toEqual([parent!, expect.any(String)])
           expect(filtered.some((msg) => msg.info.role === "assistant" && msg.info.summary)).toBe(true)
           expect(
             filtered.some((msg) => msg.info.role === "user" && msg.parts.some((part) => part.type === "compaction")),

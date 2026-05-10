@@ -34,6 +34,7 @@ import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
 import { formatDuration } from "@/util/format"
+import { summarizeUsage } from "../../util/usage"
 import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
@@ -338,20 +339,26 @@ export function Prompt(props: PromptProps) {
 
   const usage = createMemo(() => {
     if (!props.sessionID) return
-    const msg = sync.data.message[props.sessionID] ?? []
-    const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
-    if (!last) return
+    const messages = sync.data.message[props.sessionID] ?? []
+    if (messages.length === 0) return
 
-    const tokens =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    if (tokens <= 0) return
+    const summary = summarizeUsage(
+      [
+        {
+          session: sync.session.get(props.sessionID),
+          messages,
+          getParts: (messageID) => sync.data.part[messageID] ?? [],
+        },
+      ],
+      sync.data.provider,
+    )
 
-    const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
-    const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
-    const cost = msg.reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0)
+    if (summary.context_tokens <= 0) return
+
+    const pct = summary.average_context_percent !== null ? `${summary.average_context_percent}%` : undefined
     return {
-      context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
-      cost: cost > 0 ? money.format(cost) : undefined,
+      context: pct ? `${Locale.number(summary.context_tokens)} (${pct})` : Locale.number(summary.context_tokens),
+      cost: summary.cost > 0 ? money.format(summary.cost) : undefined,
     }
   })
 

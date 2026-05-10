@@ -93,6 +93,60 @@ type CompletedCompaction = {
   summary: string | undefined
 }
 
+function filePlaceholder(part: MessageV2.FilePart): MessageV2.TextPart | undefined {
+  if (part.mime === "text/plain" || part.mime === "application/x-directory") return
+  return {
+    id: part.id,
+    sessionID: part.sessionID,
+    messageID: part.messageID,
+    type: "text",
+    text: `[Attached ${part.mime}: ${part.filename ?? "file"}]`,
+  }
+}
+
+function compactionMessages(messages: MessageV2.WithParts[]) {
+  return messages.flatMap((message): MessageV2.WithParts[] => {
+    if (message.info.role === "user") {
+      const parts = message.parts.flatMap((part): MessageV2.TextPart[] => {
+        if (part.type === "text" && !part.ignored && !part.synthetic && part.text.trim()) return [part]
+        if (part.type === "file") return filePlaceholder(part) ? [filePlaceholder(part)!] : []
+        return []
+      })
+      if (!parts.length) return []
+      return [
+        {
+          info: {
+            ...message.info,
+            format: undefined,
+            summary: undefined,
+            system: undefined,
+            tools: undefined,
+          },
+          parts,
+        },
+      ]
+    }
+
+    const parts = message.parts.flatMap((part): MessageV2.TextPart[] => {
+      if (part.type === "text" && part.text.trim()) return [part]
+      if (part.type !== "reasoning" || !part.text.trim()) return []
+      return [
+        {
+          id: part.id,
+          sessionID: part.sessionID,
+          messageID: part.messageID,
+          type: "text",
+          text: part.text,
+          metadata: part.metadata,
+          time: part.time,
+        },
+      ]
+    })
+    if (!parts.length) return []
+    return [{ info: message.info, parts }]
+  })
+}
+
 function summaryText(message: MessageV2.WithParts) {
   const text = message.parts
     .filter((part): part is MessageV2.TextPart => part.type === "text")
@@ -391,8 +445,9 @@ export const layer: Layer.Layer<
       const prior = completedCompactions(history)
       const hidden = new Set(prior.flatMap((item) => [item.userIndex, item.assistantIndex]))
       const previousSummary = prior.at(-1)?.summary
+      const visible = history.filter((_, index) => !hidden.has(index))
       const selected = yield* select({
-        messages: history.filter((_, index) => !hidden.has(index)),
+        messages: visible,
         cfg,
         model,
       })
@@ -403,7 +458,7 @@ export const layer: Layer.Layer<
         { context: [], prompt: undefined },
       )
       const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
-      const msgs = structuredClone(selected.head)
+      const msgs = structuredClone(compactionMessages(visible))
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {
         stripMedia: true,

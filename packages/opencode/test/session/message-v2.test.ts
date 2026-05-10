@@ -261,7 +261,10 @@ describe("session.message-v2.toModelMessage", () => {
             filename: "img.png",
             data: "https://example.com/img.png",
           },
-          { type: "text", text: "What did we do so far?" },
+          {
+            type: "text",
+            text: "Use the following assistant summary as the conversation context carried forward from the previous chat.",
+          },
           { type: "text", text: "The following tool was executed by the user" },
         ],
       },
