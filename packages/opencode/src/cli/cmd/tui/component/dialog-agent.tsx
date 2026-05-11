@@ -28,6 +28,9 @@ const saveKey = Keybind.parse("ctrl+s,super+s").at(0)
 const AGENT_NAME = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/
 const GENERATED_AGENT_COLORS = ["success", "warning", "primary", "error", "info"] as const
 
+type AgentStorageScope = "local" | "global"
+type AgentSource = "native" | AgentStorageScope
+
 function buildAgentFrontmatter(input: { item?: Agent; color?: string }) {
   return {
     ...(input.item?.description ? { description: input.item.description } : {}),
@@ -43,24 +46,43 @@ function buildAgentFrontmatter(input: { item?: Agent; color?: string }) {
 
 function projectRoot(project: ReturnType<typeof useProject>) {
   const paths = project.instance.path()
-  return paths.worktree || paths.directory
+  if (paths.directory) return paths.directory
+  if (paths.worktree && paths.worktree !== "/") return paths.worktree
+  return process.cwd()
 }
 
-function agentPath(name: string) {
-  return path.join(Global.Path.config, "agent", `${name}.md`)
+function globalAgentDir() {
+  return path.join(Global.Path.config, "agents")
+}
+
+function localAgentDir(project: ReturnType<typeof useProject>) {
+  return path.join(projectRoot(project), ".opencode", "agents")
+}
+
+function agentPath(input: { project: ReturnType<typeof useProject>; name: string; scope: AgentStorageScope }) {
+  const dir = input.scope === "local" ? localAgentDir(input.project) : globalAgentDir()
+  return path.join(dir, `${input.name}.md`)
 }
 
 function legacyConfigPath(project: ReturnType<typeof useProject>) {
   return path.join(projectRoot(project), "config.json")
 }
 
-function legacyAgentDirs(project: ReturnType<typeof useProject>) {
+function globalLegacyAgentDirs() {
+  return [path.join(Global.Path.config, "agent")]
+}
+
+function localLegacyAgentDirs(project: ReturnType<typeof useProject>) {
   const root = projectRoot(project)
   return [path.join(root, ".opencode", "agent"), path.join(root, ".opencode", "agents")]
 }
 
-function legacyAgentPaths(project: ReturnType<typeof useProject>, name: string) {
-  return legacyAgentDirs(project).map((dir) => path.join(dir, `${name}.md`))
+function scopedAgentPaths(input: { project: ReturnType<typeof useProject>; name: string; scope: AgentStorageScope }) {
+  const paths = [agentPath(input)]
+  if (input.scope === "local") {
+    return [...paths, ...localLegacyAgentDirs(input.project).map((dir) => path.join(dir, `${input.name}.md`))]
+  }
+  return [...paths, ...globalLegacyAgentDirs().map((dir) => path.join(dir, `${input.name}.md`))]
 }
 
 function sameAgentName(left: string, right: string) {
@@ -88,7 +110,11 @@ function serializeAgentFile(input: {
         ...(typeof input.config.variant === "string" ? { variant: input.config.variant } : {}),
         ...(typeof input.config.temperature === "number" ? { temperature: input.config.temperature } : {}),
         ...(typeof input.config.top_p === "number" ? { top_p: input.config.top_p } : {}),
-        ...(typeof input.config.color === "string" ? { color: input.config.color } : input.color ? { color: input.color } : {}),
+        ...(typeof input.config.color === "string"
+          ? { color: input.config.color }
+          : input.color
+            ? { color: input.color }
+            : {}),
         ...(typeof input.config.steps === "number" ? { steps: input.config.steps } : {}),
         ...(typeof input.config.hidden === "boolean" ? { hidden: input.config.hidden } : {}),
         ...(input.config.options && typeof input.config.options === "object" ? { options: input.config.options } : {}),
@@ -155,6 +181,47 @@ async function removeLegacyConfigAgents(input: {
   return true
 }
 
+async function existingAgentScope(input: {
+  project: ReturnType<typeof useProject>
+  name: string
+}): Promise<AgentStorageScope | undefined> {
+  if (
+    await Filesystem.exists(
+      agentPath({
+        project: input.project,
+        name: input.name,
+        scope: "local",
+      }),
+    )
+  ) {
+    return "local"
+  }
+  if (
+    await Filesystem.exists(
+      agentPath({
+        project: input.project,
+        name: input.name,
+        scope: "global",
+      }),
+    )
+  ) {
+    return "global"
+  }
+  return undefined
+}
+
+async function agentSource(input: {
+  project: ReturnType<typeof useProject>
+  item: Agent
+}): Promise<AgentSource> {
+  const scope = await existingAgentScope({
+    project: input.project,
+    name: input.item.name,
+  })
+  if (scope) return scope
+  return input.item.native ? "native" : "global"
+}
+
 async function migrateLegacyAgents(input: {
   project: ReturnType<typeof useProject>
   sdk: ReturnType<typeof useSDK>
@@ -162,14 +229,18 @@ async function migrateLegacyAgents(input: {
 }) {
   const file = legacyConfigPath(input.project)
   const config = await Filesystem.readJson<{ agent?: Record<string, Record<string, unknown>> }>(file).catch(() => undefined)
-  let changed = false
   const usedColors = new Set<string>()
   const migratedNames = new Set<string>()
+  let changed = false
 
   for (const [name, value] of Object.entries(config?.agent ?? {})) {
     if (!isValidAgentName(name) || value.disable === true || typeof value.prompt !== "string") continue
     await Filesystem.write(
-      agentPath(name),
+      agentPath({
+        project: input.project,
+        name,
+        scope: "local",
+      }),
       serializeAgentFile({
         prompt: value.prompt,
         config: value,
@@ -180,22 +251,33 @@ async function migrateLegacyAgents(input: {
     changed = true
   }
 
-  for (const dir of legacyAgentDirs(input.project)) {
-    if (!(await Filesystem.isDir(dir))) continue
-    for await (const file of new Bun.Glob("*.md").scan({ cwd: dir, absolute: true })) {
-      const name = path.basename(file, ".md")
-      if (!isValidAgentName(name)) continue
-      await Filesystem.write(agentPath(name), await Filesystem.readText(file))
-      await Bun.file(file).delete()
-      migratedNames.add(name)
-      changed = true
+  for (const scope of ["local", "global"] as const) {
+    const directories = scope === "local" ? localLegacyAgentDirs(input.project) : globalLegacyAgentDirs()
+    for (const dir of directories) {
+      if (!(await Filesystem.isDir(dir))) continue
+      for await (const file of new Bun.Glob("*.md").scan({ cwd: dir, absolute: true })) {
+        const name = path.basename(file, ".md")
+        if (!isValidAgentName(name)) continue
+        await Filesystem.write(
+          agentPath({
+            project: input.project,
+            name,
+            scope,
+          }),
+          await Filesystem.readText(file),
+        )
+        if (path.dirname(file) !== path.dirname(agentPath({ project: input.project, name, scope }))) {
+          await Bun.file(file).delete()
+        }
+        migratedNames.add(name)
+        changed = true
+      }
     }
   }
 
   if (migratedNames.size > 0) {
     changed = (await removeLegacyConfigAgents({ project: input.project, names: [...migratedNames] })) || changed
   }
-
   if (!changed) return
   await reloadAgents({ sdk: input.sdk, sync: input.sync })
 }
@@ -234,7 +316,69 @@ function agentPrompt(input: {
   return SystemPrompt.provider(model as Parameters<typeof SystemPrompt.provider>[0]).join("\n")
 }
 
-function DialogAgentEditor(props: { item?: Agent; selected?: string }) {
+function DialogAgentScope(props: {
+  item?: Agent
+  selected?: string
+  draft: { name: string; prompt: string; color?: string }
+  onSelect: (scope: AgentStorageScope) => void
+}) {
+  const dialog = useDialog()
+  const project = useProject()
+  const { theme } = useTheme()
+
+  function back() {
+    dialog.replace(() => <DialogAgentEditor item={props.item} selected={props.selected} draft={props.draft} />)
+  }
+
+  onMount(() => {
+    dialog.setSize("medium")
+    dialog.setWidth(72)
+    dialog.setBeforeClose(() => {
+      back()
+      return false
+    })
+  })
+
+  return (
+    <DialogSelect
+      title="Save Agent"
+      placeholder="Choose save location"
+      current="local"
+      flat
+      renderFilter={false}
+      skipFilter
+      options={[
+        {
+          value: "local",
+          title: "Workspace",
+          description: localAgentDir(project),
+          footer: "local",
+        },
+        {
+          value: "global",
+          title: "Global",
+          description: globalAgentDir(),
+          footer: "global",
+        },
+      ]}
+      footerLeft={
+        <>
+          <span style={{ fg: theme.text }}>{"↑↓"}</span> choose
+        </>
+      }
+      onSelect={(option) => {
+        props.onSelect(option.value as AgentStorageScope)
+      }}
+    />
+  )
+}
+
+function DialogAgentEditor(props: {
+  item?: Agent
+  selected?: string
+  draft?: { name: string; prompt: string; color?: string }
+  scope?: AgentStorageScope
+}) {
   const dialog = useDialog()
   const local = useLocal()
   const project = useProject()
@@ -262,13 +406,10 @@ function DialogAgentEditor(props: { item?: Agent; selected?: string }) {
     dialog.replace(() => <DialogAgent selected={selected} />)
   }
 
-  async function submit() {
-    if (saving()) return
+  function validatedDraft() {
     const name = nameInput?.plainText.trim() ?? ""
     const prompt = promptInput?.plainText ?? ""
-    const target = agentPath(name)
-    const currentPath = props.item ? agentPath(props.item.name) : undefined
-    const color = props.item?.color ?? nextAgentColor({ sync, exclude: props.item?.name })
+    const color = props.item?.color ?? props.draft?.color ?? nextAgentColor({ sync, exclude: props.item?.name })
 
     if (!name) {
       setError("Agent name is required")
@@ -276,14 +417,12 @@ function DialogAgentEditor(props: { item?: Agent; selected?: string }) {
       nameInput?.focus()
       return
     }
-
     if (!isValidAgentName(name)) {
       setError("Use letters, numbers, spaces, dots, dashes, or underscores")
       setActive("name")
       nameInput?.focus()
       return
     }
-
     if (
       sync.data.agent.some(
         (item) =>
@@ -297,6 +436,35 @@ function DialogAgentEditor(props: { item?: Agent; selected?: string }) {
       nameInput?.focus()
       return
     }
+    if (!prompt.trim()) {
+      setError("Prompt is required")
+      setActive("prompt")
+      promptInput?.focus()
+      return
+    }
+    return { name, prompt, color }
+  }
+
+  async function saveDraft(draft: { name: string; prompt: string; color?: string }, targetScope: AgentStorageScope) {
+    const target = agentPath({
+      project,
+      name: draft.name,
+      scope: targetScope,
+    })
+    const currentScope = props.item
+      ? await existingAgentScope({
+          project,
+          name: props.item.name,
+        })
+      : undefined
+    const currentPath =
+      props.item && currentScope
+        ? agentPath({
+            project,
+            name: props.item.name,
+            scope: currentScope,
+          })
+        : undefined
 
     if (
       currentPath &&
@@ -307,17 +475,10 @@ function DialogAgentEditor(props: { item?: Agent; selected?: string }) {
       await Bun.file(currentPath).delete()
     }
 
-    if (!sameAgentName(props.item?.name ?? "", name) && (await Filesystem.exists(target))) {
-      setError(`Agent file already exists: ${name}.md`)
+    if (!sameAgentName(props.item?.name ?? "", draft.name) && (await Filesystem.exists(target))) {
+      setError(`Agent file already exists: ${draft.name}.md`)
       setActive("name")
       nameInput?.focus()
-      return
-    }
-
-    if (!prompt.trim()) {
-      setError("Prompt is required")
-      setActive("prompt")
-      promptInput?.focus()
       return
     }
 
@@ -328,22 +489,30 @@ function DialogAgentEditor(props: { item?: Agent; selected?: string }) {
         target,
         serializeAgentFile({
           item: props.item,
-          prompt,
-          color,
+          prompt: draft.prompt,
+          color: draft.color,
         }),
       )
       if (currentPath && currentPath !== target && (await Filesystem.exists(currentPath))) {
         await Bun.file(currentPath).delete()
       }
-      if (props.item?.name && !sameAgentName(props.item.name, name)) {
-        for (const item of legacyAgentPaths(project, props.item.name)) {
-          if (await Filesystem.exists(item)) await Bun.file(item).delete()
+      if (props.item?.name && !sameAgentName(props.item.name, draft.name)) {
+        for (const legacyScope of ["local", "global"] as const) {
+          for (const item of scopedAgentPaths({
+            project,
+            name: props.item.name,
+            scope: legacyScope,
+          })) {
+            if (!(await Filesystem.exists(item))) continue
+            if (item === target) continue
+            await Bun.file(item).delete()
+          }
         }
         await removeLegacyConfigAgents({ project, names: [props.item.name] })
       }
-      if (props.item?.name && props.item.name !== name) local.agent.renameFavorite(props.item.name, name)
+      if (props.item?.name && props.item.name !== draft.name) local.agent.renameFavorite(props.item.name, draft.name)
       await reloadAgents({ sdk, sync })
-      back(name)
+      back(draft.name)
     } catch (err) {
       const message = errorMessage(err)
       setError(message)
@@ -355,6 +524,37 @@ function DialogAgentEditor(props: { item?: Agent; selected?: string }) {
     } finally {
       setSaving(false)
     }
+  }
+
+  async function submit() {
+    if (saving()) return
+    const draft = validatedDraft()
+    if (!draft) return
+
+    const targetScope =
+      props.scope ??
+      (props.item
+        ? ((await existingAgentScope({
+            project,
+            name: props.item.name,
+          })) ?? "global")
+        : undefined)
+
+    if (!targetScope) {
+      dialog.replace(() => (
+        <DialogAgentScope
+          item={props.item}
+          selected={props.selected}
+          draft={draft}
+          onSelect={(selectedScope) => {
+            void saveDraft(draft, selectedScope)
+          }}
+        />
+      ))
+      return
+    }
+
+    await saveDraft(draft, targetScope)
   }
 
   useKeyboard((evt) => {
@@ -427,7 +627,7 @@ function DialogAgentEditor(props: { item?: Agent; selected?: string }) {
               nameInput = value
               value.traits = { status: "AGENT_NAME" }
             }}
-            initialValue={props.item?.name ?? ""}
+            initialValue={props.draft?.name ?? props.item?.name ?? ""}
             minHeight={1}
             maxHeight={1}
             placeholder="Review Agent"
@@ -452,7 +652,7 @@ function DialogAgentEditor(props: { item?: Agent; selected?: string }) {
               promptInput = value
               value.traits = { status: "AGENT_PROMPT" }
             }}
-            initialValue={agentPrompt({ item: props.item, local, sync })}
+            initialValue={props.draft?.prompt ?? agentPrompt({ item: props.item, local, sync })}
             minHeight={10}
             maxHeight={16}
             placeholder="Describe how this agent should behave"
@@ -490,44 +690,79 @@ export function DialogAgent(props: { selected?: string }) {
   const { theme } = useTheme()
   const toast = useToast()
   const [toDelete, setToDelete] = createSignal<string>()
+  const [anchor, setAnchor] = createSignal(props.selected ?? local.agent.current()?.name)
   const [selected, setSelected] = createSignal(props.selected ?? local.agent.current()?.name)
+  const [sources, setSources] = createSignal<Record<string, AgentSource>>({})
+  const [touched, setTouched] = createSignal(false)
 
   const options = createMemo(() => {
     const items = local.agent.list()
+    const favorites = local
+      .agent
+      .favoriteNames()
+      .map((name) => items.find((item) => item.name === name))
+      .filter((item) => item !== undefined)
+    const others = items.filter((item) => !local.agent.isFavorite(item.name))
     const option = (item: (typeof items)[number], category: "Favorites" | "Agents") => {
       const isDeleting = toDelete() === item.name
-      const favorite = local.agent.isFavorite(item.name)
       return {
         value: item.name,
         title: isDeleting ? `Press ${Keybind.toString(deleteKey)} again to confirm` : item.name,
-        description: favorite ? "favorite" : item.native ? "built-in" : "custom",
-        footer: item.native ? "native" : "local",
+        description: undefined,
+        footer: item.native ? "builtin" : sources()[item.name] ?? "global",
         category,
         bg: isDeleting ? theme.error : undefined,
       }
     }
     return [
-      ...items.filter((item) => local.agent.isFavorite(item.name)).map((item) => option(item, "Favorites")),
-      ...items.filter((item) => !local.agent.isFavorite(item.name)).map((item) => option(item, "Agents")),
+      ...favorites.map((item) => option(item, "Favorites")),
+      ...others.map((item) => option(item, "Agents")),
     ]
   })
 
   async function refresh(selection?: string) {
     await sync.bootstrap({ fatal: false })
-    setSelected(selection ?? local.agent.current()?.name)
+    const current = selection ?? local.agent.current()?.name
+    setSources(
+      Object.fromEntries(
+        await Promise.all(
+          local.agent.list().map(async (item) => [
+            item.name,
+            await agentSource({
+              project,
+              item,
+            }),
+          ]),
+        ),
+      ),
+    )
+    if (!touched()) {
+      setAnchor(current)
+      setSelected(current)
+    }
   }
 
   onMount(() => {
     void (async () => {
-      await refresh(selected())
       await migrateLegacyAgents({ project, sdk, sync })
-      setSelected(props.selected ?? local.agent.current()?.name)
+      await refresh(selected())
+      const current = props.selected ?? local.agent.current()?.name
+      if (!touched()) {
+        setAnchor(current)
+        setSelected(current)
+      }
     })()
   })
 
   async function remove(name: string) {
     const agent = local.agent.list().find((item) => item.name === name)
     if (!agent) return
+    const visible = options()
+    const index = visible.findIndex((item) => item.value === name)
+    const fallback =
+      visible[index + 1]?.value ??
+      visible[index - 1]?.value ??
+      local.agent.current()?.name
     if (local.agent.list().length <= 1) {
       toast.show({
         variant: "warning",
@@ -536,22 +771,21 @@ export function DialogAgent(props: { selected?: string }) {
       return
     }
     try {
-      const file = agentPath(name)
       let changed = false
-      if (await Filesystem.exists(file)) {
-        await Bun.file(file).delete()
-        changed = true
-      }
-      for (const item of legacyAgentPaths(project, name)) {
-        if (!(await Filesystem.exists(item))) continue
-        await Bun.file(item).delete()
-        changed = true
+      for (const scope of ["local", "global"] as const) {
+        for (const item of scopedAgentPaths({ project, name, scope })) {
+          if (!(await Filesystem.exists(item))) continue
+          await Bun.file(item).delete()
+          changed = true
+        }
       }
       changed = (await removeLegacyConfigAgents({ project, names: [name] })) || changed
       if (changed) {
         if (!agent.native) local.agent.removeFavorite(name)
         await reloadAgents({ sdk, sync })
-        setSelected(local.agent.current()?.name)
+        await refresh(fallback)
+        setAnchor(fallback)
+        setSelected(fallback)
         setToDelete(undefined)
         return
       }
@@ -583,13 +817,14 @@ export function DialogAgent(props: { selected?: string }) {
       placeholder="Search agents"
       options={options()}
       flat
-      current={selected()}
+      current={anchor()}
       footerLeft={
         <>
           <span style={{ fg: theme.text }}>{"↑↓"}</span> navigate
         </>
       }
       onMove={(option) => {
+        setTouched(true)
         setSelected(option.value)
         setToDelete(undefined)
       }}

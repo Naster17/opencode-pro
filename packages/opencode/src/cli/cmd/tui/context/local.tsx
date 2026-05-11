@@ -157,7 +157,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             return
           }
           const exists = favoriteNames().includes(name)
-          const next = exists ? favoriteNames().filter((item) => item !== name) : [name, ...favoriteNames()]
+          const next = exists ? favoriteNames().filter((item) => item !== name) : [...favoriteNames(), name]
           this.setFavorites(next)
         },
         removeFavorite(name: string) {
