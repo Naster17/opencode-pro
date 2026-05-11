@@ -315,9 +315,42 @@ function normalizeMessages(
   return msgs
 }
 
-function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: { breakpoint_interval?: number; min_messages?: number; enabled?: boolean }): ModelMessage[] {
+  const cachingEnabled = config?.enabled ?? true
+  
+  if (!cachingEnabled) {
+    return msgs
+  }
+
+  // Cache system prompts (first 2)
   const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
-  const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
+  
+  // Cache conversation history more aggressively:
+  // - All messages except the last user message and its response
+  // - This allows the entire conversation history to be cached
+  const nonSystem = msgs.filter((msg) => msg.role !== "system")
+  
+  // Find the last user message index
+  let lastUserIndex = -1
+  for (let i = nonSystem.length - 1; i >= 0; i--) {
+    if (nonSystem[i].role === "user") {
+      lastUserIndex = i
+      break
+    }
+  }
+  
+  const minMessages = config?.min_messages ?? 5
+  
+  // Cache everything except the last user message (and any assistant response after it)
+  // This maximizes cache hits while keeping the current turn fresh
+  const cacheableHistory = lastUserIndex > 0 && nonSystem.length >= minMessages ? nonSystem.slice(0, lastUserIndex) : []
+  
+  // For very long conversations, add cache breakpoints every N messages to improve hit rate
+  const CACHE_BREAKPOINT_INTERVAL = config?.breakpoint_interval ?? 10
+  const breakpointIndices = new Set<number>()
+  for (let i = CACHE_BREAKPOINT_INTERVAL - 1; i < cacheableHistory.length; i += CACHE_BREAKPOINT_INTERVAL) {
+    breakpointIndices.add(i)
+  }
 
   const providerOptions = {
     anthropic: {
@@ -340,7 +373,8 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
     },
   }
 
-  for (const msg of unique([...system, ...final])) {
+  // Apply caching to system messages
+  for (const msg of system) {
     const useMessageLevelOptions =
       model.providerID === "anthropic" ||
       model.providerID.includes("bedrock") ||
@@ -348,7 +382,37 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
     const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
     if (shouldUseContentOptions) {
-      const lastContent = msg.content[msg.content.length - 1]
+      const lastContent = msg.content[msg.content.length - 1] as any
+      if (
+        lastContent &&
+        typeof lastContent === "object" &&
+        lastContent.type !== "tool-approval-request" &&
+        lastContent.type !== "tool-approval-response"
+      ) {
+        lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, providerOptions)
+        continue
+      }
+    }
+
+    msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, providerOptions)
+  }
+
+  // Apply caching to conversation history (all messages before the last user turn)
+  for (let i = 0; i < cacheableHistory.length; i++) {
+    const msg = cacheableHistory[i]
+    const isBreakpoint = breakpointIndices.has(i) || i === cacheableHistory.length - 1
+    
+    // Only apply cache control at breakpoints to avoid excessive cache entries
+    if (!isBreakpoint) continue
+
+    const useMessageLevelOptions =
+      model.providerID === "anthropic" ||
+      model.providerID.includes("bedrock") ||
+      model.api.npm === "@ai-sdk/amazon-bedrock"
+    const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
+
+    if (shouldUseContentOptions) {
+      const lastContent = msg.content[msg.content.length - 1] as any
       if (
         lastContent &&
         typeof lastContent === "object" &&
@@ -404,7 +468,7 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
   })
 }
 
-export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
+export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>, config?: { caching?: { enabled?: boolean; breakpoint_interval?: number; min_messages?: number; normalize_dates?: boolean } }) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
   if (
@@ -427,13 +491,23 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
       typeof options.reasoningEffort === "string" && ["low", "medium", "high"].includes(options.reasoningEffort)
         ? options.reasoningEffort
         : "medium"
+    
+    // Cache the current date at midnight to avoid breaking cache every second
+    // This ensures the date only changes once per day, maximizing cache hits
+    const normalizeDates = config?.caching?.normalize_dates ?? true
+    const stableDate = normalizeDates ? (() => {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      return today.toISOString().slice(0, 10)
+    })() : new Date().toISOString().slice(0, 10)
+    
     msgs = [
       {
         role: "system",
         content: [
           "You are ChatGPT, a large language model trained by OpenAI.",
           "Knowledge cutoff: 2024-06",
-          `Current date: ${new Date().toISOString().slice(0, 10)}`,
+          `Current date: ${stableDate}`,
           "",
           `Reasoning: ${reasoning}`,
           "",
@@ -456,7 +530,7 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
       model.api.npm === "@ai-sdk/alibaba") &&
     model.api.npm !== "@ai-sdk/gateway"
   ) {
-    msgs = applyCaching(msgs, model)
+    msgs = applyCaching(msgs, model, config?.caching)
   }
 
   // Remap providerOptions keys from stored providerID to expected SDK key

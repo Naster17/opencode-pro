@@ -25,6 +25,7 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 import type { Provider } from "@/provider/provider"
 import * as SessionProcessorModule from "../../src/session/processor"
 import { Snapshot } from "../../src/snapshot"
+import { Storage } from "@/storage/storage"
 import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -232,6 +233,7 @@ function runtime(
       Layer.provide(plugin),
       Layer.provide(bus),
       Layer.provide(config),
+      Layer.provide(Storage.defaultLayer),
     ),
   )
 }
@@ -243,6 +245,7 @@ const deps = Layer.mergeAll(
   Plugin.defaultLayer,
   Bus.layer,
   Config.defaultLayer,
+  Storage.defaultLayer,
 )
 
 const env = Layer.mergeAll(
@@ -291,6 +294,7 @@ function liveRuntime(layer: Layer.Layer<LLM.Service>, provider = ProviderTest.fa
       Layer.provide(status),
       Layer.provide(bus),
       Layer.provide(config),
+      Layer.provide(Storage.defaultLayer),
     ),
   )
 }

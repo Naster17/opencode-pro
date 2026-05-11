@@ -262,6 +262,9 @@ export const Info = Schema.Struct({
       prune: Schema.optional(Schema.Boolean).annotate({
         description: "Enable pruning of old tool outputs (default: true)",
       }),
+      stable_prune: Schema.optional(Schema.Boolean).annotate({
+        description: "Store pruned tool metadata separately to maintain cache stability (default: true). Set to false to restore legacy behavior where tool parts are modified directly.",
+      }),
       tail_turns: Schema.optional(NonNegativeInt).annotate({
         description:
           "Number of recent user turns, including their following assistant/tool responses, to keep verbatim during compaction (default: 2)",
@@ -274,6 +277,31 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  caching: Schema.optional(
+    Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable aggressive prompt caching for supported providers (default: true)",
+      }),
+      breakpoint_interval: Schema.optional(PositiveInt).annotate({
+        description: "Number of messages between cache breakpoints for long conversations (default: 10)",
+      }),
+      min_messages: Schema.optional(NonNegativeInt).annotate({
+        description: "Minimum number of messages before caching is applied (default: 5)",
+      }),
+      normalize_dates: Schema.optional(Schema.Boolean).annotate({
+        description: "Normalize dates in system prompts to stable daily values for better cache hits (default: true)",
+      }),
+      log_metrics: Schema.optional(Schema.Boolean).annotate({
+        description: "Log cache performance metrics and potential token savings (default: false)",
+      }),
+      stable_history: Schema.optional(Schema.Boolean).annotate({
+        description: "Prevent modifying old messages with summary diffs to maintain cache stability (default: true). Set to false to restore legacy behavior where diffs are added to user messages.",
+      }),
+    }),
+  ).annotate({
+    description:
+      "Prompt caching configuration for reducing token usage. Applies to Anthropic, Bedrock, OpenRouter, and other providers that support prompt caching.",
+  }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),

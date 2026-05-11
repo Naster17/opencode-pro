@@ -7,7 +7,7 @@ import { LSP } from "@/lsp/lsp"
 import { Snapshot } from "@/snapshot"
 import { SyncEvent } from "../sync"
 import { Database } from "@/storage/db"
-import { NotFoundError } from "@/storage/storage"
+import { NotFoundError, Storage } from "@/storage/storage"
 import { and } from "drizzle-orm"
 import { desc } from "drizzle-orm"
 import { eq } from "drizzle-orm"
@@ -22,6 +22,7 @@ import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { Config } from "@/config/config"
 import { Effect, Schema, Types } from "effect"
 import { zod, ZodOverride } from "@/util/effect-zod"
 import { NonNegativeInt, withStatics } from "@/util/schema"
@@ -733,6 +734,56 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   model: Provider.Model,
   options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
 ) {
+  // Try to get Storage and Config services if available
+  const storage = yield* Effect.serviceOption(Storage.Service)
+  const config = yield* Effect.serviceOption(Config.Service)
+  
+  // Pre-load compacted status for all tool parts to avoid repeated storage calls
+  const compactedParts = new Set<string>()
+  
+  if (storage._tag === "Some" && config._tag === "Some") {
+    const cfg = yield* config.value.get()
+    const stablePrune = cfg.compaction?.stable_prune ?? true
+    
+    if (stablePrune) {
+      // Collect all tool part IDs
+      const toolPartIds: string[] = []
+      for (const msg of input) {
+        for (const part of msg.parts) {
+          if (part.type === "tool" && part.state.status === "completed") {
+            toolPartIds.push(part.id)
+          }
+        }
+      }
+      
+      // Load compacted status for all parts in parallel
+      yield* Effect.forEach(
+        toolPartIds,
+        (partId) =>
+          storage.value
+            .read<{ compacted: number }>(["compacted_tool", partId])
+            .pipe(
+              Effect.map(() => {
+                compactedParts.add(partId)
+              }),
+              Effect.catch(() => Effect.void),
+            ),
+        { concurrency: "unbounded" },
+      )
+    }
+  }
+  
+  // Helper to check if a tool part is compacted
+  const isCompacted = (part: ToolPart): boolean => {
+    // Check legacy compacted timestamp first
+    if (part.state.status === "completed" && part.state.time.compacted) {
+      return true
+    }
+    
+    // Check stable_prune storage (new behavior)
+    return compactedParts.has(part.id)
+  }
+  
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
   // Track media from tool results that need to be injected as user messages
@@ -870,10 +921,11 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         if (part.type === "tool") {
           toolNames.add(part.tool)
           if (part.state.status === "completed") {
-            const outputText = part.state.time.compacted
+            const compacted = isCompacted(part)
+            const outputText = compacted
               ? "[Old tool result content cleared]"
               : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
-            const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
+            const attachments = compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
 
             // For providers that don't support media in tool results, extract media files
             // (images, PDFs) to be sent as a separate user message
@@ -998,7 +1050,13 @@ export function toModelMessages(
   model: Provider.Model,
   options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
 ): Promise<ModelMessage[]> {
-  return Effect.runPromise(toModelMessagesEffect(input, model, options).pipe(Effect.provide(EffectLogger.layer)))
+  return Effect.runPromise(
+    toModelMessagesEffect(input, model, options).pipe(
+      Effect.provide(EffectLogger.layer),
+      Effect.provide(Storage.defaultLayer),
+      Effect.provide(Config.defaultLayer),
+    ),
+  )
 }
 
 export function page(input: { sessionID: SessionID; limit: number; before?: string }) {

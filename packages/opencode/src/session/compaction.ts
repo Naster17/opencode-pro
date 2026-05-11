@@ -11,7 +11,7 @@ import { SessionProcessor } from "./processor"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
-import { NotFoundError } from "@/storage/storage"
+import { NotFoundError, Storage } from "@/storage/storage"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Layer, Context, Schema } from "effect"
 import * as DateTime from "effect/DateTime"
@@ -286,6 +286,7 @@ export const layer: Layer.Layer<
   | Plugin.Service
   | SessionProcessor.Service
   | Provider.Service
+  | Storage.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -296,6 +297,7 @@ export const layer: Layer.Layer<
     const plugin = yield* Plugin.Service
     const processors = yield* SessionProcessor.Service
     const provider = yield* Provider.Service
+    const storage = yield* Storage.Service
 
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: MessageV2.Assistant["tokens"]
@@ -401,13 +403,33 @@ export const layer: Layer.Layer<
 
       log.info("found", { pruned, total })
       if (pruned > PRUNE_MINIMUM) {
-        for (const part of toPrune) {
-          if (part.state.status === "completed") {
-            part.state.time.compacted = Date.now()
-            yield* session.updatePart(part)
+        // Check if stable_prune is enabled (default: true)
+        // When enabled, we store compacted metadata separately to avoid modifying old parts
+        const stablePrune = cfg.compaction?.stable_prune ?? true
+        
+        if (stablePrune) {
+          // NEW BEHAVIOR (default): Store compacted metadata separately
+          // This prevents cache invalidation by not modifying old tool parts
+          for (const part of toPrune) {
+            if (part.state.status === "completed") {
+              yield* storage.write(["compacted_tool", part.id], { 
+                compacted: Date.now(),
+                sessionID: input.sessionID,
+                partID: part.id,
+              }).pipe(Effect.ignore)
+            }
           }
+          log.info("pruned (stable)", { count: toPrune.length })
+        } else {
+          // LEGACY BEHAVIOR: Modify tool parts directly (breaks cache)
+          for (const part of toPrune) {
+            if (part.state.status === "completed") {
+              part.state.time.compacted = Date.now()
+              yield* session.updatePart(part)
+            }
+          }
+          log.info("pruned (legacy)", { count: toPrune.length })
         }
-        log.info("pruned", { count: toPrune.length })
       }
     })
 
@@ -693,6 +715,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
+    Layer.provide(Storage.defaultLayer),
   ),
 )
 

@@ -7,6 +7,7 @@ import { withStatics } from "@/util/schema"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID } from "./schema"
+import { Config } from "@/config/config"
 
 function unquoteGitPath(input: string) {
   if (!input.startsWith('"')) return input
@@ -79,6 +80,7 @@ export const layer = Layer.effect(
     const snapshot = yield* Snapshot.Service
     const storage = yield* Storage.Service
     const bus = yield* Bus.Service
+    const config = yield* Config.Service
 
     const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: MessageV2.WithParts[] }) {
       let from: string | undefined
@@ -124,9 +126,24 @@ export const layer = Layer.effect(
       )
       const target = messages.find((m) => m.info.id === input.messageID)
       if (!target || target.info.role !== "user") return
-      const msgDiffs = yield* computeDiff({ messages })
-      target.info.summary = { ...target.info.summary, diffs: msgDiffs }
-      yield* sessions.updateMessage(target.info)
+      
+      // Check if stable_history is enabled (default: true)
+      // When enabled, we don't modify old user messages to maintain cache stability
+      const cfg = yield* config.get()
+      const stableHistory = cfg.caching?.stable_history ?? true
+      
+      if (stableHistory) {
+        // Store diffs separately without modifying the user message
+        // This prevents cache invalidation caused by updating old messages
+        const msgDiffs = yield* computeDiff({ messages })
+        yield* storage.write(["message_diff", input.messageID], msgDiffs).pipe(Effect.ignore)
+      } else {
+        // Legacy behavior: update the user message with diffs
+        // This will invalidate the cache but preserves old behavior if needed
+        const msgDiffs = yield* computeDiff({ messages })
+        target.info.summary = { ...target.info.summary, diffs: msgDiffs }
+        yield* sessions.updateMessage(target.info)
+      }
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
@@ -153,6 +170,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Snapshot.defaultLayer),
     Layer.provide(Storage.defaultLayer),
     Layer.provide(Bus.layer),
+    Layer.provide(Config.defaultLayer),
   ),
 )
 

@@ -24,6 +24,7 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { EffectBridge } from "@/effect/bridge"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
+import { CacheOptimizer } from "./cache-optimizer"
 
 const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
@@ -115,16 +116,38 @@ const live: Layer.Layer<
       )
 
       const header = system[0]
+      
+      // Store original header for cache stability check
+      const originalHeader = header
+      
       yield* plugin.trigger(
         "experimental.chat.system.transform",
         { sessionID: input.sessionID, model: input.model },
         { system },
       )
+      
       // rejoin to maintain 2-part structure for caching if header unchanged
       if (system.length > 2 && system[0] === header) {
         const rest = system.slice(1)
         system.length = 0
         system.push(header, rest.join("\n"))
+      }
+      
+      // Normalize system prompts for cache stability
+      if (CacheOptimizer.supportsCaching(input.model)) {
+        system[0] = CacheOptimizer.normalizeSystemPrompt(system[0], cfg)
+        if (system.length > 1) {
+          system[1] = CacheOptimizer.normalizeSystemPrompt(system[1], cfg)
+        }
+        
+        // Log if plugins modified the header (potential cache invalidation)
+        if (system[0] !== originalHeader && originalHeader) {
+          l.debug("system prompt modified by plugins", {
+            sessionID: input.sessionID,
+            originalLength: originalHeader.length,
+            modifiedLength: system[0].length,
+          })
+        }
       }
 
       const variant =
@@ -333,6 +356,23 @@ const live: Layer.Layer<
         ? (yield* InstanceState.context).project.id
         : undefined
 
+      // Track cache statistics and log metrics
+      if (CacheOptimizer.supportsCaching(input.model)) {
+        const breakpoints = CacheOptimizer.computeCacheBreakpoints(messages, { config: cfg })
+        CacheOptimizer.trackCacheStats({
+          sessionID: input.sessionID,
+          messages,
+          breakpoints,
+        })
+        CacheOptimizer.logCacheMetrics({
+          sessionID: input.sessionID,
+          model: input.model,
+          messages,
+          breakpoints,
+          config: cfg,
+        })
+      }
+
       return streamText({
         onError(error) {
           l.error("stream error", {
@@ -396,7 +436,7 @@ const live: Layer.Layer<
               async transformParams(args) {
                 if (args.type === "stream") {
                   // @ts-expect-error
-                  args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
+                  args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options, cfg)
                 }
                 return args.params
               },
