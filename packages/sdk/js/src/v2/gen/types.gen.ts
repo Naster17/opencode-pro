@@ -1223,9 +1223,18 @@ export type Config = {
   compaction?: {
     auto?: boolean
     prune?: boolean
+    stable_prune?: boolean
     tail_turns?: number
     preserve_recent_tokens?: number
     reserved?: number
+  }
+  caching?: {
+    enabled?: boolean
+    breakpoint_interval?: number
+    min_messages?: number
+    normalize_dates?: boolean
+    log_metrics?: boolean
+    stable_history?: boolean
   }
   experimental?: {
     disable_paste_summary?: boolean
@@ -1524,7 +1533,7 @@ export type LspStatus = {
 
 export type LspInstallResult = {
   ok: boolean
-  message: string
+  message?: string
 }
 
 export type FormatterStatus = {
