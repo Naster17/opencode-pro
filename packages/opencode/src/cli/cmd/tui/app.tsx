@@ -498,7 +498,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
     },
     {
-      title: "Switch agent",
+      title: "Agents Manager",
       value: "agent.list",
       keybind: "agent_list",
       category: "Agent",

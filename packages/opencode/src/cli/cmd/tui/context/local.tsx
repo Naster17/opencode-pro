@@ -73,7 +73,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const visibleAgents = createMemo(() => sync.data.agent.filter((x) => !x.hidden))
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
+        ready: false,
+        favorite: undefined as string[] | undefined,
       })
+      const filePath = path.join(Global.Path.state, "agent.json")
+      const state = {
+        pending: false,
+      }
       const { theme } = useTheme()
       const colors = createMemo(() => [
         theme.secondary,
@@ -84,9 +90,83 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.error,
         theme.info,
       ])
+
+      const save = () => {
+        if (!agentStore.ready) {
+          state.pending = true
+          return
+        }
+        state.pending = false
+        void Filesystem.writeJson(filePath, {
+          favorite: agentStore.favorite,
+        })
+      }
+
+      Filesystem.readJson(filePath)
+        .then((x: any) => {
+          if (Array.isArray(x.favorite)) {
+            setAgentStore(
+              "favorite",
+              x.favorite.filter((item: unknown): item is string => typeof item === "string"),
+            )
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          setAgentStore("ready", true)
+          if (state.pending) save()
+        })
+
+      const defaultFavoriteNames = createMemo(() =>
+        agents()
+          .filter((item) => item.native && (item.name === "build" || item.name === "plan"))
+          .map((item) => item.name),
+      )
+
+      const favoriteNames = createMemo(() => agentStore.favorite ?? defaultFavoriteNames())
+
+      const favoriteAgents = createMemo(() =>
+        favoriteNames()
+          .map((name) => agents().find((item) => item.name === name))
+          .filter((item) => item !== undefined),
+      )
       return {
         list() {
           return agents()
+        },
+        favorite() {
+          return favoriteAgents()
+        },
+        favoriteNames() {
+          return favoriteNames()
+        },
+        isFavorite(name: string) {
+          return favoriteNames().includes(name)
+        },
+        setFavorites(names: string[]) {
+          setAgentStore("favorite", [...new Set(names)])
+          save()
+        },
+        toggleFavorite(name: string) {
+          if (!agents().some((item) => item.name === name)) {
+            toast.show({
+              variant: "warning",
+              message: `Agent not found: ${name}`,
+              duration: 3000,
+            })
+            return
+          }
+          const exists = favoriteNames().includes(name)
+          const next = exists ? favoriteNames().filter((item) => item !== name) : [name, ...favoriteNames()]
+          this.setFavorites(next)
+        },
+        removeFavorite(name: string) {
+          if (!favoriteNames().includes(name)) return
+          this.setFavorites(favoriteNames().filter((item) => item !== name))
+        },
+        renameFavorite(from: string, to: string) {
+          if (!favoriteNames().includes(from)) return
+          this.setFavorites(favoriteNames().map((item) => (item === from ? to : item)))
         },
         current() {
           return agents().find((x) => x.name === agentStore.current) ?? agents().at(0)
@@ -102,12 +182,26 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         move(direction: 1 | -1) {
           batch(() => {
+            const items = favoriteAgents()
+            if (items.length === 0) {
+              toast.show({
+                variant: "info",
+                message: "Add a favorite agent to use this shortcut",
+                duration: 3000,
+              })
+              return
+            }
             const current = this.current()
-            if (!current) return
-            let next = agents().findIndex((x) => x.name === current.name) + direction
-            if (next < 0) next = agents().length - 1
-            if (next >= agents().length) next = 0
-            const value = agents()[next]
+            let next = current ? items.findIndex((item) => item.name === current.name) : -1
+            if (next === -1) {
+              next = direction === 1 ? 0 : items.length - 1
+            } else {
+              next += direction
+              if (next < 0) next = items.length - 1
+              if (next >= items.length) next = 0
+            }
+            const value = items[next]
+            if (!value) return
             setAgentStore("current", value.name)
           })
         },
