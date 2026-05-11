@@ -739,7 +739,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   const config = yield* Effect.serviceOption(Config.Service)
   const compactedParts = new Set<string>()
   const cfg = config._tag === "Some" ? yield* config.value.get() : undefined
-  const stablePrune = cfg?.compaction?.stable_prune ?? false
+  const stablePrune = cfg?.compaction?.stable_prune ?? true
   
   if (storage._tag === "Some") {
     if (stablePrune) {
@@ -775,11 +775,12 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   
   // Helper to check if a tool part is compacted
   const isCompacted = (part: ToolPart): boolean => {
-    if (!stablePrune && part.state.status === "completed" && part.state.time.compacted) {
+    // Check legacy compacted timestamp (when stable_prune is disabled)
+    if (part.state.status === "completed" && part.state.time.compacted) {
       return true
     }
     
-    // Check stable_prune storage (new behavior)
+    // Check stable_prune storage (new behavior, when stable_prune is enabled)
     return compactedParts.has(part.id)
   }
   

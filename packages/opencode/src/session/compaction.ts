@@ -426,12 +426,9 @@ export const layer: Layer.Layer<
               })
               .pipe(Effect.ignore)
           }
-          for (const part of toPrune) {
-            if (part.state.status !== "completed") continue
-            part.state.time.compacted = compactedAt
-            yield* session.updatePart(part)
-          }
-          log.info("pruned (stable)", { count: toPrune.length })
+          // DO NOT modify parts - this would break cache!
+          // The compacted status is stored separately and checked in toModelMessagesEffect
+          log.info("pruned (stable)", { count: toPrune.length, partIDs: compactedPartIDs.length })
         } else {
           // LEGACY BEHAVIOR: Modify tool parts directly (breaks cache)
           for (const part of toPrune) {
