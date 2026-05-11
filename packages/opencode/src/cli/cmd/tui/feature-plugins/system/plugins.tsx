@@ -507,10 +507,14 @@ function show(api: TuiPluginApi) {
 const tui: TuiPlugin = async (api) => {
   api.command.register(() => [
     {
-      title: "Plugins",
+      title: "Plugin Manager",
       value: "plugins.list",
       keybind: "plugin_manager",
       category: "System",
+      slash: {
+        name: "plugins",
+        aliases: ["plugin"],
+      },
       onSelect() {
         show(api)
       },

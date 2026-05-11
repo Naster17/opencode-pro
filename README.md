@@ -44,6 +44,7 @@ nix run github:Naster17/opencode-pro
 | Reactive Context Metrics       | Metrics in the sidebar and prompt footer now update instantly after Undo (`Ctrl+X` `u`) or Redo (`Ctrl+X` `r`) operations, accurately reflecting the usable context size.                      |
 | Privacy-First Hardening        | Telemetry is stripped back, session sharing is permanently disabled, and remote workspace sync cannot be re-enabled by env flags.                                                            |
 | Stable History Cache           | Fixed a major OpenCode token drain issue caused by broken `prune()` and `diff()` functions that altered chat history on every file interaction via tool calls. History cache now remains stable — only new user input heads are processed, avoiding full cache reprocessing on each request. Legacy behavior available via config toggle. |
+| Actually Useful Help Menu      | Finally, a help menu that actually tells you what commands exist and how to use them. Because what the original developers left was basically a joke — now you can actually learn opencode without guessing. Type `/help` for full reference. |
 
 ### Desktop App (BETA)
 

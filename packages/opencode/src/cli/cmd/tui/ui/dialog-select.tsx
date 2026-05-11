@@ -40,6 +40,7 @@ export interface DialogSelectOption<T = any> {
   value: T
   description?: string
   footer?: JSX.Element | string
+  keywords?: string[]
   category?: string
   categoryView?: JSX.Element
   disabled?: boolean
@@ -82,23 +83,37 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   let input: InputRenderable
 
+  const searchIndex = createMemo(() =>
+    props.options.map((option) => ({
+      option,
+      search: [
+        option.category,
+        option.description,
+        typeof option.footer === "string" ? option.footer : undefined,
+        ...(option.keywords ?? []),
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    })),
+  )
+
   const filtered = createMemo(() => {
     if (props.skipFilter || props.renderFilter === false) return props.options.filter((x) => x.disabled !== true)
     const needle = store.filter.toLowerCase()
     const options = pipe(
-      props.options,
-      filter((x) => x.disabled !== true),
+      searchIndex(),
+      filter((x) => x.option.disabled !== true),
     )
-    if (!needle) return options
+    if (!needle) return options.map((x) => x.option)
 
-    // prioritize title matches (weight: 2) over category matches (weight: 1).
+    // prioritize title matches (weight: 2) over broader metadata matches (weight: 1).
     // users typically search by the item name, and not its category.
     const result = fuzzysort
       .go(needle, options, {
-        keys: ["title", "category"],
+        keys: ["option.title", "search"],
         scoreFn: (r) => r[0].score * 2 + r[1].score,
       })
-      .map((x) => x.obj)
+      .map((x) => x.obj.option)
 
     return result
   })
