@@ -594,9 +594,8 @@ export function DialogAgent(props: { selected?: string }) {
         setToDelete(undefined)
       }}
       onSelect={(option) => {
-        const item = local.agent.list().find((entry) => entry.name === option.value)
-        if (!item) return
-        dialog.replace(() => <DialogAgentEditor item={item} selected={option.value} />)
+        local.agent.set(option.value)
+        dialog.clear()
       }}
       keybind={[
         {

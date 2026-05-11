@@ -74,6 +74,7 @@ IMPORTANT:
 - This tool provides your final answer - no further actions are taken after calling it`
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
+const CUSTOM_AGENT_REMINDER_PREFIX = "<system-reminder>\nCustom agent instructions are active."
 
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
@@ -255,6 +256,31 @@ export const layer = Layer.effect(
             sessionID: userMessage.info.sessionID,
             type: "text",
             text: BUILD_SWITCH,
+            synthetic: true,
+          })
+        }
+        if (
+          input.agent.mode === "primary" &&
+          !input.agent.native &&
+          input.agent.prompt &&
+          !userMessage.parts.some(
+            (part) =>
+              part.type === "text" && part.synthetic && part.text.startsWith(CUSTOM_AGENT_REMINDER_PREFIX),
+          )
+        ) {
+          userMessage.parts.push({
+            id: PartID.ascending(),
+            messageID: userMessage.info.id,
+            sessionID: userMessage.info.sessionID,
+            type: "text",
+            text: [
+              CUSTOM_AGENT_REMINDER_PREFIX,
+              `The active agent is "${input.agent.name}". Follow its instructions exactly for this turn.`,
+              "",
+              "In the agent prompt:",
+              input.agent.prompt,
+              "</system-reminder>",
+            ].join("\n"),
             synthetic: true,
           })
         }

@@ -104,10 +104,13 @@ const live: Layer.Layer<
       const system: string[] = []
       system.push(
         [
-          // use agent prompt otherwise provider prompt
-          ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+          // Keep general environment/instruction blocks first so agent prompts can
+          // override behavior and persona instead of being diluted by later system text.
+          ...(input.agent.prompt ? [] : SystemPrompt.provider(input.model)),
           // any custom prompt passed into this call
           ...input.system,
+          // use agent prompt otherwise provider prompt
+          ...(input.agent.prompt ? [input.agent.prompt] : []),
           // any custom prompt from last user message
           ...(input.user.system ? [input.user.system] : []),
         ]
