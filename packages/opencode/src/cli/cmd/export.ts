@@ -1,4 +1,6 @@
 import { Session } from "@/session/session"
+import { Snapshot } from "@/snapshot"
+import { Storage } from "@/storage/storage"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionID } from "../../session/schema"
 import { effectCmd, fail } from "../effect-cmd"
@@ -238,6 +240,7 @@ export const ExportCommand = effectCmd({
 
 const run = Effect.fn("Cli.export.body")(function* (args: { sessionID?: string; sanitize?: boolean }) {
   const svc = yield* Session.Service
+  const storage = yield* Storage.Service
   let sessionID = args.sessionID ? SessionID.make(args.sessionID) : undefined
   process.stderr.write(`Exporting session: ${sessionID ?? "latest"}\n`)
 
@@ -282,8 +285,35 @@ const run = Effect.fn("Cli.export.body")(function* (args: { sessionID?: string; 
   return yield* Effect.gen(function* () {
     const sessionInfo = yield* svc.get(sessionID!)
     const messages = yield* svc.messages({ sessionID: sessionInfo.id })
+    const exportMessages = yield* Effect.forEach(messages, (msg) => {
+      if (msg.info.role !== "user") return Effect.succeed(msg)
+      const info = msg.info as MessageV2.User
+      if (info.summary?.diffs) return Effect.succeed(msg)
+      return storage
+        .read<Snapshot.FileDiff[]>(["message_diff", sessionInfo.id, msg.info.id])
+        .pipe(
+          Effect.catch(() => storage.read<Snapshot.FileDiff[]>(["message_diff", msg.info.id])),
+          Effect.map(
+            (diffs) =>
+              ({
+                ...msg,
+                info: {
+                  ...info,
+                  summary: info.summary
+                    ? {
+                        title: info.summary.title,
+                        body: info.summary.body,
+                        diffs,
+                      }
+                    : { diffs },
+                },
+              }) satisfies MessageV2.WithParts,
+          ),
+          Effect.catch(() => Effect.succeed(msg)),
+        )
+    })
 
-    const exportData = { info: sessionInfo, messages }
+    const exportData = { info: sessionInfo, messages: exportMessages }
 
     process.stdout.write(JSON.stringify(args.sanitize ? sanitize(exportData) : exportData, null, 2))
     process.stdout.write(EOL)

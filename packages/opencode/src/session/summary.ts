@@ -82,6 +82,29 @@ export const layer = Layer.effect(
     const bus = yield* Bus.Service
     const config = yield* Config.Service
 
+    const normalizeDiffs = Effect.fn("SessionSummary.normalizeDiffs")(function* (key: string[], diffs: Snapshot.FileDiff[]) {
+      const next = diffs.map((item) => {
+        const file = unquoteGitPath(item.file)
+        if (file === item.file) return item
+        return { ...item, file }
+      })
+      if (next.some((item, i) => item.file !== diffs[i]?.file)) {
+        yield* storage.write(key, next).pipe(Effect.ignore)
+      }
+      return next
+    })
+
+    const readDiffs = Effect.fn("SessionSummary.readDiffs")(function* (keys: string[][]) {
+      for (const key of keys) {
+        const diffs = yield* storage
+          .read<Snapshot.FileDiff[]>(key)
+          .pipe(Effect.map((diffs) => ({ diffs, key })), Effect.catch(() => Effect.succeed(undefined)))
+        if (!diffs) continue
+        return yield* normalizeDiffs(diffs.key, diffs.diffs)
+      }
+      return [] as Snapshot.FileDiff[]
+    })
+
     const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: MessageV2.WithParts[] }) {
       let from: string | undefined
       let to: string | undefined
@@ -126,6 +149,7 @@ export const layer = Layer.effect(
       )
       const target = messages.find((m) => m.info.id === input.messageID)
       if (!target || target.info.role !== "user") return
+      const msgDiffs = yield* computeDiff({ messages })
       
       // Check if stable_history is enabled (default: true)
       // When enabled, we don't modify old user messages to maintain cache stability
@@ -135,29 +159,25 @@ export const layer = Layer.effect(
       if (stableHistory) {
         // Store diffs separately without modifying the user message
         // This prevents cache invalidation caused by updating old messages
-        const msgDiffs = yield* computeDiff({ messages })
-        yield* storage.write(["message_diff", input.messageID], msgDiffs).pipe(Effect.ignore)
-      } else {
-        // Legacy behavior: update the user message with diffs
-        // This will invalidate the cache but preserves old behavior if needed
-        const msgDiffs = yield* computeDiff({ messages })
-        target.info.summary = { ...target.info.summary, diffs: msgDiffs }
-        yield* sessions.updateMessage(target.info)
+        yield* storage.write(["message_diff", input.sessionID, input.messageID], msgDiffs).pipe(Effect.ignore)
+        return
       }
+
+      // Legacy behavior: update the user message with diffs
+      // This will invalidate the cache but preserves old behavior if needed
+      target.info.summary = { ...target.info.summary, diffs: msgDiffs }
+      yield* sessions.updateMessage(target.info)
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
-      const diffs = yield* storage
-        .read<Snapshot.FileDiff[]>(["session_diff", input.sessionID])
-        .pipe(Effect.catch(() => Effect.succeed([] as Snapshot.FileDiff[])))
-      const next = diffs.map((item) => {
-        const file = unquoteGitPath(item.file)
-        if (file === item.file) return item
-        return { ...item, file }
-      })
-      const changed = next.some((item, i) => item.file !== diffs[i]?.file)
-      if (changed) yield* storage.write(["session_diff", input.sessionID], next).pipe(Effect.ignore)
-      return next
+      if (input.messageID) {
+        return yield* readDiffs([
+          ["message_diff", input.sessionID, input.messageID],
+          ["message_diff", input.messageID],
+        ])
+      }
+
+      return yield* readDiffs([["session_diff", input.sessionID]])
     })
 
     return Service.of({ summarize, diff, computeDiff })

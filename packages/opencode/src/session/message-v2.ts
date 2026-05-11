@@ -737,46 +737,45 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   // Try to get Storage and Config services if available
   const storage = yield* Effect.serviceOption(Storage.Service)
   const config = yield* Effect.serviceOption(Config.Service)
-  
-  // Pre-load compacted status for all tool parts to avoid repeated storage calls
   const compactedParts = new Set<string>()
+  const cfg = config._tag === "Some" ? yield* config.value.get() : undefined
+  const stablePrune = cfg?.compaction?.stable_prune ?? false
   
-  if (storage._tag === "Some" && config._tag === "Some") {
-    const cfg = yield* config.value.get()
-    const stablePrune = cfg.compaction?.stable_prune ?? true
-    
+  if (storage._tag === "Some") {
     if (stablePrune) {
-      // Collect all tool part IDs
-      const toolPartIds: string[] = []
-      for (const msg of input) {
-        for (const part of msg.parts) {
-          if (part.type === "tool" && part.state.status === "completed") {
-            toolPartIds.push(part.id)
-          }
+      const sessionID = input[0]?.info.sessionID
+      const toolPartIds = input.flatMap((msg) =>
+        msg.parts.flatMap((part) => (part.type === "tool" && part.state.status === "completed" ? [part.id] : [])),
+      )
+
+      if (sessionID) {
+        const stored = yield* storage.value
+          .read<{ partIDs?: string[] }>(["compacted_tool_session", sessionID])
+          .pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (stored?.partIDs?.length) {
+          for (const id of stored.partIDs) compactedParts.add(id)
+        } else if (toolPartIds.length > 0) {
+          yield* Effect.forEach(
+            toolPartIds,
+            (partId) =>
+              storage.value
+                .read<{ compacted: number }>(["compacted_tool", partId])
+                .pipe(
+                  Effect.map(() => {
+                    compactedParts.add(partId)
+                  }),
+                  Effect.catch(() => Effect.void),
+                ),
+            { concurrency: "unbounded" },
+          )
         }
       }
-      
-      // Load compacted status for all parts in parallel
-      yield* Effect.forEach(
-        toolPartIds,
-        (partId) =>
-          storage.value
-            .read<{ compacted: number }>(["compacted_tool", partId])
-            .pipe(
-              Effect.map(() => {
-                compactedParts.add(partId)
-              }),
-              Effect.catch(() => Effect.void),
-            ),
-        { concurrency: "unbounded" },
-      )
     }
   }
   
   // Helper to check if a tool part is compacted
   const isCompacted = (part: ToolPart): boolean => {
-    // Check legacy compacted timestamp first
-    if (part.state.status === "completed" && part.state.time.compacted) {
+    if (!stablePrune && part.state.status === "completed" && part.state.time.compacted) {
       return true
     }
     
@@ -1050,13 +1049,7 @@ export function toModelMessages(
   model: Provider.Model,
   options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
 ): Promise<ModelMessage[]> {
-  return Effect.runPromise(
-    toModelMessagesEffect(input, model, options).pipe(
-      Effect.provide(EffectLogger.layer),
-      Effect.provide(Storage.defaultLayer),
-      Effect.provide(Config.defaultLayer),
-    ),
-  )
+  return Effect.runPromise(toModelMessagesEffect(input, model, options).pipe(Effect.provide(EffectLogger.layer)))
 }
 
 export function page(input: { sessionID: SessionID; limit: number; before?: string }) {

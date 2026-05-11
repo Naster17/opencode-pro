@@ -408,16 +408,28 @@ export const layer: Layer.Layer<
         const stablePrune = cfg.compaction?.stable_prune ?? true
         
         if (stablePrune) {
+          const compactedAt = Date.now()
+          const compactedPartIDs = toPrune.flatMap((part) =>
+            part.state.status === "completed" ? [part.id] : [],
+          )
+
           // NEW BEHAVIOR (default): Store compacted metadata separately
           // This prevents cache invalidation by not modifying old tool parts
+          if (compactedPartIDs.length > 0) {
+            const existing = yield* storage
+              .read<{ compacted: number; partIDs?: string[] }>(["compacted_tool_session", input.sessionID])
+              .pipe(Effect.catch(() => Effect.succeed({ compacted: compactedAt, partIDs: [] })))
+            yield* storage
+              .write(["compacted_tool_session", input.sessionID], {
+                compacted: compactedAt,
+                partIDs: Array.from(new Set([...(existing.partIDs ?? []), ...compactedPartIDs])),
+              })
+              .pipe(Effect.ignore)
+          }
           for (const part of toPrune) {
-            if (part.state.status === "completed") {
-              yield* storage.write(["compacted_tool", part.id], { 
-                compacted: Date.now(),
-                sessionID: input.sessionID,
-                partID: part.id,
-              }).pipe(Effect.ignore)
-            }
+            if (part.state.status !== "completed") continue
+            part.state.time.compacted = compactedAt
+            yield* session.updatePart(part)
           }
           log.info("pruned (stable)", { count: toPrune.length })
         } else {

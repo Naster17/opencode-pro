@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { APICallError } from "ai"
+import * as EffectLogger from "@opencode-ai/core/effect/logger"
+import { Effect, Layer } from "effect"
+import { Storage } from "@/storage/storage"
 import { MessageV2 } from "../../src/session/message-v2"
 import { ProviderTransform } from "@/provider/transform"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { Question } from "../../src/question"
+import { TestConfig } from "../fixture/config"
 
 const sessionID = SessionID.make("session")
 const providerID = ProviderID.make("test")
@@ -357,6 +361,105 @@ describe("session.message-v2.toModelMessage", () => {
               ],
             },
             providerOptions: { openai: { tool: "meta" } },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("uses session-scoped stable prune metadata without reading each tool marker", async () => {
+    const userID = "m-user-pruned"
+    const assistantID = "m-assistant-pruned"
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u-pruned"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a-pruned"),
+            type: "tool",
+            callID: "call-pruned",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "very long output",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-pruned"),
+                  type: "file",
+                  mime: "image/png",
+                  filename: "attachment.png",
+                  url: "data:image/png;base64,Zm9v",
+                },
+              ],
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await Effect.runPromise(
+      MessageV2.toModelMessagesEffect(input, model).pipe(
+        Effect.provide(EffectLogger.layer),
+        Effect.provide(TestConfig.layer({ get: () => Effect.succeed({ compaction: { stable_prune: true } }) })),
+        Effect.provide(
+          Layer.succeed(
+            Storage.Service,
+            Storage.Service.of({
+              remove: () => Effect.void,
+              update: () => Effect.die("unexpected storage.update"),
+              write: () => Effect.die("unexpected storage.write"),
+              list: () => Effect.succeed([]),
+              read: <T,>(key: string[]) => {
+                if (key[0] === "compacted_tool_session") {
+                  return Effect.succeed({ partIDs: ["a-pruned"] } as T)
+                }
+                return Effect.die(`unexpected storage.read: ${key.join("/")}`)
+              },
+            }),
+          ),
+        ),
+      ),
+    )
+
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-pruned",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-pruned",
+            toolName: "bash",
+            output: { type: "text", value: "[Old tool result content cleared]" },
           },
         ],
       },
