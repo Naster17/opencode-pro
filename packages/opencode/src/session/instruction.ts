@@ -7,6 +7,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "@opencode-ai/core/global"
+import { Storage } from "@/storage/storage"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
 
@@ -16,17 +17,18 @@ const FILES = [
   "CONTEXT.md", // deprecated
 ]
 
-function extract(messages: MessageV2.WithParts[]) {
+function extract(messages: MessageV2.WithParts[], compactedPartIDs?: Set<string>) {
   const paths = new Set<string>()
   for (const msg of messages) {
     for (const part of msg.parts) {
-      if (part.type === "tool" && part.tool === "read" && part.state.status === "completed") {
-        if (part.state.time.compacted) continue
-        const loaded = part.state.metadata?.loaded
-        if (!loaded || !Array.isArray(loaded)) continue
-        for (const p of loaded) {
-          if (typeof p === "string") paths.add(p)
-        }
+      if (part.type !== "tool" || part.tool !== "read" || part.state.status !== "completed") continue
+      // Check if part is compacted (stable_prune mode uses storage, legacy mode uses part.state.time.compacted)
+      if (compactedPartIDs?.has(part.id)) continue
+      if (part.state.time.compacted) continue
+      const loaded = part.state.metadata?.loaded
+      if (!loaded || !Array.isArray(loaded)) continue
+      for (const p of loaded) {
+        if (typeof p === "string") paths.add(p)
       }
     }
   }
@@ -176,7 +178,22 @@ export const layer: Layer.Layer<
       messageID: MessageID,
     ) {
       const sys = yield* systemPaths()
-      const already = extract(messages)
+
+      const storage = yield* Effect.serviceOption(Storage.Service)
+      const compactedParts = new Set<string>()
+      if (storage._tag === "Some") {
+        const sessionIDs = new Set(messages.map((m) => m.info.sessionID).filter(Boolean))
+        for (const sid of sessionIDs) {
+          const stored = yield* storage.value
+            .read<{ partIDs?: string[] }>(["compacted_tool_session", sid])
+            .pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (stored?.partIDs) {
+            for (const id of stored.partIDs) compactedParts.add(id)
+          }
+        }
+      }
+
+      const already = extract(messages, compactedParts.size > 0 ? compactedParts : undefined)
       const results: { filepath: string; content: string }[] = []
       const s = yield* InstanceState.get(state)
       const root = path.resolve(yield* InstanceState.directory)
@@ -225,8 +242,27 @@ export const defaultLayer = layer.pipe(
   Layer.provide(FetchHttpClient.layer),
 )
 
-export function loaded(messages: MessageV2.WithParts[]) {
-  return extract(messages)
-}
+export const loaded = Effect.fn("Instruction.loaded")(function* (messages: MessageV2.WithParts[]) {
+  const storage = yield* Effect.serviceOption(Storage.Service)
+  const cfg = yield* Effect.serviceOption(Config.Service)
+  const compactedParts = new Set<string>()
+  
+  // Load compacted part IDs from storage when stable_prune is enabled
+  const stablePrune = cfg._tag === "Some" ? (yield* cfg.value.get()).compaction?.stable_prune ?? true : true
+  
+  if (stablePrune && storage._tag === "Some") {
+    const sessionIDs = new Set(messages.map((m) => m.info.sessionID).filter(Boolean))
+    for (const sid of sessionIDs) {
+      const stored = yield* storage.value
+        .read<{ partIDs?: string[] }>(["compacted_tool_session", sid])
+        .pipe(Effect.catch(() => Effect.succeed(undefined)))
+      if (stored?.partIDs) {
+        for (const id of stored.partIDs) compactedParts.add(id)
+      }
+    }
+  }
+  
+  return extract(messages, compactedParts.size > 0 ? compactedParts : undefined)
+})
 
 export * as Instruction from "./instruction"

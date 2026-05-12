@@ -1571,7 +1571,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             if (step === 1)
               yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
 
+            // Clone messages before modification to avoid mutating original objects
+            // This prevents cache invalidation and ensures message history integrity
             if (step > 1 && lastFinished) {
+              msgs = structuredClone(msgs)
               for (const m of msgs) {
                 if (m.info.role !== "user" || m.info.id <= lastFinished.id) continue
                 for (const p of m.parts) {
