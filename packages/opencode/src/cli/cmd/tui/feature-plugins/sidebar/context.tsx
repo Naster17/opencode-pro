@@ -1,14 +1,23 @@
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
-import { createEffect, createMemo, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
 import type { JSX } from "@opentui/solid"
 import { formatAlignedRow, formatCompactTokens, money, summarizeUsage } from "@tui/util/usage"
 import { Locale } from "@/util/locale"
+import { formatResetDuration, getCodexUsage } from "./codex-usage"
 
 const id = "internal:sidebar-metrics"
 
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
   const allSessions = createMemo(() => props.api.state.session.all())
+  const [now, setNow] = createSignal(Date.now())
+  const [codexUsage, { refetch }] = createResource(() => getCodexUsage())
+
+  const countdown = setInterval(() => setNow(Date.now()), 60_000)
+  const refresh = setInterval(() => void refetch(), 5 * 60_000)
+  onCleanup(() => clearInterval(countdown))
+  onCleanup(() => clearInterval(refresh))
+
   const descendantSessions = createMemo(() => {
     const rootID = props.session_id
     const descendants: string[] = []
@@ -115,6 +124,28 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     }
   })
 
+  const codexStats = createMemo(() => {
+    const snapshot = codexUsage()
+    if (!snapshot?.configured) return
+
+    const labelWidth = Math.max("Account".length, "Usage".length, "Reset".length)
+    const formatRow = (label: string, value: string) => (
+      <text wrapMode="none">
+        <span style={{ fg: theme().textMuted }}>{label.padEnd(labelWidth, " ")} </span>
+        <span style={{ fg: theme().text }}>{value}</span>
+      </text>
+    )
+
+    return {
+      account: formatRow("Account", snapshot.email ?? "unknown"),
+      usage: formatRow("Usage", snapshot.usedPercent === undefined ? "unknown" : `${snapshot.usedPercent}%`),
+      reset: formatRow(
+        "Reset",
+        snapshot.resetsAt === undefined ? "unknown" : formatResetDuration(snapshot.resetsAt, now()),
+      ),
+    }
+  })
+
   return (
     <box>
       <text fg={theme().text}>
@@ -141,6 +172,16 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
         {totalStats().avg}
       </box>
       <Show when={usage().additions > 0 || usage().deletions > 0}>{totalStats().code}</Show>
+      <Show when={codexStats()}>
+        <box marginTop={1}>
+          <text fg={theme().text}>
+            <b>Codex Usage</b>
+          </text>
+        </box>
+        {codexStats()?.account}
+        {codexStats()?.usage}
+        {codexStats()?.reset}
+      </Show>
     </box>
   )
 }
