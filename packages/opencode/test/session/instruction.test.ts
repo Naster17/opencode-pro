@@ -6,6 +6,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { ModelID, ProviderID } from "../../src/provider/schema"
+import { Storage } from "@/storage/storage"
 import { Instruction } from "../../src/session/instruction"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -18,18 +19,35 @@ const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, NodeFileSys
 
 const configLayer = TestConfig.layer()
 
-const instructionLayer = (global: Partial<Global.Interface>) =>
+const instructionLayer = (global: Partial<Global.Interface>, config = configLayer) =>
   Instruction.layer.pipe(
-    Layer.provide(configLayer),
+    Layer.provide(config),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(Global.layerWith(global)),
   )
 
 const provideInstruction =
-  (global: Partial<Global.Interface>) =>
+  (global: Partial<Global.Interface>, config = configLayer) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
-    self.pipe(Effect.provide(instructionLayer(global)))
+    self.pipe(Effect.provide(instructionLayer(global, config)))
+
+const storageLayer = (partIDs: string[]) =>
+  Layer.succeed(
+    Storage.Service,
+    Storage.Service.of({
+      remove: () => Effect.void,
+      update: () => Effect.die("unexpected storage.update"),
+      write: () => Effect.die("unexpected storage.write"),
+      list: () => Effect.succeed([]),
+      read: <T,>(key: string[]) => {
+        if (key[0] === "compacted_tool_session") {
+          return Effect.succeed({ partIDs } as T)
+        }
+        return Effect.die(`unexpected storage.read: ${key.join("/")}`)
+      },
+    }),
+  )
 
 const write = (filepath: string, content: string) =>
   Effect.gen(function* () {
@@ -193,7 +211,58 @@ describe("Instruction.resolve", () => {
     ),
   )
 
+  it.live("skips instructions from reads compacted via stable_prune storage", () =>
+    withFiles({ "subdir/AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
+      Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const agents = path.join(dir, "subdir", "AGENTS.md")
+        const filepath = path.join(dir, "subdir", "nested", "file.ts")
+        const id = MessageID.make("message-claim-4")
+
+        const results = yield* svc.resolve(loaded(agents), filepath, id)
+        expect(results).toHaveLength(1)
+        expect(results[0].filepath).toBe(agents)
+      }).pipe(Effect.provide(storageLayer(["part-loaded-1"]))),
+    ),
+  )
+
+  it.live("ignores storage compacted markers when stable_prune is disabled", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        yield* writeFiles(dir, { "subdir/AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" })
+        const svc = yield* Instruction.Service
+        const agents = path.join(dir, "subdir", "AGENTS.md")
+        const filepath = path.join(dir, "subdir", "nested", "file.ts")
+        const id = MessageID.make("message-claim-5")
+
+        const results = yield* svc.resolve(loaded(agents), filepath, id)
+        expect(results).toEqual([])
+      }).pipe(
+        provideInstruction(
+          { home: dir, config: dir },
+          TestConfig.layer({ get: () => Effect.succeed({ compaction: { stable_prune: false } }) }),
+        ),
+        Effect.provide(storageLayer(["part-loaded-1"])),
+      ),
+    ),
+  )
+
   test.todo("fetches remote instructions from config URLs via HttpClient", () => {})
+})
+
+describe("Instruction.loaded", () => {
+  it.live("skips compacted read metadata from stable_prune storage", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const agents = path.join(dir, "subdir", "AGENTS.md")
+        const paths = yield* Instruction.loaded(loaded(agents))
+        expect(paths.has(agents)).toBe(false)
+      }).pipe(
+        Effect.provide(configLayer),
+        Effect.provide(storageLayer(["part-loaded-1"])),
+      ),
+    ),
+  )
 })
 
 describe("Instruction.system", () => {

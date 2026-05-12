@@ -178,10 +178,10 @@ export const layer: Layer.Layer<
       messageID: MessageID,
     ) {
       const sys = yield* systemPaths()
-
+      const stablePrune = (yield* cfg.get()).compaction?.stable_prune ?? true
       const storage = yield* Effect.serviceOption(Storage.Service)
       const compactedParts = new Set<string>()
-      if (storage._tag === "Some") {
+      if (stablePrune && storage._tag === "Some") {
         const sessionIDs = new Set(messages.map((m) => m.info.sessionID).filter(Boolean))
         for (const sid of sessionIDs) {
           const stored = yield* storage.value
