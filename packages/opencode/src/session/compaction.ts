@@ -377,6 +377,20 @@ export const layer: Layer.Layer<
         .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
       if (!msgs) return
 
+      // Check if stable_prune is enabled to determine how to check for already-compacted parts
+      const stablePrune = cfg.compaction?.stable_prune ?? true
+      const alreadyCompacted = new Set<string>()
+      
+      if (stablePrune) {
+        // Load already compacted parts from storage
+        const stored = yield* storage
+          .read<{ partIDs?: string[] }>(["compacted_tool_session", input.sessionID])
+          .pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (stored?.partIDs) {
+          for (const id of stored.partIDs) alreadyCompacted.add(id)
+        }
+      }
+
       let total = 0
       let pruned = 0
       const toPrune: MessageV2.ToolPart[] = []
@@ -392,7 +406,14 @@ export const layer: Layer.Layer<
           if (part.type !== "tool") continue
           if (part.state.status !== "completed") continue
           if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
-          if (part.state.time.compacted) break loop
+          
+          // Check if already compacted (either in storage or in part itself)
+          if (stablePrune) {
+            if (alreadyCompacted.has(part.id)) break loop
+          } else {
+            if (part.state.time.compacted) break loop
+          }
+          
           const estimate = Token.estimate(part.state.output)
           total += estimate
           if (total <= PRUNE_PROTECT) continue

@@ -23,6 +23,10 @@ const ALLOWED_MODELS = new Set([
   "gpt-5.4-mini",
 ])
 
+export function isCodexModel(providerID: string, modelID: string) {
+  return providerID === "openai" && ALLOWED_MODELS.has(modelID)
+}
+
 interface PkceCodes {
   verifier: string
   challenge: string
