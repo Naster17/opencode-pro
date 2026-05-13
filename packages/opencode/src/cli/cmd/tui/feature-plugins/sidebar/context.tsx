@@ -2,7 +2,7 @@ import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plug
 import { createEffect, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
 import type { JSX } from "@opentui/solid"
 import { useSync } from "@tui/context/sync"
-import { formatAlignedRow, formatCompactTokens, money, summarizeUsage } from "@tui/util/usage"
+import { formatCompactTokens, money, summarizeUsage } from "@tui/util/usage"
 import { Locale } from "@/util/locale"
 import { isCodexModel } from "@/plugin/codex"
 import { formatResetDuration, getCodexUsage } from "./codex-usage"
@@ -133,14 +133,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       getParts: props.api.state.part,
     }], props.api.state.provider)
 
-    const reasoning = aggregated.reasoning > 0 ? aggregated.reasoning : rootMessages.reduce((sum, msg) => {
-      if (msg.role !== "assistant") return sum
-      return sum + (msg.tokens.reasoning ?? 0)
-    }, 0)
-
     return {
       ...aggregated,
-      reasoning,
       context_tokens_formatted: Locale.number(rootOnly.context_tokens),
       average_context_percent: rootOnly.average_context_percent,
     }
@@ -148,7 +142,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
 
   const totalStats = createMemo(() => {
     const leftLabels = ["ctx", "in", "total", "tools", "spent", "code"]
-    const rightLabels = ["reason", "out", "cached", "compact", "avg.gen"]
+    const rightLabels = ["code", "out", "cached", "compact", "avg.gen"]
     
     const leftWidth = Math.max(...leftLabels.map((l) => l.length))
     const rightWidth = Math.max(...rightLabels.map((l) => l.length))
@@ -162,9 +156,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
 
     return {
       ctx: formatRow("ctx", usage().context_tokens_formatted, leftWidth),
-      reason: formatRow("reason", Locale.number(usage().reasoning), rightWidth),
       in: formatRow("in", Locale.number(usage().input), leftWidth),
-      out: formatRow("out", Locale.number(usage().output), rightWidth),
+      out: formatRow("out", Locale.number(usage().output + usage().reasoning), rightWidth),
       total: formatRow("total", Locale.number(usage().tokens), leftWidth),
       cached: formatRow("cached", Locale.number(usage().cached), rightWidth),
       tools: formatRow("tools", usage().tools.toString(), leftWidth),
@@ -173,7 +166,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       avg: formatRow("avg.gen", usage().avg_tokens_per_second.replace(" t/s", "t/s"), rightWidth),
       code: (
         <text wrapMode="none">
-          <span style={{ fg: theme().textMuted }}>{"code".padEnd(leftWidth, " ")} </span>
+          <span style={{ fg: theme().textMuted }}>{"code".padEnd(rightWidth, " ")} </span>
           <span style={{ fg: theme().diffAdded }}>+{formatCompactTokens(usage().additions)}</span>
           <span style={{ fg: theme().textMuted }}> </span>
           <span style={{ fg: theme().diffRemoved }}>-{formatCompactTokens(usage().deletions)}</span>
@@ -213,7 +206,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       </text>
       <box flexDirection="row">
         <box width={totalStats().columnGap}>{totalStats().ctx}</box>
-        <Show when={usage().reasoning > 0}>{totalStats().reason}</Show>
+        <Show when={usage().additions > 0 || usage().deletions > 0}>{totalStats().code}</Show>
       </box>
       <box flexDirection="row">
         <box width={totalStats().columnGap}>{totalStats().in}</box>
@@ -231,7 +224,6 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
         <box width={totalStats().columnGap}>{totalStats().spent}</box>
         {totalStats().avg}
       </box>
-      <Show when={usage().additions > 0 || usage().deletions > 0}>{totalStats().code}</Show>
       <Show when={codexStats()}>
         <box marginTop={1}>
           <text fg={theme().text}>
