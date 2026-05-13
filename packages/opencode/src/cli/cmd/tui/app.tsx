@@ -311,10 +311,31 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const [pasteSummaryEnabled, setPasteSummaryEnabled] = createSignal(
     kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary),
   )
+  const [pendingPermissionIDs, setPendingPermissionIDs] = createSignal(new Set<string>())
+  const pendingPermissionCount = createMemo(() => pendingPermissionIDs().size)
+
+  event.on("permission.asked", (evt) => {
+    setPendingPermissionIDs((prev) => new Set(prev).add(evt.properties.id))
+  })
+
+  event.on("permission.replied", (evt) => {
+    setPendingPermissionIDs((prev) => {
+      if (!prev.has(evt.properties.requestID)) return prev
+      const next = new Set(prev)
+      next.delete(evt.properties.requestID)
+      return next
+    })
+  })
 
   // Update terminal window title based on current route and session
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+
+    if (pendingPermissionCount() > 0) {
+      const suffix = pendingPermissionCount() > 1 ? ` (${pendingPermissionCount()})` : ""
+      renderer.setTerminalTitle(`OC | Action Required [!]${suffix}`)
+      return
+    }
 
     if (route.data.type === "home") {
       renderer.setTerminalTitle("OpenCode")

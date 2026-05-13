@@ -20,7 +20,7 @@ import { useDialog } from "../../ui/dialog"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
 
-type PermissionStage = "permission" | "always" | "reject"
+type PermissionStage = "permission" | "always" | "session" | "reject"
 
 function normalizePath(input?: string) {
   if (!input) return ""
@@ -189,6 +189,29 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             if (option === "cancel") return
             void sdk.client.permission.reply({
               reply: "always",
+              requestID: props.request.id,
+              workspace: project.workspace.current(),
+            })
+          }}
+        />
+      </Match>
+      <Match when={store.stage === "session"}>
+        <Prompt
+          title="Allow everything"
+          body={
+            <box paddingLeft={1}>
+              <text fg={theme.textMuted}>
+                This will allow all permissions, paths, and commands until OpenCode is restarted.
+              </text>
+            </box>
+          }
+          options={{ confirm: "Confirm", cancel: "Cancel" }}
+          escapeKey="cancel"
+          onSelect={(option) => {
+            setStore("stage", "permission")
+            if (option === "cancel") return
+            void sdk.client.permission.reply({
+              reply: "session",
               requestID: props.request.id,
               workspace: project.workspace.current(),
             })
@@ -424,12 +447,21 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               title="Permission required"
               header={header()}
               body={current.body}
-              options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
+              options={{
+                once: "Allow once",
+                always: "Allow always",
+                reject: "Reject",
+                session: "Allow all",
+              }}
               escapeKey="reject"
               fullscreen
               onSelect={(option) => {
                 if (option === "always") {
                   setStore("stage", "always")
+                  return
+                }
+                if (option === "session") {
+                  setStore("stage", "session")
                   return
                 }
                 if (option === "reject") {

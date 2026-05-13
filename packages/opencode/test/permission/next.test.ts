@@ -901,6 +901,49 @@ it.live("reply - always keeps other session pending", () =>
   ),
 )
 
+it.live("reply - session persists wildcard approval and resolves all pending", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped({ git: true })
+    const run = withProvided(dir)
+    const a = yield* ask({
+      id: PermissionID.make("per_test6c"),
+      sessionID: SessionID.make("session_a"),
+      permission: "bash",
+      patterns: ["ls"],
+      metadata: {},
+      always: ["ls"],
+      ruleset: [],
+    }).pipe(run, Effect.forkScoped)
+
+    const b = yield* ask({
+      id: PermissionID.make("per_test6d"),
+      sessionID: SessionID.make("session_b"),
+      permission: "external_directory",
+      patterns: ["/tmp/*"],
+      metadata: {},
+      always: ["/tmp/*"],
+      ruleset: [],
+    }).pipe(run, Effect.forkScoped)
+
+    yield* waitForPending(2).pipe(run)
+    yield* reply({ requestID: PermissionID.make("per_test6c"), reply: "session" }).pipe(run)
+
+    yield* Fiber.join(a)
+    yield* Fiber.join(b)
+    expect(yield* list().pipe(run)).toHaveLength(0)
+
+    const result = yield* ask({
+      sessionID: SessionID.make("session_c"),
+      permission: "edit",
+      patterns: ["foo.ts"],
+      metadata: {},
+      always: [],
+      ruleset: [],
+    }).pipe(run)
+    expect(result).toBeUndefined()
+  }),
+)
+
 it.live("reply - publishes replied event", () =>
   withDir({ git: true }, () =>
     Effect.gen(function* () {

@@ -152,6 +152,7 @@ export class Agent implements ACPAgent {
     { optionId: "once", kind: "allow_once", name: "Allow once" },
     { optionId: "always", kind: "allow_always", name: "Always allow" },
     { optionId: "reject", kind: "reject_once", name: "Reject" },
+    { optionId: "session", kind: "allow_always", name: "Allow all" },
   ]
 
   constructor(connection: AgentSideConnection, config: ACPConfig) {
@@ -255,7 +256,7 @@ export class Agent implements ACPAgent {
 
             await this.sdk.permission.reply({
               requestID: permission.id,
-              reply: res.outcome.optionId as "once" | "always" | "reject",
+              reply: res.outcome.optionId as "once" | "always" | "session" | "reject",
               directory,
             })
           })

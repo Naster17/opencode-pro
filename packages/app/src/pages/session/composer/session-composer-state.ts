@@ -79,7 +79,7 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     return store.responding === perm.id
   })
 
-  const decide = (response: "once" | "always" | "reject") => {
+  const decide = (response: "once" | "always" | "session" | "reject") => {
     const perm = permissionRequest()
     if (!perm) return
     if (store.responding === perm.id) return
