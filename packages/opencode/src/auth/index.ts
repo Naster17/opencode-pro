@@ -76,7 +76,14 @@ export const layer = Layer.effect(
     const readDiskAuth = Effect.fn("Auth.readDisk")(function* () {
       for (let attempt = 0; attempt <= TRANSIENT_AUTH_RETRIES; attempt++) {
         const data = yield* readAuthFile()
-        if (!data || typeof data !== "object") return lastGood
+        if (!data || typeof data !== "object") {
+          if (attempt < TRANSIENT_AUTH_RETRIES) {
+            yield* Effect.sleep(TRANSIENT_AUTH_RETRY_DELAY)
+            continue
+          }
+          lastGood = {}
+          return lastGood
+        }
 
         const next = decodeAuth(data)
         if (Object.keys(data).length === 0 || Object.keys(next).length < Object.keys(data).length) {

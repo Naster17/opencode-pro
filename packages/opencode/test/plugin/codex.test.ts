@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import {
   parseJwtClaims,
@@ -147,28 +148,32 @@ describe("plugin.codex", () => {
         source: "codex-cli",
         access: accessToken,
         refresh: "refresh-cli",
-        accountId: "acc-file",
+        accountId: "acc-cli",
         expires: 2_000_000_000_000,
       })
     })
   })
 
   describe("resolveCodexAuth", () => {
-    test("prefers cockpit account selection over codex auth account id", async () => {
+    test("prefers cockpit account selection when auth matches it", async () => {
       await using tmp = await tmpdir()
       const home = process.env.OPENCODE_TEST_HOME
       process.env.OPENCODE_TEST_HOME = tmp.path
 
       try {
-        await Bun.$`mkdir -p ${path.join(tmp.path, ".codex")}`
+        await fs.mkdir(path.join(tmp.path, ".codex"), { recursive: true })
         await Bun.write(
           path.join(tmp.path, ".codex", "auth.json"),
           JSON.stringify({
             last_refresh: "2026-01-01T00:00:00.000Z",
             tokens: {
-              access_token: createTestJwt({ chatgpt_account_id: "acc-token", exp: 2_000_000_000 }),
+              access_token: createTestJwt({
+                chatgpt_account_id: "acc-token",
+                exp: 2_000_000_000,
+                "https://api.openai.com/profile": { email: "new@example.com" },
+              }),
               refresh_token: "refresh-cli",
-              id_token: createTestJwt({ email: "test@example.com" }),
+              id_token: createTestJwt({ email: "new@example.com" }),
               account_id: "acc-old",
             },
           }),
@@ -176,20 +181,63 @@ describe("plugin.codex", () => {
         await Bun.write(
           path.join(tmp.path, ".codex", ".cockpit_codex_auth.json"),
           JSON.stringify({
-            account_id: "acc-new",
+            account_id: "codex-internal-account-id",
             email: "new@example.com",
             written_at: 1778887499,
           }),
         )
 
         expect(await loadCockpitCodexSelection(path.join(tmp.path, ".codex", ".cockpit_codex_auth.json"))).toMatchObject({
-          account_id: "acc-new",
+          account_id: "codex-internal-account-id",
           email: "new@example.com",
         })
         expect(await resolveCodexAuth()).toMatchObject({
           source: "codex-cli",
-          accountId: "acc-new",
+          accountId: "acc-token",
           email: "new@example.com",
+        })
+      } finally {
+        if (home === undefined) delete process.env.OPENCODE_TEST_HOME
+        else process.env.OPENCODE_TEST_HOME = home
+      }
+    })
+
+    test("falls back to Codex CLI auth when cockpit points elsewhere", async () => {
+      await using tmp = await tmpdir()
+      const home = process.env.OPENCODE_TEST_HOME
+      process.env.OPENCODE_TEST_HOME = tmp.path
+
+      try {
+        await fs.mkdir(path.join(tmp.path, ".codex"), { recursive: true })
+        await Bun.write(
+          path.join(tmp.path, ".codex", "auth.json"),
+          JSON.stringify({
+            last_refresh: "2026-01-01T00:00:00.000Z",
+            tokens: {
+              access_token: createTestJwt({
+                chatgpt_account_id: "acc-old",
+                exp: 2_000_000_000,
+                "https://api.openai.com/profile": { email: "old@example.com" },
+              }),
+              refresh_token: "refresh-cli",
+              id_token: createTestJwt({ email: "old@example.com" }),
+              account_id: "acc-old",
+            },
+          }),
+        )
+        await Bun.write(
+          path.join(tmp.path, ".codex", ".cockpit_codex_auth.json"),
+          JSON.stringify({
+            account_id: "codex-internal-account-id",
+            email: "new@example.com",
+            written_at: 1778887499,
+          }),
+        )
+
+        expect(await resolveCodexAuth()).toMatchObject({
+          source: "codex-cli",
+          accountId: "acc-old",
+          email: "old@example.com",
         })
       } finally {
         if (home === undefined) delete process.env.OPENCODE_TEST_HOME

@@ -54,7 +54,17 @@ export class RunFailedError extends Error {
   }
 }
 
-export type Child = ChildProcess & { exited: Promise<number> }
+export type Child = ChildProcess & { exited: Promise<number>; detached?: boolean }
+
+function kill(proc: ChildProcess, signal?: NodeJS.Signals | number) {
+  if ((proc as Child).detached && process.platform !== "win32" && proc.pid) {
+    try {
+      process.kill(-proc.pid, signal)
+      return
+    } catch {}
+  }
+  proc.kill(signal)
+}
 
 export function spawn(cmd: string[], opts: Options = {}): Child {
   if (cmd.length === 0) throw new Error("Command is required")
@@ -77,11 +87,11 @@ export function spawn(cmd: string[], opts: Options = {}): Child {
     if (proc.exitCode !== null || proc.signalCode !== null) return
     closed = true
 
-    proc.kill(opts.kill ?? "SIGTERM")
+    kill(proc, opts.kill ?? "SIGTERM")
 
     const ms = opts.timeout ?? 5_000
     if (ms <= 0) return
-    timer = setTimeout(() => proc.kill("SIGKILL"), ms)
+    timer = setTimeout(() => kill(proc, "SIGKILL"), ms)
   }
 
   const exited = new Promise<number>((resolve, reject) => {
@@ -109,6 +119,7 @@ export function spawn(cmd: string[], opts: Options = {}): Child {
 
   const child = proc as Child
   child.exited = exited
+  child.detached = opts.detached
   return child
 }
 
@@ -151,7 +162,7 @@ export async function stop(proc: ChildProcess) {
   if (proc.exitCode !== null || proc.signalCode !== null) return
 
   if (process.platform !== "win32" || !proc.pid) {
-    proc.kill()
+    kill(proc)
     return
   }
 
@@ -160,7 +171,7 @@ export async function stop(proc: ChildProcess) {
   })
 
   if (out.code === 0) return
-  proc.kill()
+  kill(proc)
 }
 
 export async function text(cmd: string[], opts: RunOptions = {}): Promise<TextResult> {

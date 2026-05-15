@@ -16,6 +16,8 @@ const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
+const CODEX_CLI_AUTH_MATCH_RETRIES = 20
+const CODEX_CLI_AUTH_MATCH_DELAY_MS = 100
 const ALLOWED_MODELS = new Set([
   "gpt-5.5",
   "gpt-5.2",
@@ -69,6 +71,9 @@ export interface IdTokenClaims {
   "https://api.openai.com/auth"?: {
     chatgpt_account_id?: string
   }
+  "https://api.openai.com/profile"?: {
+    email?: string
+  }
 }
 
 export function parseJwtClaims(token: string): IdTokenClaims | undefined {
@@ -98,6 +103,23 @@ export function extractAccountId(tokens: TokenResponse): string | undefined {
   if (tokens.access_token) {
     const claims = parseJwtClaims(tokens.access_token)
     return claims ? extractAccountIdFromClaims(claims) : undefined
+  }
+  return undefined
+}
+
+function extractEmailFromClaims(claims: IdTokenClaims): string | undefined {
+  return claims.email || claims["https://api.openai.com/profile"]?.email
+}
+
+function extractEmail(tokens: Pick<TokenResponse, "id_token" | "access_token">): string | undefined {
+  if (tokens.id_token) {
+    const claims = parseJwtClaims(tokens.id_token)
+    const email = claims && extractEmailFromClaims(claims)
+    if (email) return email
+  }
+  if (tokens.access_token) {
+    const claims = parseJwtClaims(tokens.access_token)
+    return claims ? extractEmailFromClaims(claims) : undefined
   }
   return undefined
 }
@@ -202,12 +224,15 @@ export async function loadCodexCliAuth(filePath = codexCliAuthPath()): Promise<R
         ? Date.parse(stored.last_refresh) + 3600 * 1000
         : Date.now() + 3600 * 1000),
     accountId:
-      tokens.account_id ||
       extractAccountId({
         id_token: tokens.id_token ?? "",
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
-      }),
+      }) || tokens.account_id,
+    email: extractEmail({
+      id_token: tokens.id_token ?? "",
+      access_token: tokens.access_token,
+    }),
   }
 }
 
@@ -217,14 +242,28 @@ export async function loadCockpitCodexSelection(filePath = cockpitCodexAuthPath(
     .catch(() => undefined)) as CockpitCodexAuthFile | undefined
 }
 
-async function applyCockpitSelection(auth: ResolvedCodexAuth) {
-  const cockpit = await loadCockpitCodexSelection()
-  if (!cockpit?.account_id) return auth
-  return {
-    ...auth,
-    accountId: cockpit.account_id,
-    email: cockpit.email,
+function matchesCockpitSelection(auth: ResolvedCodexAuth, cockpit?: CockpitCodexAuthFile) {
+  if (!cockpit) return true
+  if (cockpit.email && auth.email) return cockpit.email.toLowerCase() === auth.email.toLowerCase()
+  if (cockpit.account_id && auth.accountId) return cockpit.account_id === auth.accountId
+  return true
+}
+
+async function loadSelectedCodexCliAuth(cockpit?: CockpitCodexAuthFile) {
+  for (let attempt = 0; attempt <= CODEX_CLI_AUTH_MATCH_RETRIES; attempt++) {
+    const auth = await loadCodexCliAuth()
+    if (!auth || matchesCockpitSelection(auth, cockpit)) return auth
+    if (attempt < CODEX_CLI_AUTH_MATCH_RETRIES) await sleep(CODEX_CLI_AUTH_MATCH_DELAY_MS)
   }
+
+  const auth = await loadCodexCliAuth()
+  log.warn("codex auth still points at previous cockpit account", {
+    cockpit_email: cockpit?.email,
+    auth_email: auth?.email,
+    cockpit_account_id: cockpit?.account_id,
+    auth_account_id: auth?.accountId,
+  })
+  return auth
 }
 
 async function writeCodexCliAuth(tokens: TokenResponse, accountId?: string) {
@@ -253,11 +292,12 @@ async function writeCodexCliAuth(tokens: TokenResponse, accountId?: string) {
 }
 
 export async function resolveCodexAuth(getAuth?: () => Promise<CodexOAuthLike | undefined>) {
-  const codexCli = await loadCodexCliAuth()
-  if (codexCli) return applyCockpitSelection(codexCli)
+  const cockpit = await loadCockpitCodexSelection()
+  const codexCli = await loadSelectedCodexCliAuth(cockpit)
+  if (codexCli) return codexCli
   const opencode = normalizeOpencodeCodexAuth(await getAuth?.())
   if (!opencode) return
-  return applyCockpitSelection(opencode)
+  return opencode
 }
 
 export async function refreshResolvedCodexAuth(auth: ResolvedCodexAuth) {
@@ -269,6 +309,7 @@ export async function refreshResolvedCodexAuth(auth: ResolvedCodexAuth) {
     refresh: tokens.refresh_token,
     expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
     accountId,
+    email: extractEmail(tokens) || auth.email,
   }
   if (auth.source === "codex-cli") await writeCodexCliAuth(tokens, accountId)
   return next
