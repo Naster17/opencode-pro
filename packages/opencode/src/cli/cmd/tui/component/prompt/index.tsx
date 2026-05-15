@@ -951,9 +951,6 @@ export function Prompt(props: PromptProps) {
       }
     }
 
-    // Filter out text parts (pasted content) since they're now expanded inline
-    const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
-
     // Capture mode before it gets reset
     const currentMode = store.mode
     const editorSelection = editorContext()
@@ -974,6 +971,16 @@ export function Prompt(props: PromptProps) {
             },
           ]
         : []
+    const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
+    const requestParts = [
+      ...editorParts,
+      {
+        id: PartID.ascending(),
+        type: "text" as const,
+        text: inputText,
+      },
+      ...nonTextParts.map(assign),
+    ]
 
     if (store.mode === "shell") {
       void sdk.client.session.shell({
@@ -1009,33 +1016,60 @@ export function Prompt(props: PromptProps) {
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,
         variant,
-        parts: nonTextParts
+        parts: requestParts
           .filter((x) => x.type === "file")
           .map((x) => ({
-            id: PartID.ascending(),
             ...x,
           })),
       })
     } else {
+      const optimisticMessage: UserMessage = {
+        id: messageID,
+        sessionID,
+        role: "user",
+        time: { created: Date.now() },
+        agent: agent.name,
+        model: {
+          providerID: selectedModel.providerID,
+          modelID: selectedModel.modelID,
+          variant,
+        },
+      }
+      const optimisticParts = requestParts.map((part) => ({
+        ...part,
+        messageID,
+        sessionID,
+      }))
+      sync.set(
+        produce((draft) => {
+          const messages = draft.message[sessionID] ?? []
+          const result = messages.findIndex((item) => item.id === messageID)
+          if (result >= 0) messages[result] = optimisticMessage
+          else messages.push(optimisticMessage)
+          draft.message[sessionID] = messages
+          draft.part[messageID] = optimisticParts
+          draft.session_status[sessionID] = { type: "busy" }
+        }),
+      )
       sdk.client.session
-        .prompt({
+        .promptAsync({
           sessionID,
           ...selectedModel,
           messageID,
           agent: agent.name,
           model: selectedModel,
           variant,
-          parts: [
-            ...editorParts,
-            {
-              id: PartID.ascending(),
-              type: "text",
-              text: inputText,
-            },
-            ...nonTextParts.map(assign),
-          ],
+          parts: requestParts,
         })
-        .catch(() => {})
+        .catch(() => {
+          sync.set(
+            produce((draft) => {
+              draft.message[sessionID] = (draft.message[sessionID] ?? []).filter((item) => item.id !== messageID)
+              delete draft.part[messageID]
+              draft.session_status[sessionID] = { type: "idle" }
+            }),
+          )
+        })
       if (editorParts.length > 0) editor.markSelectionSent()
     }
     history.append({

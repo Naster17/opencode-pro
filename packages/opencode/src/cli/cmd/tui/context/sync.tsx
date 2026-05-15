@@ -27,7 +27,7 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, onCleanup, onMount } from "solid-js"
 import * as Log from "@opencode-ai/core/util/log"
 import { emptyConsoleState, type ConsoleState } from "@/config/console-state"
 import path from "path"
@@ -36,6 +36,7 @@ import { useKV } from "./kv"
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
+    const PART_EVENT_FLUSH_MS = 16
     const [store, setStore] = createStore<{
       status: "loading" | "partial" | "complete"
       provider: Provider[]
@@ -114,6 +115,63 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const fullSyncedSessions = new Set<string>()
     const fullHistorySyncedSessions = new Set<string>()
     let syncedWorkspace = project.workspace.current()
+    const queuedPartUpdates = new Map<string, Part>()
+    const queuedPartDeltas = new Map<string, { messageID: string; partID: string; field: string; delta: string }>()
+    let queuedPartFlush: ReturnType<typeof setTimeout> | undefined
+
+    function flushQueuedPartEvents() {
+      queuedPartFlush = undefined
+      if (queuedPartUpdates.size === 0 && queuedPartDeltas.size === 0) return
+      const updates = [...queuedPartUpdates.values()]
+      const deltas = [...queuedPartDeltas.values()]
+      queuedPartUpdates.clear()
+      queuedPartDeltas.clear()
+      batch(() => {
+        if (updates.length > 0) {
+          setStore(
+            "part",
+            produce((draft) => {
+              for (const part of updates) {
+                const parts = draft[part.messageID]
+                if (!parts) {
+                  draft[part.messageID] = [part]
+                  continue
+                }
+                const result = Binary.search(parts, part.id, (item) => item.id)
+                if (result.found) {
+                  parts[result.index] = part
+                  continue
+                }
+                parts.splice(result.index, 0, part)
+              }
+            }),
+          )
+        }
+
+        if (deltas.length > 0) {
+          setStore(
+            "part",
+            produce((draft) => {
+              for (const delta of deltas) {
+                const parts = draft[delta.messageID]
+                if (!parts) continue
+                const result = Binary.search(parts, delta.partID, (part) => part.id)
+                if (!result.found) continue
+                const part = parts[result.index]
+                const field = delta.field as keyof typeof part
+                const existing = part[field] as string | undefined
+                ;(part[field] as string) = (existing ?? "") + delta.delta
+              }
+            }),
+          )
+        }
+      })
+    }
+
+    function scheduleQueuedPartEvents() {
+      if (queuedPartFlush) return
+      queuedPartFlush = setTimeout(flushQueuedPartEvents, PART_EVENT_FLUSH_MS)
+    }
 
     async function fetchSessionMessages(sessionID: string, fullHistory?: boolean) {
       if (!fullHistory) {
@@ -325,41 +383,21 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
         case "message.part.updated": {
-          const parts = store.part[event.properties.part.messageID]
-          if (!parts) {
-            setStore("part", event.properties.part.messageID, [event.properties.part])
-            break
-          }
-          const result = Binary.search(parts, event.properties.part.id, (p) => p.id)
-          if (result.found) {
-            setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
-            break
-          }
-          setStore(
-            "part",
-            event.properties.part.messageID,
-            produce((draft) => {
-              draft.splice(result.index, 0, event.properties.part)
-            }),
-          )
+          queuedPartUpdates.set(`${event.properties.part.messageID}:${event.properties.part.id}`, event.properties.part)
+          scheduleQueuedPartEvents()
           break
         }
 
         case "message.part.delta": {
-          const parts = store.part[event.properties.messageID]
-          if (!parts) break
-          const result = Binary.search(parts, event.properties.partID, (p) => p.id)
-          if (!result.found) break
-          setStore(
-            "part",
-            event.properties.messageID,
-            produce((draft) => {
-              const part = draft[result.index]
-              const field = event.properties.field as keyof typeof part
-              const existing = part[field] as string | undefined
-              ;(part[field] as string) = (existing ?? "") + event.properties.delta
-            }),
-          )
+          const key = `${event.properties.messageID}:${event.properties.partID}:${event.properties.field}`
+          const existing = queuedPartDeltas.get(key)
+          queuedPartDeltas.set(key, {
+            messageID: event.properties.messageID,
+            partID: event.properties.partID,
+            field: event.properties.field,
+            delta: (existing?.delta ?? "") + event.properties.delta,
+          })
+          scheduleQueuedPartEvents()
           break
         }
 
@@ -496,6 +534,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     onMount(() => {
       void bootstrap()
+    })
+
+    onCleanup(() => {
+      if (queuedPartFlush) clearTimeout(queuedPartFlush)
     })
 
     const result = {
