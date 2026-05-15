@@ -23,7 +23,7 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
   if (options?.bypass) return
 
   const ins = yield* InstanceState.context
-  const full = process.platform === "win32" ? AppFileSystem.normalizePath(target) : target
+  const full = process.platform === "win32" ? AppFileSystem.resolve(target) : target
   if (containsPath(full, ins)) return
 
   const kind = options?.kind ?? "file"

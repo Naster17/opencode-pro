@@ -344,6 +344,7 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: { br
   // Cache everything except the last user message (and any assistant response after it)
   // This maximizes cache hits while keeping the current turn fresh
   const cacheableHistory = lastUserIndex > 0 && nonSystem.length >= minMessages ? nonSystem.slice(0, lastUserIndex) : []
+  const singleTurnUser = system.length === 0 && nonSystem.length === 1 && nonSystem[0].role === "user" ? nonSystem[0] : undefined
   
   // For very long conversations, add cache breakpoints every N messages to improve hit rate
   const CACHE_BREAKPOINT_INTERVAL = config?.breakpoint_interval ?? 10
@@ -425,6 +426,10 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: { br
     }
 
     msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, providerOptions)
+  }
+
+  if (singleTurnUser) {
+    singleTurnUser.providerOptions = mergeDeep(singleTurnUser.providerOptions ?? {}, providerOptions)
   }
 
   return msgs

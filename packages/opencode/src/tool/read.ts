@@ -160,7 +160,7 @@ export const ReadTool = Tool.define(
         filepath = path.resolve(instance.directory, filepath)
       }
       if (process.platform === "win32") {
-        filepath = AppFileSystem.normalizePath(filepath)
+        filepath = AppFileSystem.resolve(filepath)
       }
       const title = path.relative(instance.worktree, filepath)
 

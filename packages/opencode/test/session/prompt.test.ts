@@ -65,6 +65,8 @@ const ref = {
   modelID: ModelID.make("test-model"),
 }
 
+const delayedShellCommand = process.platform === "win32" ? "Start-Sleep -Milliseconds 200" : "sleep 0.2"
+
 function defer<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
   const promise = new Promise<T>((done) => {
@@ -1312,7 +1314,7 @@ it.live(
         yield* llm.text("after-shell")
 
         const sh = yield* prompt
-          .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
+          .shell({ sessionID: chat.id, agent: "build", command: delayedShellCommand })
           .pipe(Effect.forkChild)
         yield* Effect.sleep(50)
 
@@ -1350,7 +1352,7 @@ it.live(
         yield* llm.text("done")
 
         const sh = yield* prompt
-          .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
+          .shell({ sessionID: chat.id, agent: "build", command: delayedShellCommand })
           .pipe(Effect.forkChild)
         yield* Effect.sleep(50)
 

@@ -5,6 +5,7 @@ import type { TuiPlugin, TuiPluginApi, TuiPluginModule, TuiPluginStatus } from "
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { useSync } from "@tui/context/sync"
 import { fileURLToPath } from "url"
+import path from "path"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
 
@@ -80,18 +81,18 @@ function source(spec: string) {
 function meta(item: TuiPluginStatus, width: number) {
   if (item.source === "internal") return "built-in plugin"
   const next = source(item.spec)
-  if (next) return width >= 120 ? next : next.split("/").at(-1)
+  if (next) return width >= 120 ? next : path.basename(next)
   if (item.source === "npm") return parsePluginSpecifier(item.spec).pkg
   return width >= 120 ? item.spec : pluginName(item.spec)
 }
 
 function pluginName(spec: string) {
   if (spec.startsWith("file://")) {
-    const path = fileURLToPath(spec)
-    const part = path.split("/").at(-1) ?? path
+    const file = fileURLToPath(spec)
+    const part = path.basename(file)
     const base = part.includes(".") ? part.slice(0, part.lastIndexOf(".")) : part
     if (base === "index") {
-      const dir = path.split("/").at(-2)
+      const dir = path.basename(path.dirname(file))
       return dir || base
     }
     return base
@@ -126,7 +127,7 @@ function configuredPluginEnabled(api: TuiPluginApi, spec: string) {
 function pluginDescription(spec: string, width: number, label: string) {
   if (spec.startsWith("file://")) {
     const file = fileURLToPath(spec)
-    if (width >= 120) return `${label}: ${file.split("/").at(-1) ?? file}`
+    if (width >= 120) return `${label}: ${path.basename(file)}`
     return label.toLowerCase()
   }
 

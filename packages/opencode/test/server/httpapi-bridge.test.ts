@@ -233,6 +233,8 @@ describe("HttpApi server", () => {
       "POST /api/session/{sessionID}/compact",
       "POST /api/session/{sessionID}/prompt",
       "POST /api/session/{sessionID}/wait",
+      "POST /lsp/install",
+      "POST /lsp/uninstall",
     ])
   })
 

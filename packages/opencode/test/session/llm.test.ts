@@ -1222,6 +1222,11 @@ describe("session.llm.stream", () => {
                 type: "text",
                 text: "I checked your home directory and looked for PDF files.",
               },
+            ],
+          },
+          {
+            role: "assistant",
+            content: [
               {
                 type: "tool_use",
                 id: "toolu_01N8mDEzG8DSTs7UPHFtmgCT",

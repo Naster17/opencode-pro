@@ -24,7 +24,8 @@ import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { errorMessage } from "@/util/error"
 import { PluginLoader } from "./loader"
-import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
+import { parsePluginSpecifier, pluginSource, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
+import { ConfigPlugin } from "@/config/plugin"
 import { registerAdapter } from "@/control-plane/adapters"
 import type { WorkspaceAdapter } from "@/control-plane/types"
 
@@ -161,7 +162,9 @@ export const layer = Layer.effect(
         if (Flag.OPENCODE_PURE && cfg.plugin_origins?.length) {
           log.info("skipping external plugins in pure mode", { count: cfg.plugin_origins.length })
         }
-        if (plugins.length) yield* config.waitForDependencies()
+        if (plugins.some((item) => pluginSource(ConfigPlugin.pluginSpecifier(item.spec)) === "npm")) {
+          yield* config.waitForDependencies()
+        }
 
         const loaded = yield* Effect.promise(() =>
           PluginLoader.loadExternal({
