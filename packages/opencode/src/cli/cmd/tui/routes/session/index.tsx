@@ -111,6 +111,22 @@ const STREAM_RATE_MAX_RISE = 6
 const STREAM_RATE_MAX_FALL = 1.2
 const PROMPT_RATE_SMOOTHING = 0.2
 
+type AssistantDerivedMetrics = {
+  startedAt?: number
+  estimatedPromptTokens: number
+  estimatedOutputTokens: number
+  generationStartedAt?: number
+}
+
+type LiveAssistantMetrics = {
+  messageID?: string
+  now: number
+  responseStartedAt?: number
+  textStartedAt?: number
+  firstTokenAt?: number
+  streamSamples: { time: number; chars: number }[]
+}
+
 const context = createContext<{
   width: number
   sessionID: string
@@ -1408,127 +1424,47 @@ function UserMessage(props: {
   )
 }
 
-function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
+function AssistantMessage(props: {
+  message: AssistantMessage
+  parts: Part[]
+  last: boolean
+  derived?: AssistantDerivedMetrics
+  live?: LiveAssistantMetrics
+}) {
   const ctx = use()
   const local = useLocal()
   const { theme } = useTheme()
-  const sync = useSync()
-  const event = useEvent()
-  const [now, setNow] = createSignal(Date.now())
-  const [firstTokenAt, setFirstTokenAt] = createSignal<number>()
-  const [responseStartedAt, setResponseStartedAt] = createSignal<number>()
-  const [textStartedAt, setTextStartedAt] = createSignal<number>()
-  const [streamSamples, setStreamSamples] = createSignal<{ time: number; chars: number }[]>([])
   const [smoothedLiveTokensPerSecond, setSmoothedLiveTokensPerSecond] = createSignal(0)
   const [latestLiveTokensPerSecond, setLatestLiveTokensPerSecond] = createSignal(0)
   const [smoothedPromptTokensPerSecond, setSmoothedPromptTokensPerSecond] = createSignal(0)
-  const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
-  const contextMessages = createMemo(() => {
-    const index = messages().findIndex((message) => message.id === props.message.parentID)
-    if (index < 0) return []
-    return messages().slice(0, index + 1)
-  })
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
-  const providerModel = createMemo(
-    () => sync.data.provider.find((item) => item.id === props.message.providerID)?.models[props.message.modelID],
-  )
-  const parentUserMessage = createMemo(() =>
-    messages().find(
-      (message): message is UserMessage => message.role === "user" && message.id === props.message.parentID,
-    ),
-  )
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
   })
 
-  createEffect(() => {
-    if (final()) return
-    if (!props.last) return
-    const timer = setInterval(() => setNow(Date.now()), STREAM_RATE_UPDATE_INTERVAL)
-    onCleanup(() => clearInterval(timer))
-  })
+  const live = createMemo(() => (!final() && props.last ? props.live : undefined))
 
   const startedAt = createMemo(() => {
-    const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
-    return user?.time?.created
+    return props.derived?.startedAt
   })
 
   const duration = createMemo(() => {
     if (!startedAt()) return 0
-    const end = final() ? props.message.time.completed : now()
+    const end = final() ? props.message.time.completed : live()?.now
     if (!end) return 0
     return Math.max(0, end - startedAt()!)
   })
 
-  const estimatedOutputTokens = createMemo(() =>
-    props.parts
-      .filter((part): part is TextPart => part.type === "text")
-      .reduce((total, part) => total + Token.estimate(part.text), 0),
-  )
+  const estimatedOutputTokens = createMemo(() => props.derived?.estimatedOutputTokens ?? 0)
 
-  const estimatedPromptTokens = createMemo(
-    () =>
-      contextMessages()
-        .flatMap((message) => sync.data.part[message.id] ?? [])
-        .map((part) => estimatePromptPartTokens(part))
-        .reduce((total, value) => total + value, 0) +
-      Token.estimate(
-        [
-          ...(providerModel()
-            ? SystemPrompt.provider(providerModel() as Parameters<typeof SystemPrompt.provider>[0])
-            : []),
-          parentUserMessage()?.system ?? "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      ),
-  )
-
-  event.on("session.next.reasoning.started", (evt) => {
-    if (!props.last) return
-    if (final()) return
-    if (evt.properties.sessionID !== props.message.sessionID) return
-    if (responseStartedAt()) return
-    setResponseStartedAt(evt.properties.timestamp)
-    setNow(evt.properties.timestamp)
-  })
-
-  event.on("session.next.text.started", (evt) => {
-    if (!props.last) return
-    if (final()) return
-    if (evt.properties.sessionID !== props.message.sessionID) return
-    if (!responseStartedAt()) setResponseStartedAt(evt.properties.timestamp)
-    if (!textStartedAt()) setTextStartedAt(evt.properties.timestamp)
-    setNow(evt.properties.timestamp)
-  })
-
-  event.on("message.part.delta", (evt) => {
-    if (evt.properties.messageID !== props.message.id) return
-    if (evt.properties.field !== "text") return
-    const time = Date.now()
-    setNow(time)
-    if (!responseStartedAt()) setResponseStartedAt(time)
-    if (!textStartedAt()) setTextStartedAt(time)
-    if (!firstTokenAt()) setFirstTokenAt(time)
-    setStreamSamples((samples) => [
-      ...samples.filter((sample) => time - sample.time <= STREAM_RATE_WINDOW),
-      { time, chars: evt.properties.delta.length },
-    ])
-  })
+  const estimatedPromptTokens = createMemo(() => props.derived?.estimatedPromptTokens ?? 0)
 
   const generationDuration = createMemo(() => {
     const generationStartedAt =
-      textStartedAt() ??
-      firstTokenAt() ??
-      props.parts
-        .flatMap((part) => {
-          if (part.type === "text" && part.time?.start) return [part.time.start]
-          return []
-        })
-        .sort((a, b) => a - b)[0]
+      live()?.textStartedAt ?? live()?.firstTokenAt ?? props.derived?.generationStartedAt
     if (!generationStartedAt) return 0
-    const end = final() ? props.message.time.completed : now()
+    const end = final() ? props.message.time.completed : live()?.now
     if (!end) return 0
     return Math.max(0, end - generationStartedAt)
   })
@@ -1536,16 +1472,8 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const promptProcessingDuration = createMemo(() => {
     if (!startedAt()) return 0
     const end =
-      responseStartedAt() ??
-      firstTokenAt() ??
-      props.parts
-        .flatMap((part) => {
-          if (part.type === "text" && part.time?.start) return [part.time.start]
-          if (part.type === "reasoning" && part.time?.start) return [part.time.start]
-          return []
-        })
-        .sort((a, b) => a - b)[0] ??
-      now()
+      live()?.responseStartedAt ?? live()?.firstTokenAt ?? props.derived?.generationStartedAt ?? live()?.now
+    if (!end) return 0
     return Math.max(0, end - startedAt()!)
   })
 
@@ -1556,10 +1484,10 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   })
 
   const rateForWindow = (window: number) => {
-    const current = now()
-    const recent = streamSamples().filter((sample) => current - sample.time <= window)
+    const current = live()?.now ?? 0
+    const recent = (live()?.streamSamples ?? []).filter((sample: { time: number; chars: number }) => current - sample.time <= window)
     if (recent.length === 0) return 0
-    const chars = recent.reduce((total, sample) => total + sample.chars, 0)
+    const chars = recent.reduce((total: number, sample: { time: number; chars: number }) => total + sample.chars, 0)
     const started = recent[0]?.time
     const ended = recent[recent.length - 1]?.time
     if (!started || !ended) return 0
@@ -1590,7 +1518,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   })
 
   createEffect(() => {
-    if (responseStartedAt() || firstTokenAt()) {
+    if (live()?.responseStartedAt || live()?.firstTokenAt) {
       setSmoothedPromptTokensPerSecond(0)
       return
     }
@@ -1610,6 +1538,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   createEffect(() => {
     if (final()) return
     if (!props.last) return
+    if (!live()) return
     const timer = setInterval(() => {
       const next = latestLiveTokensPerSecond()
       const prev = smoothedLiveTokensPerSecond()
@@ -1656,7 +1585,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       ].filter(Boolean)
     }
 
-    if (!responseStartedAt()) {
+    if (!live()?.responseStartedAt) {
       return [
         `↓ ${formatTokensPerSecond(smoothedPromptTokensPerSecond())}`,
         duration() > 0 ? Locale.duration(duration()) : "",
@@ -1774,6 +1703,7 @@ const PART_MAPPING = {
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme, subtleSyntax } = useTheme()
   const ctx = use()
+  const streaming = createMemo(() => !props.message.time.completed)
   const content = createMemo(() => {
     // Filter out redacted reasoning chunks from OpenRouter
     // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
@@ -1793,7 +1723,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
         <code
           filetype="markdown"
           drawUnstyledText={false}
-          streaming={true}
+          streaming={streaming()}
           syntaxStyle={subtleSyntax()}
           content={"_Thinking:_ " + content()}
           conceal={ctx.conceal()}
@@ -1807,6 +1737,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const streaming = createMemo(() => !props.message.time.completed)
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
@@ -1814,7 +1745,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <markdown
               syntaxStyle={syntax()}
-              streaming={true}
+              streaming={streaming()}
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
               fg={theme.markdownText}
@@ -1825,7 +1756,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
             <code
               filetype="markdown"
               drawUnstyledText={false}
-              streaming={true}
+              streaming={streaming()}
               syntaxStyle={syntax()}
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
