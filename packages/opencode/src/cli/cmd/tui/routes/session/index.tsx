@@ -100,21 +100,17 @@ const GO_UPSELL_LAST_SEEN_AT = "go_upsell_last_seen_at"
 const GO_UPSELL_DONT_SHOW = "go_upsell_dont_show"
 const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
 const STREAM_RATE_WINDOW = 5000
-const STREAM_RATE_SHORT_WINDOW = 1200
-const STREAM_RATE_MEDIUM_WINDOW = 2500
-const STREAM_RATE_LONG_WINDOW = 5000
 const STREAM_RATE_UPDATE_INTERVAL = 250
-const STREAM_RATE_LOCK_THRESHOLD = 6
-const STREAM_RATE_RISE_SMOOTHING = 0.35
-const STREAM_RATE_FALL_SMOOTHING = 0.08
-const STREAM_RATE_MAX_RISE = 6
-const STREAM_RATE_MAX_FALL = 1.2
-const PROMPT_RATE_SMOOTHING = 0.2
+const STREAM_RATE_MIN_WINDOW = 1200
+const STREAM_RATE_SMOOTHING = 0.18
+const PROMPT_RATE_MIN_WINDOW = 1500
+const PROMPT_RATE_SMOOTHING = 0.12
 
 type AssistantDerivedMetrics = {
   startedAt?: number
   estimatedPromptTokens: number
   estimatedOutputTokens: number
+  responseStartedAt?: number
   generationStartedAt?: number
 }
 
@@ -182,6 +178,10 @@ export function Session() {
 
   const lastAssistant = createMemo(() => {
     return messages().findLast((x) => x.role === "assistant")
+  })
+  const [liveAssistant, setLiveAssistant] = createSignal<LiveAssistantMetrics>({
+    now: Date.now(),
+    streamSamples: [],
   })
 
   const dimensions = useTerminalDimensions()
@@ -300,6 +300,80 @@ export function Session() {
       if (dontShowAgain) kv.set(GO_UPSELL_DONT_SHOW, true)
       kv.set(GO_UPSELL_LAST_SEEN_AT, Date.now())
     })
+  })
+
+  event.on("session.next.reasoning.started", (evt) => {
+    const assistant = lastAssistant()
+    if (!assistant) return
+    if (assistant.time.completed) return
+    if (evt.properties.sessionID !== route.sessionID) return
+    setLiveAssistant((current) =>
+      current.messageID !== assistant.id
+        ? {
+            messageID: assistant.id,
+            now: evt.properties.timestamp,
+            responseStartedAt: evt.properties.timestamp,
+            streamSamples: [],
+          }
+        : {
+            ...current,
+            now: evt.properties.timestamp,
+            responseStartedAt: current.responseStartedAt ?? evt.properties.timestamp,
+          },
+    )
+  })
+
+  event.on("session.next.text.started", (evt) => {
+    const assistant = lastAssistant()
+    if (!assistant) return
+    if (assistant.time.completed) return
+    if (evt.properties.sessionID !== route.sessionID) return
+    setLiveAssistant((current) =>
+      current.messageID !== assistant.id
+        ? {
+            messageID: assistant.id,
+            now: evt.properties.timestamp,
+            responseStartedAt: evt.properties.timestamp,
+            textStartedAt: evt.properties.timestamp,
+            streamSamples: [],
+          }
+        : {
+            ...current,
+            now: evt.properties.timestamp,
+            responseStartedAt: current.responseStartedAt ?? evt.properties.timestamp,
+            textStartedAt: current.textStartedAt ?? evt.properties.timestamp,
+          },
+    )
+  })
+
+  event.on("message.part.delta", (evt) => {
+    const assistant = lastAssistant()
+    if (!assistant) return
+    if (assistant.id !== evt.properties.messageID) return
+    if (evt.properties.field !== "text") return
+    const now = Date.now()
+    setLiveAssistant((current) =>
+      current.messageID !== assistant.id
+        ? {
+            messageID: assistant.id,
+            now,
+            responseStartedAt: now,
+            textStartedAt: now,
+            firstTokenAt: now,
+            streamSamples: [{ time: now, chars: evt.properties.delta.length }],
+          }
+        : {
+            ...current,
+            now,
+            responseStartedAt: current.responseStartedAt ?? now,
+            textStartedAt: current.textStartedAt ?? now,
+            firstTokenAt: current.firstTokenAt ?? now,
+            streamSamples: [...current.streamSamples.filter((sample) => now - sample.time <= STREAM_RATE_WINDOW), {
+              time: now,
+              chars: evt.properties.delta.length,
+            }],
+          },
+    )
   })
 
   // Allow exit when in child session (prompt is hidden)
@@ -1107,6 +1181,37 @@ export function Session() {
     return messages().filter((message) => message.id > cutoff)
   })
 
+  createEffect(() => {
+    const assistant = lastAssistant()
+    if (!assistant) {
+      setLiveAssistant({ now: Date.now(), streamSamples: [] })
+      return
+    }
+    setLiveAssistant((current) =>
+      current.messageID === assistant.id
+        ? current
+        : {
+            messageID: assistant.id,
+            now: Date.now(),
+            streamSamples: [],
+          },
+    )
+    if (assistant.time.completed) return
+    const timer = setInterval(() => {
+      const now = Date.now()
+      setLiveAssistant((current) =>
+        current.messageID !== assistant.id
+          ? current
+          : {
+              ...current,
+              now,
+              streamSamples: current.streamSamples.filter((sample) => now - sample.time <= STREAM_RATE_WINDOW),
+            },
+      )
+    }, STREAM_RATE_UPDATE_INTERVAL)
+    onCleanup(() => clearInterval(timer))
+  })
+
   // snap to bottom when session changes
   createEffect(on(() => route.sessionID, () => setVisualClearAfter(undefined)))
   createEffect(on(() => route.sessionID, toBottom))
@@ -1241,6 +1346,7 @@ export function Session() {
                         last={lastAssistant()?.id === message.id}
                         message={message as AssistantMessage}
                         parts={sync.data.part[message.id] ?? []}
+                        live={lastAssistant()?.id === message.id ? liveAssistant() : undefined}
                       />
                     </Match>
                   </Switch>
@@ -1428,16 +1534,30 @@ function AssistantMessage(props: {
   message: AssistantMessage
   parts: Part[]
   last: boolean
-  derived?: AssistantDerivedMetrics
   live?: LiveAssistantMetrics
 }) {
   const ctx = use()
   const local = useLocal()
   const { theme } = useTheme()
+  const sync = useSync()
   const [smoothedLiveTokensPerSecond, setSmoothedLiveTokensPerSecond] = createSignal(0)
   const [latestLiveTokensPerSecond, setLatestLiveTokensPerSecond] = createSignal(0)
   const [smoothedPromptTokensPerSecond, setSmoothedPromptTokensPerSecond] = createSignal(0)
+  const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
+  const contextMessages = createMemo(() => {
+    const index = messages().findIndex((message) => message.id === props.message.parentID)
+    if (index < 0) return []
+    return messages().slice(0, index + 1)
+  })
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
+  const providerModel = createMemo(
+    () => sync.data.provider.find((item) => item.id === props.message.providerID)?.models[props.message.modelID],
+  )
+  const parentUserMessage = createMemo(() =>
+    messages().find(
+      (message): message is UserMessage => message.role === "user" && message.id === props.message.parentID,
+    ),
+  )
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
@@ -1445,8 +1565,45 @@ function AssistantMessage(props: {
 
   const live = createMemo(() => (!final() && props.last ? props.live : undefined))
 
+  const derived = createMemo<AssistantDerivedMetrics>(() => {
+    let responseStartedAt: number | undefined
+    let generationStartedAt: number | undefined
+    let estimatedOutputTokens = 0
+
+    for (const part of props.parts) {
+      if (part.type === "text") {
+        estimatedOutputTokens += Token.estimate(part.text)
+        generationStartedAt = generationStartedAt ?? part.time?.start
+        responseStartedAt = responseStartedAt ?? part.time?.start
+        continue
+      }
+      if (part.type === "reasoning") {
+        responseStartedAt = responseStartedAt ?? part.time.start
+      }
+    }
+
+    return {
+      startedAt: parentUserMessage()?.time.created,
+      estimatedPromptTokens:
+        contextMessages()
+          .flatMap((message) => sync.data.part[message.id] ?? [])
+          .reduce((total, part) => total + estimatePromptPartTokens(part), 0) +
+        Token.estimate(
+          [
+            ...(providerModel() ? SystemPrompt.provider(providerModel() as Parameters<typeof SystemPrompt.provider>[0]) : []),
+            parentUserMessage()?.system ?? "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        ),
+      estimatedOutputTokens,
+      responseStartedAt,
+      generationStartedAt,
+    }
+  })
+
   const startedAt = createMemo(() => {
-    return props.derived?.startedAt
+    return derived().startedAt
   })
 
   const duration = createMemo(() => {
@@ -1456,13 +1613,12 @@ function AssistantMessage(props: {
     return Math.max(0, end - startedAt()!)
   })
 
-  const estimatedOutputTokens = createMemo(() => props.derived?.estimatedOutputTokens ?? 0)
+  const estimatedOutputTokens = createMemo(() => derived().estimatedOutputTokens)
 
-  const estimatedPromptTokens = createMemo(() => props.derived?.estimatedPromptTokens ?? 0)
+  const estimatedPromptTokens = createMemo(() => derived().estimatedPromptTokens)
 
   const generationDuration = createMemo(() => {
-    const generationStartedAt =
-      live()?.textStartedAt ?? live()?.firstTokenAt ?? props.derived?.generationStartedAt
+    const generationStartedAt = live()?.textStartedAt ?? live()?.firstTokenAt ?? derived().generationStartedAt
     if (!generationStartedAt) return 0
     const end = final() ? props.message.time.completed : live()?.now
     if (!end) return 0
@@ -1471,29 +1627,27 @@ function AssistantMessage(props: {
 
   const promptProcessingDuration = createMemo(() => {
     if (!startedAt()) return 0
-    const end =
-      live()?.responseStartedAt ?? live()?.firstTokenAt ?? props.derived?.generationStartedAt ?? live()?.now
+    const end = live()?.responseStartedAt ?? live()?.firstTokenAt ?? derived().responseStartedAt ?? live()?.now
     if (!end) return 0
     return Math.max(0, end - startedAt()!)
   })
 
   const promptTokensPerSecond = createMemo(() => {
     if (estimatedPromptTokens() <= 0) return 0
-    const seconds = Math.max(promptProcessingDuration() / 1000, 0.1)
+    const seconds = Math.max(promptProcessingDuration(), PROMPT_RATE_MIN_WINDOW) / 1000
     return estimatedPromptTokens() / seconds
   })
 
-  const rateForWindow = (window: number) => {
+  const liveWindowTokensPerSecond = createMemo(() => {
     const current = live()?.now ?? 0
-    const recent = (live()?.streamSamples ?? []).filter((sample: { time: number; chars: number }) => current - sample.time <= window)
+    const recent = (live()?.streamSamples ?? []).filter((sample: { time: number; chars: number }) => current - sample.time <= STREAM_RATE_WINDOW)
     if (recent.length === 0) return 0
     const chars = recent.reduce((total: number, sample: { time: number; chars: number }) => total + sample.chars, 0)
-    const started = recent[0]?.time
-    const ended = recent[recent.length - 1]?.time
-    if (!started || !ended) return 0
-    const seconds = Math.max((ended - started) / 1000, 0.1)
+    const started = live()?.firstTokenAt ?? live()?.textStartedAt ?? recent[0]?.time
+    if (!started) return 0
+    const seconds = Math.max(current - Math.min(started, recent[0]?.time ?? started), STREAM_RATE_MIN_WINDOW) / 1000
     return chars / 4 / seconds
-  }
+  })
 
   const averageLiveTokensPerSecond = createMemo(() => {
     if (final()) return 0
@@ -1504,13 +1658,9 @@ function AssistantMessage(props: {
 
   const liveTokensPerSecond = createMemo(() => {
     if (final()) return 0
-    const short = rateForWindow(STREAM_RATE_SHORT_WINDOW)
-    const medium = rateForWindow(STREAM_RATE_MEDIUM_WINDOW)
-    const long = rateForWindow(STREAM_RATE_LONG_WINDOW)
-    const average = averageLiveTokensPerSecond()
-    const weighted = average * 0.45 + short * 0.15 + medium * 0.2 + long * 0.2
-    const floor = Math.max(average * 0.9, long, medium * 0.95)
-    return Math.max(weighted, floor)
+    const windowed = liveWindowTokensPerSecond()
+    if (windowed > 0) return windowed
+    return averageLiveTokensPerSecond()
   })
 
   createEffect(() => {
@@ -1543,27 +1693,14 @@ function AssistantMessage(props: {
       const next = latestLiveTokensPerSecond()
       const prev = smoothedLiveTokensPerSecond()
       if (next <= 0) {
-        setSmoothedLiveTokensPerSecond(0)
+        setSmoothedLiveTokensPerSecond(prev * (1 - STREAM_RATE_SMOOTHING))
         return
       }
       if (prev <= 0) {
         setSmoothedLiveTokensPerSecond(next)
         return
       }
-      if (Math.abs(next - prev) >= STREAM_RATE_LOCK_THRESHOLD) {
-        setSmoothedLiveTokensPerSecond(next)
-        return
-      }
-      const rising = next > prev
-      const smoothed = prev + (next - prev) * (rising ? STREAM_RATE_RISE_SMOOTHING : STREAM_RATE_FALL_SMOOTHING)
-      const delta = smoothed - prev
-      const limited =
-        delta > STREAM_RATE_MAX_RISE
-          ? prev + STREAM_RATE_MAX_RISE
-          : delta < -STREAM_RATE_MAX_FALL
-            ? prev - STREAM_RATE_MAX_FALL
-            : smoothed
-      setSmoothedLiveTokensPerSecond(limited)
+      setSmoothedLiveTokensPerSecond(prev + (next - prev) * STREAM_RATE_SMOOTHING)
     }, STREAM_RATE_UPDATE_INTERVAL)
     onCleanup(() => clearInterval(timer))
   })

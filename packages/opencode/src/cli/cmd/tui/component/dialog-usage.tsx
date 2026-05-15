@@ -15,6 +15,54 @@ const ranges = [
 ] as const
 
 const sections = ["Overview", "Sessions", "Models"] as const
+const USAGE_CACHE_LIMIT = 32
+const usageCache = new Map<string, ReturnType<typeof summarizeUsage>>()
+type UsageSessionData = {
+  session: ReturnType<typeof useSync>["data"]["session"][number] | undefined
+  messages: ReturnType<typeof useSync>["data"]["message"][string]
+  getParts: (messageID: string) => ReturnType<typeof useSync>["data"]["part"][string]
+  additions?: number
+  deletions?: number
+}
+
+function cachedUsage(key: string, calculate: () => ReturnType<typeof summarizeUsage>) {
+  const cached = usageCache.get(key)
+  if (cached) {
+    usageCache.delete(key)
+    usageCache.set(key, cached)
+    return cached
+  }
+  const result = calculate()
+  usageCache.set(key, result)
+  if (usageCache.size > USAGE_CACHE_LIMIT) usageCache.delete(usageCache.keys().next().value!)
+  return result
+}
+
+function usageKey(
+  sessions: UsageSessionData[],
+  providers: ReturnType<typeof useSync>["data"]["provider"],
+  start?: number,
+) {
+  return [
+    start ?? "all",
+    providers.map((provider) => `${provider.id}:${Object.keys(provider.models).length}`).join(","),
+    sessions
+      .map((item) => {
+        const last = item.messages.at(-1)
+        return [
+          item.session?.id ?? "current",
+          item.session?.time.updated ?? 0,
+          item.session?.revert?.messageID ?? "",
+          item.messages.length,
+          last?.id ?? "",
+          last?.role === "assistant" ? last.time.completed ?? 0 : last?.time.created ?? 0,
+          item.additions ?? 0,
+          item.deletions ?? 0,
+        ].join(":")
+      })
+      .join("|"),
+  ].join(";")
+}
 
 function visibleWindow<T>(items: readonly T[], selected: number, limit: number) {
   if (items.length <= limit) return { start: 0, items: items.slice() }
@@ -23,6 +71,18 @@ function visibleWindow<T>(items: readonly T[], selected: number, limit: number) 
     start,
     items: items.slice(start, start + limit),
   }
+}
+
+async function syncUsageSessions(sessionIDs: string[], sync: ReturnType<typeof useSync>) {
+  const queue = sessionIDs.slice()
+  await Promise.all(
+    Array.from({ length: Math.min(8, queue.length) }, async () => {
+      while (queue.length > 0) {
+        const sessionID = queue.shift()
+        if (sessionID) await sync.session.sync(sessionID, { fullHistory: true })
+      }
+    }),
+  )
 }
 
 export function DialogUsage() {
@@ -40,19 +100,24 @@ export function DialogUsage() {
   const [modelIndex, setModelIndex] = createSignal(0)
   const sessionData = createMemo(() => {
     const all = sync.data.session
+    const byID = new Map(all.map((session) => [session.id, session]))
+    const children = all.reduce((acc, session) => {
+      if (!session.parentID) return acc
+      acc.set(session.parentID, [...(acc.get(session.parentID) ?? []), session.id])
+      return acc
+    }, new Map<string, string[]>())
+
     return all.map((session) => {
-      // Find all descendants of this session
       const descendants: string[] = []
       const queue = [session.id]
       const visited = new Set<string>([session.id])
       while (queue.length > 0) {
         const parentID = queue.shift()!
-        for (const s of all) {
-          if (s.parentID === parentID && !visited.has(s.id)) {
-            visited.add(s.id)
-            descendants.push(s.id)
-            queue.push(s.id)
-          }
+        for (const id of children.get(parentID) ?? []) {
+          if (visited.has(id)) continue
+          visited.add(id)
+          descendants.push(id)
+          queue.push(id)
         }
       }
 
@@ -65,7 +130,7 @@ export function DialogUsage() {
           deletions: sync.data.session_diff[session.id]?.reduce((sum, item) => sum + item.deletions, 0),
         },
         ...descendants.map((id) => ({
-          session: all.find((s) => s.id === id),
+          session: byID.get(id),
           messages: sync.data.message[id] ?? [],
           getParts: (messageID: string) => sync.data.part[messageID] ?? [],
           additions: sync.data.session_diff[id]?.reduce((sum, item) => sum + item.additions, 0),
@@ -79,6 +144,7 @@ export function DialogUsage() {
       }
     })
   })
+  const allSessions = createMemo(() => sessionData().filter((item) => !item.session?.parentID).flatMap((item) => item.sessions))
 
   onMount(() => {
     dialog.setSize("large")
@@ -88,9 +154,7 @@ export function DialogUsage() {
       setMode("sections")
       return false
     })
-    void Promise.allSettled(sync.data.session.map((item) => sync.session.sync(item.id, { fullHistory: true }))).finally(
-      () => setLoading(false),
-    )
+    void syncUsageSessions(sync.data.session.map((item) => item.id), sync).finally(() => setLoading(false))
   })
 
   onCleanup(() => {
@@ -98,24 +162,22 @@ export function DialogUsage() {
   })
 
   const overviewUsage = createMemo(() => {
-    const allSessions = sessionData().flatMap((d) => d.sessions)
-    return summarizeUsage(allSessions, sync.data.provider, { start: ranges[overviewRange()].start() })
+    const start = ranges[overviewRange()].start()
+    return cachedUsage(usageKey(allSessions(), sync.data.provider, start), () =>
+      summarizeUsage(allSessions(), sync.data.provider, { start }),
+    )
   })
   const sessionsUsage = createMemo(() => {
-    // For individual session list, we might want to show the aggregated metrics per root session
-    const rootSessions = sessionData()
-      .filter((d) => !d.session.parentID)
-      .map((d) => summarizeUsage(d.sessions, sync.data.provider, { start: ranges[sessionsRange()].start() }))
-    
-    // This is tricky because summarizeUsage returns a single object.
-    // The DialogUsage expects sessionsUsage().session_usage to be a list.
-    // Let's just aggregate all for now to be safe.
-    const allSessions = sessionData().flatMap((d) => d.sessions)
-    return summarizeUsage(allSessions, sync.data.provider, { start: ranges[sessionsRange()].start() })
+    const start = ranges[sessionsRange()].start()
+    return cachedUsage(usageKey(allSessions(), sync.data.provider, start), () =>
+      summarizeUsage(allSessions(), sync.data.provider, { start }),
+    )
   })
   const modelsUsage = createMemo(() => {
-    const allSessions = sessionData().flatMap((d) => d.sessions)
-    return summarizeUsage(allSessions, sync.data.provider, { start: ranges[modelsRange()].start() })
+    const start = ranges[modelsRange()].start()
+    return cachedUsage(usageKey(allSessions(), sync.data.provider, start), () =>
+      summarizeUsage(allSessions(), sync.data.provider, { start }),
+    )
   })
 
   const rows = createMemo(() => {
