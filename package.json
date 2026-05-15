@@ -15,6 +15,7 @@
     "build:cli:fast": "bun run packages/opencode/script/build.ts --skip-install --single --skip-embed-web-ui",
     "build:web": "bun run --cwd packages/app build",
     "build:desktop": "bun run --cwd packages/desktop build",
+    "build:desktop:fast": "bun run --cwd packages/desktop build:fast",
     "package:desktop": "bun run --cwd packages/desktop package",
     "lint": "oxlint",
     "typecheck": "bun turbo typecheck",

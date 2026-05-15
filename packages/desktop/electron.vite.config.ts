@@ -12,6 +12,13 @@ const channel = (() => {
 const OPENCODE_SERVER_DIST = "../opencode/dist/node"
 
 const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
+const rendererSourcemap = process.env.ELECTRON_RENDERER_SOURCEMAP !== "false"
+
+const ignoreKnownBuildWarnings = (warning: { code?: string; id?: string; message: string }, next: (warning: unknown) => void) => {
+  if (warning.code === "EVAL" && warning.id?.includes("/packages/opencode/dist/node/node.js")) return
+  if (warning.message.includes("dynamically imported by") && warning.message.includes("will not move module into another chunk")) return
+  next(warning)
+}
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
@@ -38,6 +45,9 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: { index: "src/main/index.ts" },
+        onwarn(warning, next) {
+          ignoreKnownBuildWarnings(warning, next)
+        },
       },
       externalizeDeps: { include: [nodePtyPkg] },
     },
@@ -86,11 +96,14 @@ export default defineConfig({
       "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
     },
     build: {
-      sourcemap: true,
+      sourcemap: rendererSourcemap,
       rollupOptions: {
         input: {
           main: "src/renderer/index.html",
           loading: "src/renderer/loading.html",
+        },
+        onwarn(warning, next) {
+          ignoreKnownBuildWarnings(warning, next)
         },
       },
     },

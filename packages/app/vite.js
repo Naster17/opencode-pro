@@ -27,10 +27,10 @@ export default [
   {
     name: "opencode-desktop:theme-preload",
     transformIndexHtml(html) {
-      return html.replace(
-        '<script id="oc-theme-preload-script" src="/oc-theme-preload.js"></script>',
-        `<script id="oc-theme-preload-script">${readFileSync(theme, "utf8")}</script>`,
-      )
+      const inline = `<script id="oc-theme-preload-script">${readFileSync(theme, "utf8")}</script>`
+      return html
+        .replace('<script id="oc-theme-preload-script" src="/oc-theme-preload.js"></script>', inline)
+        .replace('<script id="oc-theme-preload-script" src="./oc-theme-preload.js"></script>', inline)
     },
   },
   tailwindcss(),

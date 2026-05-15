@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process"
+import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
@@ -30,6 +31,7 @@ const repo = (() => {
   return process.env.GH_REPO || process.env.GITHUB_REPOSITORY || "Naster17/opencode-pro"
 })()
 const [owner = "Naster17", name = "opencode-pro"] = repo.split("/", 2)
+const nativeDir = path.join(rootDir, "packages", "desktop", "native")
 
 const getBase = (): Configuration => ({
   artifactName: `${name}-desktop-\${os}-\${arch}.\${ext}`,
@@ -38,13 +40,15 @@ const getBase = (): Configuration => ({
     buildResources: "resources",
   },
   files: ["out/**/*", "resources/**/*"],
-  extraResources: [
-    {
-      from: "native/",
-      to: "native/",
-      filter: ["index.js", "index.d.ts", "build/Release/mac_window.node", "swift-build/**"],
-    },
-  ],
+  extraResources: fs.existsSync(nativeDir)
+    ? [
+        {
+          from: "native/",
+          to: "native/",
+          filter: ["index.js", "index.d.ts", "build/Release/mac_window.node", "swift-build/**"],
+        },
+      ]
+    : [],
   mac: {
     category: "public.app-category.developer-tools",
     icon: `resources/icons/icon.icns`,

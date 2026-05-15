@@ -100,6 +100,12 @@ function setupApp() {
   ensureLoopbackNoProxy()
   useEnvProxy()
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
+  if (process.platform === "linux" && app.isPackaged && process.env.OPENCODE_USE_PORTAL !== "1") {
+    app.commandLine.appendSwitch("xdg-portal-required-version", "999")
+  }
+  if (process.platform === "linux" && app.isPackaged && !process.env.OPENCODE_CHROMIUM_LOG_LEVEL) {
+    app.commandLine.appendSwitch("log-level", "3")
+  }
   if (!app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", "9222")
 
   if (!app.requestSingleInstanceLock()) {
