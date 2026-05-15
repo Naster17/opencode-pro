@@ -3,7 +3,9 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Installation } from "../installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { OAUTH_DUMMY_KEY } from "../auth"
+import { Global } from "@opencode-ai/core/global"
 import os from "os"
+import path from "path"
 import { setTimeout as sleep } from "node:timers/promises"
 import { createServer } from "http"
 
@@ -63,6 +65,7 @@ export interface IdTokenClaims {
   chatgpt_account_id?: string
   organizations?: Array<{ id: string }>
   email?: string
+  exp?: number
   "https://api.openai.com/auth"?: {
     chatgpt_account_id?: string
   }
@@ -120,6 +123,126 @@ export interface TokenResponse {
   access_token: string
   refresh_token: string
   expires_in?: number
+}
+
+type CodexOAuthLike = {
+  type?: string
+  access?: string
+  refresh?: string
+  expires?: number
+  accountId?: string
+}
+
+type CodexCliAuthFile = {
+  last_refresh?: string
+  tokens?: {
+    access_token?: string
+    refresh_token?: string
+    id_token?: string
+    account_id?: string
+  }
+}
+
+export type ResolvedCodexAuth = {
+  source: "opencode" | "codex-cli"
+  access: string
+  refresh: string
+  expires: number
+  accountId?: string
+}
+
+function codexCliAuthPath() {
+  return path.join(Global.Path.home, ".codex", "auth.json")
+}
+
+function tokenExpiresAt(token?: string) {
+  if (!token) return
+  const exp = parseJwtClaims(token)?.exp
+  return typeof exp === "number" ? exp * 1000 : undefined
+}
+
+function normalizeOpencodeCodexAuth(auth?: CodexOAuthLike): ResolvedCodexAuth | undefined {
+  if (auth?.type !== "oauth") return
+  if (!auth.access || !auth.refresh || !auth.expires) return
+  return {
+    source: "opencode",
+    access: auth.access,
+    refresh: auth.refresh,
+    expires: auth.expires,
+    accountId: auth.accountId,
+  }
+}
+
+export async function loadCodexCliAuth(filePath = codexCliAuthPath()): Promise<ResolvedCodexAuth | undefined> {
+  const stored = (await Bun.file(filePath)
+    .json()
+    .catch(() => undefined)) as CodexCliAuthFile | undefined
+  const tokens = stored?.tokens
+  if (!tokens?.access_token || !tokens.refresh_token) return
+
+  return {
+    source: "codex-cli",
+    access: tokens.access_token,
+    refresh: tokens.refresh_token,
+    expires:
+      tokenExpiresAt(tokens.access_token) ||
+      tokenExpiresAt(tokens.id_token) ||
+      (stored?.last_refresh && !Number.isNaN(Date.parse(stored.last_refresh))
+        ? Date.parse(stored.last_refresh) + 3600 * 1000
+        : Date.now() + 3600 * 1000),
+    accountId:
+      tokens.account_id ||
+      extractAccountId({
+        id_token: tokens.id_token ?? "",
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+      }),
+  }
+}
+
+async function writeCodexCliAuth(tokens: TokenResponse, accountId?: string) {
+  const filePath = codexCliAuthPath()
+  const stored = (await Bun.file(filePath)
+    .json()
+    .catch(() => ({}))) as CodexCliAuthFile & Record<string, unknown>
+  await Bun.write(
+    filePath,
+    `${JSON.stringify(
+      {
+        ...stored,
+        last_refresh: new Date().toISOString(),
+        tokens: {
+          ...stored.tokens,
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          id_token: tokens.id_token,
+          account_id: accountId,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  )
+}
+
+export async function resolveCodexAuth(getAuth?: () => Promise<CodexOAuthLike | undefined>) {
+  const codexCli = await loadCodexCliAuth()
+  if (codexCli) return codexCli
+  return normalizeOpencodeCodexAuth(await getAuth?.())
+}
+
+export async function refreshResolvedCodexAuth(auth: ResolvedCodexAuth) {
+  const tokens = await refreshAccessToken(auth.refresh)
+  const accountId = extractAccountId(tokens) || auth.accountId
+  const next: ResolvedCodexAuth = {
+    source: auth.source,
+    access: tokens.access_token,
+    refresh: tokens.refresh_token,
+    expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+    accountId,
+  }
+  if (auth.source === "codex-cli") await writeCodexCliAuth(tokens, accountId)
+  return next
 }
 
 async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: PkceCodes): Promise<TokenResponse> {
@@ -373,7 +496,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
     provider: {
       id: "openai",
       async models(provider, ctx) {
-        if (ctx.auth?.type !== "oauth") return provider.models
+        if (ctx.auth?.type !== "oauth" && !(await loadCodexCliAuth())) return provider.models
 
         return Object.fromEntries(
           Object.entries(provider.models)
@@ -406,8 +529,8 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
     auth: {
       provider: "openai",
       async loader(getAuth) {
-        const auth = await getAuth()
-        if (auth.type !== "oauth") return {}
+        const auth = await resolveCodexAuth(getAuth)
+        if (!auth) return {}
 
         return {
           apiKey: OAUTH_DUMMY_KEY,
@@ -425,29 +548,25 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               }
             }
 
-            const currentAuth = await getAuth()
-            if (currentAuth.type !== "oauth") return fetch(requestInput, init)
-
-            // Cast to include accountId field
-            const authWithAccount = currentAuth as typeof currentAuth & { accountId?: string }
+            let currentAuth = await resolveCodexAuth(getAuth)
+            if (!currentAuth) return fetch(requestInput, init)
 
             // Check if token needs refresh
-            if (!currentAuth.access || currentAuth.expires < Date.now()) {
+            if (currentAuth.expires < Date.now()) {
               log.info("refreshing codex access token")
-              const tokens = await refreshAccessToken(currentAuth.refresh)
-              const newAccountId = extractAccountId(tokens) || authWithAccount.accountId
-              await input.client.auth.set({
-                path: { id: "openai" },
-                body: {
-                  type: "oauth",
-                  refresh: tokens.refresh_token,
-                  access: tokens.access_token,
-                  expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-                  ...(newAccountId && { accountId: newAccountId }),
-                },
-              })
-              currentAuth.access = tokens.access_token
-              authWithAccount.accountId = newAccountId
+              currentAuth = await refreshResolvedCodexAuth(currentAuth)
+              if (currentAuth.source === "opencode") {
+                await input.client.auth.set({
+                  path: { id: "openai" },
+                  body: {
+                    type: "oauth",
+                    refresh: currentAuth.refresh,
+                    access: currentAuth.access,
+                    expires: currentAuth.expires,
+                    ...(currentAuth.accountId && { accountId: currentAuth.accountId }),
+                  },
+                })
+              }
             }
 
             // Build headers
@@ -470,8 +589,8 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             headers.set("authorization", `Bearer ${currentAuth.access}`)
 
             // Set ChatGPT-Account-Id header for organization subscriptions
-            if (authWithAccount.accountId) {
-              headers.set("ChatGPT-Account-Id", authWithAccount.accountId)
+            if (currentAuth.accountId) {
+              headers.set("ChatGPT-Account-Id", currentAuth.accountId)
             }
 
             // Rewrite URL to Codex endpoint

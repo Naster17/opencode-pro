@@ -18,7 +18,8 @@ import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecy
 ensureProcessMetadata("worker")
 
 await Log.init({
-  print: process.argv.includes("--print-logs"),
+  print: process.argv.includes("--print-logs") && !process.env.OPENCODE_LOG_FILE,
+  file: process.env.OPENCODE_LOG_FILE,
   dev: Installation.isLocal(),
   level: (() => {
     if (Installation.isLocal()) return "DEBUG"

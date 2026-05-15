@@ -48,6 +48,8 @@ export interface Options {
   print: boolean
   dev?: boolean
   level?: Level
+  file?: string
+  truncate?: boolean
 }
 
 let logpath = ""
@@ -62,6 +64,21 @@ let write = (msg: any) => {
 export async function init(options: Options) {
   if (options.level) level = options.level
   void cleanup(Global.Path.log)
+  if (options.file) {
+    logpath = path.isAbsolute(options.file) ? options.file : path.resolve(options.file)
+    await fs.mkdir(path.dirname(logpath), { recursive: true })
+    if (options.truncate) await fs.truncate(logpath).catch(() => {})
+    const stream = createWriteStream(logpath, { flags: "a" })
+    write = async (msg: any) => {
+      return new Promise((resolve, reject) => {
+        stream.write(msg, (err) => {
+          if (err) reject(err)
+          else resolve(msg.length)
+        })
+      })
+    }
+    return
+  }
   if (options.print) return
   logpath = path.join(
     Global.Path.log,

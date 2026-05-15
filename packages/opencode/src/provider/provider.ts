@@ -1444,8 +1444,8 @@ const layer: Layer.Layer<
           if (disabled.has(providerID)) continue
 
           const stored = yield* auth.get(providerID).pipe(Effect.orDie)
-          if (!stored) continue
           if (!plugin.auth.loader) continue
+          if (!stored && providerID !== "openai") continue
 
           const options = yield* Effect.promise(() =>
             plugin.auth!.loader!(
@@ -1454,6 +1454,7 @@ const layer: Layer.Layer<
             ),
           )
           const opts = options ?? {}
+          if (!stored && Object.keys(opts).length === 0) continue
           const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
           mergeProvider(providerID, patch)
         }

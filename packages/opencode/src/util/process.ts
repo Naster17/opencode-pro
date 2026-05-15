@@ -16,6 +16,7 @@ export interface Options {
   abort?: AbortSignal
   kill?: NodeJS.Signals | number
   timeout?: number
+  detached?: boolean
 }
 
 export interface RunOptions extends Omit<Options, "stdout" | "stderr"> {
@@ -64,6 +65,7 @@ export function spawn(cmd: string[], opts: Options = {}): Child {
     shell: opts.shell,
     env: opts.env === null ? {} : opts.env ? { ...process.env, ...opts.env } : undefined,
     stdio: [opts.stdin ?? "ignore", opts.stdout ?? "ignore", opts.stderr ?? "ignore"],
+    detached: opts.detached,
     windowsHide: process.platform === "win32",
   })
 

@@ -42,3 +42,14 @@ test("init cleanup keeps the newest timestamped logs", async () => {
   expect(next).not.toContain(list[0]!)
   expect(next).toContain(list.at(-1)!)
 })
+
+test("init writes to explicit log file", async () => {
+  await using tmp = await tmpdir()
+  const file = path.join(tmp.path, "logs.txt")
+
+  await Log.init({ print: true, file, truncate: true })
+  Log.Default.info("explicit log file test")
+  await Bun.sleep(20)
+
+  expect(await Bun.file(file).text()).toContain("explicit log file test")
+})

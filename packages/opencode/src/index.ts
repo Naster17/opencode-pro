@@ -56,6 +56,47 @@ process.on("uncaughtException", (e) => {
 })
 
 const args = hideBin(process.argv)
+const TUI_LOG_FILE_ENV = "OPENCODE_LOG_FILE"
+const explicitCommands = new Set([
+  "account",
+  "acp",
+  "agent",
+  "attach",
+  "auth",
+  "console",
+  "db",
+  "debug",
+  "export",
+  "generate",
+  "github",
+  "import",
+  "login",
+  "logout",
+  "lsp",
+  "mcp",
+  "models",
+  "plugin",
+  "pr",
+  "providers",
+  "run",
+  "serve",
+  "session",
+  "stats",
+  "switch",
+  "uninstall",
+  "upgrade",
+  "web",
+])
+
+function isDefaultTuiInvocation(argv: string[]) {
+  return !argv.some((arg) => !arg.startsWith("-") && explicitCommands.has(arg))
+}
+
+function resolveLogFile(argv: string[]) {
+  if (!argv.includes("--print-logs")) return
+  if (!isDefaultTuiInvocation(argv)) return
+  return path.join(process.cwd(), "logs.txt")
+}
 
 function show(out: string) {
   const text = out.trimStart()
@@ -76,7 +117,7 @@ const cli = yargs(args)
   .version("version", "show version number", InstallationVersion)
   .alias("version", "v")
   .option("print-logs", {
-    describe: "print logs to stderr",
+    describe: "print logs to stderr; default TUI writes ./logs.txt instead",
     type: "boolean",
   })
   .option("log-level", {
@@ -93,8 +134,13 @@ const cli = yargs(args)
       process.env.OPENCODE_PURE = "1"
     }
 
+    const logFile = resolveLogFile(args)
+    if (logFile) process.env[TUI_LOG_FILE_ENV] = logFile
+
     await Log.init({
-      print: process.argv.includes("--print-logs"),
+      print: process.argv.includes("--print-logs") && !logFile,
+      file: logFile,
+      truncate: !!logFile,
       dev: Installation.isLocal(),
       level: (() => {
         if (opts.logLevel) return opts.logLevel as Log.Level

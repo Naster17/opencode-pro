@@ -1,5 +1,5 @@
 import path from "path"
-import { Effect, Layer, Record, Result, Schema, Context } from "effect"
+import { Effect, Layer, Schema, Context } from "effect"
 import { zod } from "@/util/effect-zod"
 import { NonNegativeInt } from "@/util/schema"
 import { Global } from "@opencode-ai/core/global"
@@ -8,6 +8,8 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
 const file = path.join(Global.Path.data, "auth.json")
+const TRANSIENT_AUTH_RETRIES = 3
+const TRANSIENT_AUTH_RETRY_DELAY = "50 millis"
 
 const fail = (message: string) => (cause: unknown) => new AuthError({ message, cause })
 
@@ -55,16 +57,58 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const fsys = yield* AppFileSystem.Service
     const decode = Schema.decodeUnknownOption(Info)
+    let lastGood: Record<string, Info> = {}
+
+    const decodeAuth = (data: Record<string, unknown>) =>
+      Object.fromEntries(
+        Object.entries(data).flatMap(([key, value]) => {
+          const decoded = decode(value)
+          return decoded._tag === "Some" ? [[key, decoded.value] as const] : []
+        }),
+      )
+
+    const readAuthFile = Effect.fn("Auth.readFile")(function* () {
+      return (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => undefined))) as
+        | Record<string, unknown>
+        | undefined
+    })
+
+    const readDiskAuth = Effect.fn("Auth.readDisk")(function* () {
+      for (let attempt = 0; attempt <= TRANSIENT_AUTH_RETRIES; attempt++) {
+        const data = yield* readAuthFile()
+        if (!data || typeof data !== "object") return lastGood
+
+        const next = decodeAuth(data)
+        if (Object.keys(data).length === 0 || Object.keys(next).length < Object.keys(data).length) {
+          if (attempt < TRANSIENT_AUTH_RETRIES) {
+            yield* Effect.sleep(TRANSIENT_AUTH_RETRY_DELAY)
+            continue
+          }
+        }
+
+        lastGood = next
+        return next
+      }
+      return lastGood
+    })
+
+    const readEnvAuth = () => {
+      try {
+        const parsed = JSON.parse(process.env.OPENCODE_AUTH_CONTENT!)
+        if (!parsed || typeof parsed !== "object") return lastGood
+        const next = decodeAuth(parsed as Record<string, unknown>)
+        lastGood = next
+        return next
+      } catch (err) {
+        return lastGood
+      }
+    }
 
     const all = Effect.fn("Auth.all")(function* () {
       if (process.env.OPENCODE_AUTH_CONTENT) {
-        try {
-          return JSON.parse(process.env.OPENCODE_AUTH_CONTENT)
-        } catch (err) {}
+        return readEnvAuth()
       }
-
-      const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
-      return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
+      return yield* readDiskAuth()
     })
 
     const get = Effect.fn("Auth.get")(function* (providerID: string) {

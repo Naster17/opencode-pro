@@ -1,6 +1,6 @@
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
-import { extractAccountId, refreshAccessToken } from "@/plugin/codex"
+import { refreshResolvedCodexAuth, resolveCodexAuth, type ResolvedCodexAuth } from "@/plugin/codex"
 import { Process, stop } from "@/util/process"
 
 const authPath = path.join(Global.Path.data, "auth.json")
@@ -48,6 +48,7 @@ type CodexAppServerAuth = {
   refreshToken: string
   accountId: string
   expires: number
+  source: ResolvedCodexAuth["source"]
 }
 
 export type CodexUsageSnapshot = {
@@ -60,6 +61,11 @@ export type CodexUsageSnapshot = {
 let cached: { time: number; value: CodexUsageSnapshot } | undefined
 let inflight: Promise<CodexUsageSnapshot> | undefined
 
+export function clearCodexUsageCache() {
+  cached = undefined
+  inflight = undefined
+}
+
 async function readStoredAuth() {
   const file = Bun.file(authPath)
   if (!(await file.exists())) return
@@ -71,32 +77,28 @@ async function writeStoredAuth(auth: StoredAuth) {
 }
 
 async function loadCodexAppServerAuth(): Promise<CodexAppServerAuth | undefined> {
-  const stored = await readStoredAuth()
-  if (stored?.openai?.type !== "oauth") return
-  if (!stored.openai.access || !stored.openai.refresh || !stored.openai.accountId || !stored.openai.expires) return
+  const auth = await resolveCodexAuth(async () => (await readStoredAuth())?.openai)
+  if (!auth?.accountId) return
+  const refreshed = auth.expires > Date.now() ? auth : await refreshResolvedCodexAuth(auth)
+  const accountId = refreshed.accountId || auth.accountId
 
-  if (stored.openai.expires > Date.now()) {
-    return {
-      accessToken: stored.openai.access,
-      refreshToken: stored.openai.refresh,
-      accountId: stored.openai.accountId,
-      expires: stored.openai.expires,
+  if (refreshed.source === "opencode") {
+    const stored = await readStoredAuth()
+    if (stored?.openai?.type === "oauth") {
+      stored.openai.access = refreshed.access
+      stored.openai.refresh = refreshed.refresh
+      stored.openai.accountId = accountId
+      stored.openai.expires = refreshed.expires
+      await writeStoredAuth(stored)
     }
   }
 
-  const refreshed = await refreshAccessToken(stored.openai.refresh)
-  const accountId = extractAccountId(refreshed) || stored.openai.accountId
-  stored.openai.access = refreshed.access_token
-  stored.openai.refresh = refreshed.refresh_token
-  stored.openai.accountId = accountId
-  stored.openai.expires = Date.now() + (refreshed.expires_in ?? 3600) * 1000
-  await writeStoredAuth(stored)
-
   return {
-    accessToken: stored.openai.access,
-    refreshToken: stored.openai.refresh,
+    accessToken: refreshed.access,
+    refreshToken: refreshed.refresh,
     accountId,
-    expires: stored.openai.expires,
+    expires: refreshed.expires,
+    source: refreshed.source,
   }
 }
 
@@ -121,6 +123,7 @@ async function startCodexAppServer() {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
+    detached: true,
   })
 
   const url = await withTimeout(
@@ -211,15 +214,22 @@ function callCodexAppServer(url: string, auth: CodexAppServerAuth) {
 
         if (message.method === "account/chatgptAuthTokens/refresh" && message.id !== undefined) {
           try {
-            const refreshed = await refreshAccessToken(currentAuth.refreshToken)
+            const refreshed = await refreshResolvedCodexAuth({
+              source: currentAuth.source,
+              access: currentAuth.accessToken,
+              refresh: currentAuth.refreshToken,
+              accountId: currentAuth.accountId,
+              expires: currentAuth.expires,
+            })
             currentAuth = {
-              accessToken: refreshed.access_token,
-              refreshToken: refreshed.refresh_token,
-              accountId: extractAccountId(refreshed) || message.params?.previousAccountId || currentAuth.accountId,
-              expires: Date.now() + (refreshed.expires_in ?? 3600) * 1000,
+              accessToken: refreshed.access,
+              refreshToken: refreshed.refresh,
+              accountId: refreshed.accountId || message.params?.previousAccountId || currentAuth.accountId,
+              expires: refreshed.expires,
+              source: refreshed.source,
             }
             const stored = await readStoredAuth()
-            if (stored?.openai?.type === "oauth") {
+            if (currentAuth.source === "opencode" && stored?.openai?.type === "oauth") {
               stored.openai.access = currentAuth.accessToken
               stored.openai.refresh = currentAuth.refreshToken
               stored.openai.accountId = currentAuth.accountId

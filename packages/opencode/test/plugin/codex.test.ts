@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test"
+import path from "path"
 import {
   parseJwtClaims,
   extractAccountIdFromClaims,
   extractAccountId,
+  loadCodexCliAuth,
   type IdTokenClaims,
 } from "../../src/plugin/codex"
+import { tmpdir } from "../fixture/fixture"
 
 function createTestJwt(payload: object): string {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url")
@@ -118,6 +121,33 @@ describe("plugin.codex", () => {
           refresh_token: "rt",
         }),
       ).toBe("acc-123")
+    })
+  })
+
+  describe("loadCodexCliAuth", () => {
+    test("loads Codex CLI auth file used by cockpit-tools", async () => {
+      await using tmp = await tmpdir()
+      const accessToken = createTestJwt({ chatgpt_account_id: "acc-cli", exp: 2_000_000_000 })
+      await Bun.write(
+        path.join(tmp.path, "auth.json"),
+        JSON.stringify({
+          last_refresh: "2026-01-01T00:00:00.000Z",
+          tokens: {
+            access_token: accessToken,
+            refresh_token: "refresh-cli",
+            id_token: createTestJwt({ email: "test@example.com" }),
+            account_id: "acc-file",
+          },
+        }),
+      )
+
+      expect(await loadCodexCliAuth(path.join(tmp.path, "auth.json"))).toMatchObject({
+        source: "codex-cli",
+        access: accessToken,
+        refresh: "refresh-cli",
+        accountId: "acc-file",
+        expires: 2_000_000_000_000,
+      })
     })
   })
 })

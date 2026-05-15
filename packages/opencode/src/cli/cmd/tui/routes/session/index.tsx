@@ -1715,8 +1715,6 @@ function AssistantMessage(props: {
   const metrics = createMemo(() => {
     if (final()) {
       return [
-        props.message.tokens.input > 0 ? `${Locale.number(props.message.tokens.input)} in` : "",
-        props.message.tokens.output > 0 ? `${Locale.number(props.message.tokens.output)} out` : "",
         finalTokensPerSecond() > 0 ? formatTokensPerSecond(finalTokensPerSecond()) : "",
         duration() > 0 ? Locale.duration(duration()) : "",
       ].filter(Boolean)

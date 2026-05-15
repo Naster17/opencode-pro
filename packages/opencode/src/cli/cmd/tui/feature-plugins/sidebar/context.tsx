@@ -1,14 +1,17 @@
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import path from "path"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
 import type { JSX } from "@opentui/solid"
 import { useSync } from "@tui/context/sync"
+import { Global } from "@opencode-ai/core/global"
 import { formatCompactTokens, money, summarizeUsage } from "@tui/util/usage"
 import { Locale } from "@/util/locale"
 import { isCodexModel } from "@/plugin/codex"
-import { formatResetDuration, getCodexUsage } from "./codex-usage"
+import { clearCodexUsageCache, formatResetDuration, getCodexUsage } from "./codex-usage"
 
 const id = "internal:sidebar-metrics"
 const usageWidgetsHiddenKey = "usage_widgets_hidden"
+const authPaths = [path.join(Global.Path.data, "auth.json"), path.join(Global.Path.home, ".codex", "auth.json")]
 
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const sync = useSync()
@@ -70,6 +73,25 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   onCleanup(() => {
     if (codexRefreshTimer) clearTimeout(codexRefreshTimer)
   })
+
+  let authFingerprint = ""
+  const authWatcher = setInterval(async () => {
+    if (!showCodexUsage()) return
+    const nextFingerprint = (
+      await Promise.all(authPaths.map((item) => Bun.file(item).stat().catch(() => undefined)))
+    )
+      .map((stat) => `${stat?.mtimeMs ?? 0}:${stat?.size ?? 0}`)
+      .join("|")
+    if (!authFingerprint) {
+      authFingerprint = nextFingerprint
+      return
+    }
+    if (nextFingerprint === authFingerprint) return
+    authFingerprint = nextFingerprint
+    clearCodexUsageCache()
+    scheduleCodexRefresh(true)
+  }, 2_000)
+  onCleanup(() => clearInterval(authWatcher))
 
   let wasShowingCodexUsage = false
   createEffect(() => {
