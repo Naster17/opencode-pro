@@ -126,7 +126,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       ...descendantSessionsList,
     ]
 
-    const aggregated = summarizeUsage(sessions, props.api.state.provider)
+    const aggregated = summarizeUsage(sessions, props.api.state.provider, { respectRevert: false })
     const rootOnly = summarizeUsage([{
       session: rootSession,
       messages: rootMessages,

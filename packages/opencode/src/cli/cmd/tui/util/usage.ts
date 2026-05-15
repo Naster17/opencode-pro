@@ -118,6 +118,7 @@ export function summarizeUsage(
   providers: readonly Provider[],
   options: {
     start?: number
+    respectRevert?: boolean
   } = {},
 ) {
   const totals = sessions.reduce(
@@ -127,7 +128,7 @@ export function summarizeUsage(
         ? session.messages.filter((item) => item.time.created >= options.start!)
         : session.messages
 
-      const revertID = session.session?.revert?.messageID
+      const revertID = options.respectRevert !== false ? session.session?.revert?.messageID : undefined
       if (revertID) {
         messages = messages.filter((m) => m.id < revertID)
       }
