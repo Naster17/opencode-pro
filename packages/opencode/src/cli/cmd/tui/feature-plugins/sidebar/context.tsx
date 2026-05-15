@@ -11,7 +11,12 @@ import { clearCodexUsageCache, formatResetDuration, getCodexUsage } from "./code
 
 const id = "internal:sidebar-metrics"
 const usageWidgetsHiddenKey = "usage_widgets_hidden"
-const authPaths = [path.join(Global.Path.data, "auth.json"), path.join(Global.Path.home, ".codex", "auth.json")]
+const authPaths = [
+  path.join(Global.Path.data, "auth.json"),
+  path.join(Global.Path.home, ".codex", "auth.json"),
+  path.join(Global.Path.home, ".codex", ".cockpit_codex_auth.json"),
+]
+const codexHotSwapRefreshDelays = [0, 1_000, 3_000, 8_000]
 
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const sync = useSync()
@@ -19,6 +24,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const allSessions = createMemo(() => props.api.state.session.all())
   const [now, setNow] = createSignal(Date.now())
   const [codexUsageVersion, setCodexUsageVersion] = createSignal(0)
+  const codexHotSwapTimers = new Set<ReturnType<typeof setTimeout>>()
 
   const descendantSessions = createMemo(() => {
     const rootID = props.session_id
@@ -68,10 +74,27 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   }
   const [codexUsage] = createResource(codexUsageKey, (key) => (key >= 0 ? getCodexUsage(key > 0) : undefined))
 
+  const triggerCodexHotSwapRefresh = () => {
+    if (!showCodexUsage()) return
+    clearCodexUsageCache()
+    for (const timer of codexHotSwapTimers) clearTimeout(timer)
+    codexHotSwapTimers.clear()
+    for (const delay of codexHotSwapRefreshDelays) {
+      const timer = setTimeout(() => {
+        codexHotSwapTimers.delete(timer)
+        clearCodexUsageCache()
+        scheduleCodexRefresh(true)
+      }, delay)
+      codexHotSwapTimers.add(timer)
+    }
+  }
+
   const countdown = setInterval(() => setNow(Date.now()), 60_000)
   onCleanup(() => clearInterval(countdown))
   onCleanup(() => {
     if (codexRefreshTimer) clearTimeout(codexRefreshTimer)
+    for (const timer of codexHotSwapTimers) clearTimeout(timer)
+    codexHotSwapTimers.clear()
   })
 
   let authFingerprint = ""
@@ -88,8 +111,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     }
     if (nextFingerprint === authFingerprint) return
     authFingerprint = nextFingerprint
-    clearCodexUsageCache()
-    scheduleCodexRefresh(true)
+    triggerCodexHotSwapRefresh()
   }, 2_000)
   onCleanup(() => clearInterval(authWatcher))
 

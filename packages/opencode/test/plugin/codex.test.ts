@@ -4,7 +4,9 @@ import {
   parseJwtClaims,
   extractAccountIdFromClaims,
   extractAccountId,
+  loadCockpitCodexSelection,
   loadCodexCliAuth,
+  resolveCodexAuth,
   type IdTokenClaims,
 } from "../../src/plugin/codex"
 import { tmpdir } from "../fixture/fixture"
@@ -148,6 +150,51 @@ describe("plugin.codex", () => {
         accountId: "acc-file",
         expires: 2_000_000_000_000,
       })
+    })
+  })
+
+  describe("resolveCodexAuth", () => {
+    test("prefers cockpit account selection over codex auth account id", async () => {
+      await using tmp = await tmpdir()
+      const home = process.env.OPENCODE_TEST_HOME
+      process.env.OPENCODE_TEST_HOME = tmp.path
+
+      try {
+        await Bun.$`mkdir -p ${path.join(tmp.path, ".codex")}`
+        await Bun.write(
+          path.join(tmp.path, ".codex", "auth.json"),
+          JSON.stringify({
+            last_refresh: "2026-01-01T00:00:00.000Z",
+            tokens: {
+              access_token: createTestJwt({ chatgpt_account_id: "acc-token", exp: 2_000_000_000 }),
+              refresh_token: "refresh-cli",
+              id_token: createTestJwt({ email: "test@example.com" }),
+              account_id: "acc-old",
+            },
+          }),
+        )
+        await Bun.write(
+          path.join(tmp.path, ".codex", ".cockpit_codex_auth.json"),
+          JSON.stringify({
+            account_id: "acc-new",
+            email: "new@example.com",
+            written_at: 1778887499,
+          }),
+        )
+
+        expect(await loadCockpitCodexSelection(path.join(tmp.path, ".codex", ".cockpit_codex_auth.json"))).toMatchObject({
+          account_id: "acc-new",
+          email: "new@example.com",
+        })
+        expect(await resolveCodexAuth()).toMatchObject({
+          source: "codex-cli",
+          accountId: "acc-new",
+          email: "new@example.com",
+        })
+      } finally {
+        if (home === undefined) delete process.env.OPENCODE_TEST_HOME
+        else process.env.OPENCODE_TEST_HOME = home
+      }
     })
   })
 })

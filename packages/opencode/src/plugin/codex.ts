@@ -143,16 +143,27 @@ type CodexCliAuthFile = {
   }
 }
 
+type CockpitCodexAuthFile = {
+  account_id?: string
+  email?: string
+  written_at?: number
+}
+
 export type ResolvedCodexAuth = {
   source: "opencode" | "codex-cli"
   access: string
   refresh: string
   expires: number
   accountId?: string
+  email?: string
 }
 
 function codexCliAuthPath() {
   return path.join(Global.Path.home, ".codex", "auth.json")
+}
+
+function cockpitCodexAuthPath() {
+  return path.join(Global.Path.home, ".codex", ".cockpit_codex_auth.json")
 }
 
 function tokenExpiresAt(token?: string) {
@@ -200,6 +211,22 @@ export async function loadCodexCliAuth(filePath = codexCliAuthPath()): Promise<R
   }
 }
 
+export async function loadCockpitCodexSelection(filePath = cockpitCodexAuthPath()) {
+  return (await Bun.file(filePath)
+    .json()
+    .catch(() => undefined)) as CockpitCodexAuthFile | undefined
+}
+
+async function applyCockpitSelection(auth: ResolvedCodexAuth) {
+  const cockpit = await loadCockpitCodexSelection()
+  if (!cockpit?.account_id) return auth
+  return {
+    ...auth,
+    accountId: cockpit.account_id,
+    email: cockpit.email,
+  }
+}
+
 async function writeCodexCliAuth(tokens: TokenResponse, accountId?: string) {
   const filePath = codexCliAuthPath()
   const stored = (await Bun.file(filePath)
@@ -227,8 +254,10 @@ async function writeCodexCliAuth(tokens: TokenResponse, accountId?: string) {
 
 export async function resolveCodexAuth(getAuth?: () => Promise<CodexOAuthLike | undefined>) {
   const codexCli = await loadCodexCliAuth()
-  if (codexCli) return codexCli
-  return normalizeOpencodeCodexAuth(await getAuth?.())
+  if (codexCli) return applyCockpitSelection(codexCli)
+  const opencode = normalizeOpencodeCodexAuth(await getAuth?.())
+  if (!opencode) return
+  return applyCockpitSelection(opencode)
 }
 
 export async function refreshResolvedCodexAuth(auth: ResolvedCodexAuth) {
