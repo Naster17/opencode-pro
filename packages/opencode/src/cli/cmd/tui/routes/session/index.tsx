@@ -180,6 +180,7 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [visualClearAfter, setVisualClearAfter] = createSignal<string>()
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -367,6 +368,13 @@ export function Session() {
       if (!scroll || scroll.isDestroyed) return
       scroll.scrollTo(scroll.scrollHeight)
     }, 50)
+  }
+
+  function clearVisibleMessages() {
+    const last = messages().at(-1)?.id
+    if (!last) return
+    setVisualClearAfter(last)
+    toBottom()
   }
 
   const local = useLocal()
@@ -804,6 +812,19 @@ export function Session() {
       },
     },
     {
+      title: "Clear visible messages",
+      value: "session.clear",
+      keybind: "messages_clear",
+      category: "Session",
+      slash: {
+        name: "clear",
+      },
+      onSelect: (dialog) => {
+        clearVisibleMessages()
+        dialog.clear()
+      },
+    },
+    {
       title: "Jump to last user message",
       value: "session.messages_last_user",
       keybind: "messages_last_user",
@@ -1064,7 +1085,14 @@ export function Session() {
     }
   })
 
+  const renderedMessages = createMemo(() => {
+    const cutoff = visualClearAfter()
+    if (!cutoff) return messages()
+    return messages().filter((message) => message.id > cutoff)
+  })
+
   // snap to bottom when session changes
+  createEffect(on(() => route.sessionID, () => setVisualClearAfter(undefined)))
   createEffect(on(() => route.sessionID, toBottom))
 
   return (
@@ -1107,7 +1135,7 @@ export function Session() {
               scrollAcceleration={scrollAcceleration()}
             >
               <box height={1} />
-              <For each={messages()}>
+              <For each={renderedMessages()}>
                 {(message, index) => (
                   <Switch>
                     <Match when={message.id === revert()?.messageID}>

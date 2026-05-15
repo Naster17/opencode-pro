@@ -21,6 +21,7 @@ const commandAliases = {
   messages_half_page_down: "session.half.page.down",
   messages_first: "session.first",
   messages_last: "session.last",
+  messages_clear: "session.clear",
   agent_cycle: "agent.cycle",
 } as const
 

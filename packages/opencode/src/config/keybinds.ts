@@ -45,6 +45,7 @@ const KeybindsSchema = Schema.Struct({
   messages_half_page_down: keybind("ctrl+alt+d", "Scroll messages down by half page"),
   messages_first: keybind("ctrl+g,home", "Navigate to first message"),
   messages_last: keybind("ctrl+alt+g,end", "Navigate to last message"),
+  messages_clear: keybind("ctrl+l", "Clear visible messages from the session view"),
   messages_next: keybind("none", "Navigate to next message"),
   messages_previous: keybind("none", "Navigate to previous message"),
   messages_last_user: keybind("none", "Navigate to last user message"),
