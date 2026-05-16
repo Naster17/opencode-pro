@@ -1668,7 +1668,7 @@ function AssistantMessage(props: {
   })
 
   createEffect(() => {
-    if (live()?.responseStartedAt || live()?.firstTokenAt) {
+    if (live()?.textStartedAt || live()?.firstTokenAt) {
       setSmoothedPromptTokensPerSecond(0)
       return
     }
@@ -1708,8 +1708,15 @@ function AssistantMessage(props: {
   const finalTokensPerSecond = createMemo(() => {
     if (!final()) return 0
     if (generationDuration() <= 0) return 0
-    if (props.message.tokens.output <= 0) return 0
-    return props.message.tokens.output / (generationDuration() / 1000)
+    const outputTokens = props.message.tokens.output > 0 ? props.message.tokens.output : estimatedOutputTokens()
+    if (outputTokens <= 0) return 0
+    return outputTokens / (generationDuration() / 1000)
+  })
+
+  const displayLiveTokensPerSecond = createMemo(() => {
+    const smoothed = smoothedLiveTokensPerSecond()
+    if (smoothed > 0) return smoothed
+    return liveTokensPerSecond()
   })
 
   const metrics = createMemo(() => {
@@ -1720,7 +1727,7 @@ function AssistantMessage(props: {
       ].filter(Boolean)
     }
 
-    if (!live()?.responseStartedAt) {
+    if (!live()?.textStartedAt && !live()?.firstTokenAt) {
       return [
         `↓ ${formatTokensPerSecond(smoothedPromptTokensPerSecond())}`,
         duration() > 0 ? Locale.duration(duration()) : "",
@@ -1728,7 +1735,7 @@ function AssistantMessage(props: {
     }
 
     return [
-      `↑ ${formatTokensPerSecond(smoothedLiveTokensPerSecond())}`,
+      `↑ ${formatTokensPerSecond(displayLiveTokensPerSecond())}`,
       duration() > 0 ? Locale.duration(duration()) : "",
     ].filter(Boolean)
   })

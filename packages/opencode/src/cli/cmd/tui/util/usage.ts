@@ -2,6 +2,7 @@ import type { AssistantMessage, Message, Part, Provider, Session } from "@openco
 
 const ACTIVE_EVENT_SPAN_MS = 30 * 1000
 const ACTIVE_IDLE_GAP_MS = 5 * 60 * 1000
+const CHARS_PER_TOKEN = 4
 
 export const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -105,6 +106,65 @@ function activityDuration(
 
 function modelLabel(providers: readonly Provider[], providerID: string, modelID: string) {
   return providers.find((item) => item.id === providerID)?.models[modelID]?.name ?? modelID
+}
+
+function estimateTokens(input: string) {
+  return Math.max(0, Math.round(input.length / CHARS_PER_TOKEN))
+}
+
+function estimateCurrentContextTokens(messages: readonly Message[], getParts: (messageID: string) => readonly Part[]) {
+  return estimateTokens(
+    JSON.stringify(
+      messages.map((message) => ({
+        role: message.role,
+        agent: message.agent,
+        model: message.role === "user" ? message.model : `${message.providerID}/${message.modelID}`,
+        system: message.role === "user" ? message.system : undefined,
+        parts: getParts(message.id).flatMap((part) => {
+          if (part.type === "text") return part.ignored ? [] : [part.text]
+          if (part.type === "reasoning") return [part.text]
+          if (part.type === "subtask") return [part.agent, part.description, part.prompt]
+          if (part.type === "file") return [part.source?.text.value ?? `[Attached ${part.mime}: ${part.filename ?? "file"}]`]
+          if (part.type === "tool") {
+            const output = part.state.status === "completed" ? part.state.output : part.state.status === "error" ? part.state.error : ""
+            return [part.tool, JSON.stringify(part.state.input), output]
+          }
+          return []
+        }),
+      })),
+    ),
+  )
+}
+
+function currentContextUsage(
+  session: Session | undefined,
+  messages: readonly Message[],
+  getParts: (messageID: string) => readonly Part[],
+  providers: readonly Provider[],
+) {
+  const lastAssistantIndex = messages.findLastIndex((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
+  const lastAssistant = lastAssistantIndex >= 0 ? (messages[lastAssistantIndex] as AssistantMessage) : undefined
+  const latestAssistant = messages.findLast((item): item is AssistantMessage => item.role === "assistant")
+  const latestUser = messages.findLast((item): item is Extract<Message, { role: "user" }> => item.role === "user")
+  const exactTokens = lastAssistant ? lastAssistant.tokens.input + lastAssistant.tokens.cache.read + lastAssistant.tokens.cache.write : 0
+  const latestMessageIndex = messages.length - 1
+  const needsEstimate = latestMessageIndex >= 0 && latestMessageIndex !== lastAssistantIndex
+  const liveTokens = needsEstimate ? Math.max(exactTokens, estimateCurrentContextTokens(messages, getParts)) : exactTokens
+  if (liveTokens <= 0) return { tokens: 0, percent: null as number | null }
+
+  const providerID =
+    session?.model?.providerID ??
+    latestAssistant?.providerID ??
+    latestUser?.model.providerID
+  const modelID =
+    session?.model?.id ??
+    latestAssistant?.modelID ??
+    latestUser?.model.modelID
+  const limit = providerID && modelID ? providers.find((item) => item.id === providerID)?.models[modelID]?.limit.context : undefined
+  return {
+    tokens: liveTokens,
+    percent: limit ? Math.round((liveTokens / limit) * 100) : null,
+  }
 }
 
 export function summarizeUsage(
@@ -237,6 +297,7 @@ export function summarizeUsage(
           }
         >(),
       )
+      const liveContext = currentContextUsage(session.session, messages, session.getParts, providers)
 
       return {
         input: sum.input + assistants.reduce((acc, item) => acc + item.tokens.input, 0),
@@ -249,9 +310,9 @@ export function summarizeUsage(
         compact: sum.compact + parts.filter(({ part }) => part.type === "compaction").length,
         generation_output: sum.generation_output + generation.output,
         generation_duration: sum.generation_duration + generation.duration,
-        context_tokens: sum.context_tokens + context_tokens,
-        context_percent_total: sum.context_percent_total + (context_percent ?? 0),
-        context_percent_count: sum.context_percent_count + (context_percent === null ? 0 : 1),
+        context_tokens: sum.context_tokens + liveContext.tokens,
+        context_percent_total: sum.context_percent_total + (liveContext.percent ?? 0),
+        context_percent_count: sum.context_percent_count + (liveContext.percent === null ? 0 : 1),
         sessions: sum.sessions + (active ? 1 : 0),
         additions: sum.additions + (active ? (session.additions ?? session.session?.summary?.additions ?? 0) : 0),
         deletions: sum.deletions + (active ? (session.deletions ?? session.session?.summary?.deletions ?? 0) : 0),
