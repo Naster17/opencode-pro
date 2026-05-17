@@ -78,6 +78,7 @@ import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
+import { formatCompactTokens } from "../../util/usage"
 import { Global } from "@opencode-ai/core/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
@@ -1740,6 +1741,21 @@ function AssistantMessage(props: {
     ].filter(Boolean)
   })
 
+  const codeStats = createMemo(() => {
+    if (!final()) return emptyCodeStats()
+    const index = messages().findIndex((message) => message.id === props.message.id)
+    if (index < 0) return messageCodeStats(props.parts)
+    const userIndex = messages()
+      .slice(0, index + 1)
+      .findLastIndex((message) => message.role === "user")
+    return messageCodeStats(
+      messages()
+        .slice(userIndex + 1, index + 1)
+        .filter((message): message is AssistantMessage => message.role === "assistant")
+        .flatMap((message) => sync.data.part[message.id] ?? []),
+    )
+  })
+
   const keybind = useKeybind()
 
   return (
@@ -1800,6 +1816,18 @@ function AssistantMessage(props: {
               <Show when={metrics().length > 0}>
                 <span style={{ fg: theme.textMuted }}> · {metrics().join(" · ")}</span>
               </Show>
+              <Show when={codeStats().additions > 0 || codeStats().deletions > 0}>
+                <span style={{ fg: theme.textMuted }}> · </span>
+                <Show when={codeStats().additions > 0}>
+                  <span style={{ fg: theme.diffAdded }}>+{formatCompactTokens(codeStats().additions)}</span>
+                </Show>
+                <Show when={codeStats().additions > 0 && codeStats().deletions > 0}>
+                  <span style={{ fg: theme.textMuted }}> </span>
+                </Show>
+                <Show when={codeStats().deletions > 0}>
+                  <span style={{ fg: theme.diffRemoved }}>-{formatCompactTokens(codeStats().deletions)}</span>
+                </Show>
+              </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
               </Show>
@@ -1814,6 +1842,87 @@ function AssistantMessage(props: {
 function formatTokensPerSecond(value: number) {
   if (value >= 100) return `${value.toFixed(1)} t/s`
   return `${value.toFixed(2)} t/s`
+}
+
+function messageCodeStats(parts: Part[]) {
+  return parts.reduce(
+    (sum, part) => {
+      if (part.type !== "tool") return sum
+      if (part.state.status !== "completed") return sum
+
+      const countedMetadata = addCodeStats(sum, part.state.metadata)
+      const countedFilediff = countedMetadata ? false : addCodeStats(sum, part.state.metadata?.filediff)
+      const files = part.state.metadata?.files
+      const countedFiles =
+        countedMetadata || countedFilediff
+          ? false
+          : Array.isArray(files)
+            ? files.reduce((counted, file) => addCodeStats(sum, file) || counted, false)
+            : false
+      const countedDiff = countedMetadata || countedFilediff || countedFiles ? false : addDiffStats(sum, part.state.metadata?.diff)
+      const input = isRecord(part.state.input) ? part.state.input : undefined
+      if (
+        !countedMetadata &&
+        !countedFilediff &&
+        !countedFiles &&
+        !countedDiff &&
+        part.tool === "write" &&
+        part.state.metadata?.exists !== true
+      ) {
+        sum.additions += countLines(stringValue(input?.content) ?? "")
+      }
+
+      return sum
+    },
+    emptyCodeStats(),
+  )
+}
+
+function emptyCodeStats() {
+  return { additions: 0, deletions: 0 }
+}
+
+function addCodeStats(sum: { additions: number; deletions: number }, value: unknown) {
+  if (!isRecord(value)) return false
+  const additions = numberValue(value.additions) ?? 0
+  const deletions = numberValue(value.deletions) ?? 0
+  sum.additions += additions
+  sum.deletions += deletions
+  return typeof value.additions === "number" || typeof value.deletions === "number"
+}
+
+function addDiffStats(sum: { additions: number; deletions: number }, value: unknown) {
+  if (typeof value !== "string") return false
+  const stats = value.split("\n").reduce(
+    (acc, line) => {
+      if (line.startsWith("+++") || line.startsWith("---")) return acc
+      if (line.startsWith("+")) return { additions: acc.additions + 1, deletions: acc.deletions }
+      if (line.startsWith("-")) return { additions: acc.additions, deletions: acc.deletions + 1 }
+      return acc
+    },
+    { additions: 0, deletions: 0 },
+  )
+  sum.additions += stats.additions
+  sum.deletions += stats.deletions
+  return value.length > 0
+}
+
+function countLines(value: string) {
+  if (!value) return 0
+  const lines = value.split("\n")
+  return value.endsWith("\n") ? lines.length - 1 : lines.length
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : undefined
+}
+
+function numberValue(value: unknown) {
+  return typeof value === "number" ? value : undefined
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value)
 }
 
 function estimatePromptPartTokens(part: Part) {

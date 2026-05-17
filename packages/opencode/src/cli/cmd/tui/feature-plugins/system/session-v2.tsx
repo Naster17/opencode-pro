@@ -26,6 +26,7 @@ import type {
   ToolTextContent,
 } from "@opencode-ai/sdk/v2"
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
+import { formatCompactTokens } from "../../util/usage"
 
 const id = "internal:session-v2-debug"
 const route = "session.v2.messages"
@@ -88,6 +89,7 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
                       syntax={syntax()}
                       subtleSyntax={subtleSyntax()}
                       start={lastUserCreated(index())}
+                      codeStats={assistantResponseCodeStats(renderedMessages(), index())}
                     />
                   </Match>
                   <Match when={message.type === "synthetic"}>
@@ -285,6 +287,7 @@ function AssistantMessage(props: {
   syntax: SyntaxStyle
   subtleSyntax: SyntaxStyle
   start?: number
+  codeStats: { additions: number; deletions: number }
 }) {
   const { theme } = useTheme()
   const local = useLocal()
@@ -340,6 +343,18 @@ function AssistantMessage(props: {
             <span style={{ fg: theme.textMuted }}> · {model()}</span>
             <Show when={duration()}>
               <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+            </Show>
+            <Show when={final() && (props.codeStats.additions > 0 || props.codeStats.deletions > 0)}>
+              <span style={{ fg: theme.textMuted }}> · </span>
+              <Show when={props.codeStats.additions > 0}>
+                <span style={{ fg: theme.diffAdded }}>+{formatCompactTokens(props.codeStats.additions)}</span>
+              </Show>
+              <Show when={props.codeStats.additions > 0 && props.codeStats.deletions > 0}>
+                <span style={{ fg: theme.textMuted }}> </span>
+              </Show>
+              <Show when={props.codeStats.deletions > 0}>
+                <span style={{ fg: theme.diffRemoved }}>-{formatCompactTokens(props.codeStats.deletions)}</span>
+              </Show>
             </Show>
           </text>
         </box>
@@ -1043,6 +1058,72 @@ function pendingInput(part: SessionMessageAssistantTool) {
 function toolComplete(part: SessionMessageAssistantTool) {
   if (part.state.status === "pending") return pendingInput(part)
   return part.state.status === "completed" || part.state.status === "error" || part.state.status === "running"
+}
+
+function messageCodeStats(content: SessionMessageAssistant["content"]) {
+  return content.reduce(
+    (sum, part) => {
+      if (part.type !== "tool") return sum
+      const metadata = part.provider?.metadata ?? {}
+      const countedMetadata = addCodeStats(sum, metadata)
+      const countedFilediff = countedMetadata ? false : addCodeStats(sum, metadata.filediff)
+      const countedFiles = countedMetadata || countedFilediff
+        ? false
+        : arrayValue(metadata.files).reduce((counted, file) => addCodeStats(sum, file) || counted, false)
+      const countedDiff = countedMetadata || countedFilediff || countedFiles ? false : addDiffStats(sum, metadata.diff)
+      const input = toolInputRecord(part.state.input)
+      if (!countedMetadata && !countedFilediff && !countedFiles && !countedDiff && part.name === "write" && metadata.exists !== true) {
+        sum.additions += countLines(stringValue(input.content) ?? "")
+      }
+      return sum
+    },
+    emptyCodeStats(),
+  )
+}
+
+function assistantResponseCodeStats(messages: SessionMessage[], index: number) {
+  const userIndex = messages.slice(0, index + 1).findLastIndex((message) => message.type === "user")
+  return messageCodeStats(
+    messages
+      .slice(userIndex + 1, index + 1)
+      .filter((message): message is SessionMessageAssistant => message.type === "assistant")
+      .flatMap((message) => message.content),
+  )
+}
+
+function emptyCodeStats() {
+  return { additions: 0, deletions: 0 }
+}
+
+function addCodeStats(sum: { additions: number; deletions: number }, value: unknown) {
+  if (!isRecord(value)) return false
+  const additions = numberValue(value.additions) ?? 0
+  const deletions = numberValue(value.deletions) ?? 0
+  sum.additions += additions
+  sum.deletions += deletions
+  return typeof value.additions === "number" || typeof value.deletions === "number"
+}
+
+function addDiffStats(sum: { additions: number; deletions: number }, value: unknown) {
+  if (typeof value !== "string") return false
+  const stats = value.split("\n").reduce(
+    (acc, line) => {
+      if (line.startsWith("+++") || line.startsWith("---")) return acc
+      if (line.startsWith("+")) return { additions: acc.additions + 1, deletions: acc.deletions }
+      if (line.startsWith("-")) return { additions: acc.additions, deletions: acc.deletions + 1 }
+      return acc
+    },
+    { additions: 0, deletions: 0 },
+  )
+  sum.additions += stats.additions
+  sum.deletions += stats.deletions
+  return value.length > 0
+}
+
+function countLines(value: string) {
+  if (!value) return 0
+  const lines = value.split("\n")
+  return value.endsWith("\n") ? lines.length - 1 : lines.length
 }
 
 function stringValue(value: unknown) {
