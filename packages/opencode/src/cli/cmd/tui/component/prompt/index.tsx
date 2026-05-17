@@ -29,7 +29,7 @@ import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import * as Editor from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import * as Clipboard from "../../util/clipboard"
-import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, FilePart, Part, ToolPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
@@ -88,6 +88,100 @@ function randomIndex(count: number) {
 
 function fadeColor(color: RGBA, alpha: number) {
   return RGBA.fromValues(color.r, color.g, color.b, color.a * alpha)
+}
+
+function shortActionLabel(name: string) {
+  if (["bash", "shell", "execute", "command"].includes(name)) return "execute"
+  if (["read", "view"].includes(name)) return "read"
+  if (["write", "edit", "apply_patch"].includes(name)) return "write"
+  if (["glob"].includes(name)) return "glob"
+  if (["grep", "search"].includes(name)) return "search"
+  if (["task"].includes(name)) return "delegate"
+  if (["todowrite", "plan"].includes(name)) return "plan"
+  if (["webfetch", "fetch"].includes(name)) return "fetch"
+  if (["question", "ask"].includes(name)) return "asking"
+  if (["skill", "load"].includes(name)) return "loading"
+  return name.length > 12 ? name.slice(0, 12) : name
+}
+
+function titleActionLabel(title: string, tool: string) {
+  const value = title.trim().toLowerCase()
+  if (!value) return shortActionLabel(tool)
+  if (value.startsWith("read")) return "read"
+  if (value.startsWith("write")) return "write"
+  if (value.startsWith("edit")) return "write"
+  if (value.startsWith("patch")) return "write"
+  if (value.startsWith("search")) return "search"
+  if (value.startsWith("grep")) return "search"
+  if (value.startsWith("glob")) return "glob"
+  if (value.startsWith("find")) return "glob"
+  if (value.startsWith("fetch")) return "fetch"
+  if (value.startsWith("ask")) return "asking"
+  if (value.startsWith("load")) return "loading"
+  if (value.startsWith("updat")) return "plan"
+  if (value.startsWith("delegat")) return "delegate"
+  if (value.startsWith("think")) return "reasoning"
+  return shortActionLabel(tool)
+}
+
+function toolActionLabel(
+  part: ToolPart,
+  messagesBySession: Record<string, AssistantMessage[] | UserMessage[] | any[]>,
+  partsByMessage: Record<string, Part[]>,
+  seen: Set<string>,
+) {
+  const sessionId =
+    typeof part.metadata?.sessionId === "string"
+      ? part.metadata.sessionId
+      : part.state.status === "running" || part.state.status === "completed"
+        ? typeof part.state.metadata?.sessionId === "string"
+          ? part.state.metadata.sessionId
+          : undefined
+        : undefined
+
+  if (part.tool === "task" && sessionId) {
+    const nested = sessionActionLabel(sessionId, messagesBySession, partsByMessage, seen)
+    if (nested) return nested
+  }
+
+  if (part.state.status === "running" || part.state.status === "completed") {
+    if (part.state.title) return titleActionLabel(part.state.title, part.tool)
+  }
+
+  return shortActionLabel(part.tool)
+}
+
+function sessionActionLabel(
+  sessionID: string,
+  messagesBySession: Record<string, AssistantMessage[] | UserMessage[] | any[]>,
+  partsByMessage: Record<string, Part[]>,
+  seen = new Set<string>(),
+): string | undefined {
+  if (seen.has(sessionID)) return
+  seen.add(sessionID)
+
+  const assistant = messagesBySession[sessionID]?.findLast(
+    (message): message is AssistantMessage => message.role === "assistant" && !message.time.completed,
+  )
+  if (!assistant) return
+
+  const parts = partsByMessage[assistant.id] ?? []
+  const runningTool = parts.findLast(
+    (part): part is ToolPart => part.type === "tool" && part.state.status === "running",
+  )
+  if (runningTool) return toolActionLabel(runningTool, messagesBySession, partsByMessage, seen)
+
+  const pendingTool = parts.findLast(
+    (part): part is ToolPart => part.type === "tool" && part.state.status === "pending",
+  )
+  if (pendingTool) return toolActionLabel(pendingTool, messagesBySession, partsByMessage, seen)
+
+  const lastPart = parts.at(-1)
+  if (lastPart?.type === "reasoning") return "reasoning"
+  if (lastPart?.type === "text") return "reply"
+  if (parts.some((part) => part.type === "reasoning")) return "reasoning"
+  if (parts.some((part) => part.type === "text")) return "reply"
+  return "processing"
 }
 
 function hasEditorRangeSelection(selection: EditorSelection["ranges"][number]) {
@@ -387,6 +481,10 @@ export function Prompt(props: PromptProps) {
     return value
   })
   const visibleFooterVariantLabel = createMemo(() => resolveVisibleVariantLabel(thinkingLabel(), visibleVariantLabel()))
+  const activeActionLabel = createMemo(() => {
+    if (!props.sessionID || status().type !== "busy") return
+    return sessionActionLabel(props.sessionID, sync.data.message, sync.data.part)
+  })
 
   createEffect(
     on(
@@ -1670,12 +1768,14 @@ export function Prompt(props: PromptProps) {
                     })()}
                   </box>
                 </box>
-                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
-                  esc{" "}
-                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                  </span>
-                </text>
+                <Show when={store.interrupt > 0 || activeActionLabel()}>
+                  <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
+                    esc{" "}
+                    <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
+                      {store.interrupt > 0 ? "again" : activeActionLabel()}
+                    </span>
+                  </text>
+                </Show>
               </box>
             </Match>
             <Match when={warpNotice()}>
@@ -1745,7 +1845,7 @@ export function Prompt(props: PromptProps) {
                     </Match>
                   </Switch>
                   <text fg={theme.text}>
-                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>cmds</span>
                   </text>
                 </Match>
                 <Match when={store.mode === "shell"}>
