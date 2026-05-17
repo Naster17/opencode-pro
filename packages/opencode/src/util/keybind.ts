@@ -6,14 +6,29 @@ import type { ParsedKey } from "@opentui/core"
  * This ensures type compatibility and catches missing fields at compile time.
  */
 export type Info = Pick<ParsedKey, "name" | "ctrl" | "meta" | "shift" | "super"> & {
+  baseCode?: number
   leader: boolean // our custom field
+}
+
+function getBaseCodeName(baseCode?: number) {
+  if (baseCode === undefined || baseCode < 32 || baseCode === 127) return
+  try {
+    const name = String.fromCodePoint(baseCode)
+    if (name.length === 1 && name >= "A" && name <= "Z") return name.toLowerCase()
+    return name
+  } catch {
+    return
+  }
 }
 
 export function match(a: Info | undefined, b: Info): boolean {
   if (!a) return false
-  const normalizedA = { ...a, super: a.super ?? false }
-  const normalizedB = { ...b, super: b.super ?? false }
-  return isDeepEqual(normalizedA, normalizedB)
+  const normalizedA = { ...a, super: a.super ?? false, baseCode: undefined }
+  const normalizedB = { ...b, super: b.super ?? false, baseCode: undefined }
+  if (isDeepEqual(normalizedA, normalizedB)) return true
+  const baseCodeName = getBaseCodeName(b.baseCode)
+  if (!baseCodeName) return false
+  return isDeepEqual(normalizedA, { ...normalizedB, name: baseCodeName })
 }
 
 /**
@@ -27,6 +42,7 @@ export function fromParsedKey(key: ParsedKey, leader = false): Info {
     meta: key.meta,
     shift: key.shift,
     super: key.super ?? false,
+    baseCode: key.baseCode,
     leader,
   }
 }

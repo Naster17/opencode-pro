@@ -58,7 +58,7 @@ const KeybindsSchema = Schema.Struct({
   model_cycle_recent: keybind("f2", "Next recently used model"),
   model_cycle_recent_reverse: keybind("shift+f2", "Previous recently used model"),
   model_cycle_favorite: keybind("alt+m", "Next favorite model"),
-  model_cycle_favorite_reverse: keybind("none", "Previous favorite model"),
+  model_cycle_favorite_reverse: keybind("alt+n", "Previous favorite model"),
   command_list: keybind("ctrl+p", "List available commands"),
   agent_list: keybind("<leader>a", "List agents"),
   agent_cycle: keybind("tab", "Next agent"),
