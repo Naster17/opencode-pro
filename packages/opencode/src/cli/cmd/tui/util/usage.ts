@@ -167,12 +167,15 @@ function currentContextUsage(
   const latestAssistant = visibleMessages.findLast((item): item is AssistantMessage => item.role === "assistant")
   const latestUser = visibleMessages.findLast((item): item is Extract<Message, { role: "user" }> => item.role === "user")
   const exactTokens = lastAssistant ? lastAssistant.tokens.input + lastAssistant.tokens.cache.read + lastAssistant.tokens.cache.write : 0
+  const liveAssistant = latestAssistant && !latestAssistant.time.completed ? latestAssistant : undefined
   const latestMessageIndex = visibleMessages.length - 1
   const compactedSummary =
     lastAssistant?.summary === true && getParts(lastAssistant.parentID).some((part) => part.type === "compaction")
-  const needsEstimate = latestMessageIndex >= 0 && latestMessageIndex !== lastAssistantIndex
-  const estimatedTokens = estimateCurrentContextTokens(visibleMessages, getParts)
-  const liveTokens = compactedSummary ? estimatedTokens : needsEstimate ? Math.max(exactTokens, estimatedTokens) : exactTokens
+  const liveTokens = compactedSummary
+    ? estimateCurrentContextTokens(visibleMessages, getParts)
+    : liveAssistant || (latestMessageIndex >= 0 && latestMessageIndex !== lastAssistantIndex)
+      ? exactTokens
+      : exactTokens || estimateCurrentContextTokens(visibleMessages, getParts)
   if (liveTokens <= 0) return { tokens: 0, percent: null as number | null }
 
   const providerID =

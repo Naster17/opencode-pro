@@ -79,4 +79,62 @@ describe("tui usage", () => {
     expect(summary.context_tokens).toBeLessThan(5_200)
     expect(summary.average_context_percent).toBe(Math.round((summary.context_tokens / 10_000) * 100))
   })
+
+  test("keeps ctx at the last exact value while the assistant is still streaming", () => {
+    const messages = [
+      userMessage({ id: "user-1" }),
+      assistantMessage({ id: "assistant-1", parentID: "user-1", inputTokens: 12_000, outputTokens: 400 }),
+      userMessage({ id: "user-2" }),
+      {
+        ...assistantMessage({ id: "assistant-2", parentID: "user-2", inputTokens: 0, outputTokens: 0 }),
+        time: { created: 4 },
+        finish: undefined,
+      } as unknown as Message,
+    ] satisfies readonly Message[]
+    const parts = new Map<string, readonly Part[]>([
+      ["user-1", [{ type: "text", text: "previous context" } as unknown as Part]],
+      ["assistant-1", [{ type: "text", text: "done" } as unknown as Part]],
+      ["user-2", [{ type: "text", text: "new prompt that should not change live ctx yet" } as unknown as Part]],
+      ["assistant-2", [{ type: "text", text: "streaming reply" } as unknown as Part]],
+    ])
+
+    const summary = summarizeUsage(
+      [
+        {
+          messages,
+          getParts: (messageID) => parts.get(messageID) ?? [],
+        },
+      ],
+      provider(20_000),
+    )
+
+    expect(summary.context_tokens).toBe(12_000)
+    expect(summary.average_context_percent).toBe(60)
+  })
+
+  test("keeps ctx at the last exact value right after sending a new user message", () => {
+    const messages = [
+      userMessage({ id: "user-1" }),
+      assistantMessage({ id: "assistant-1", parentID: "user-1", inputTokens: 12_200, outputTokens: 400 }),
+      userMessage({ id: "user-2" }),
+    ] satisfies readonly Message[]
+    const parts = new Map<string, readonly Part[]>([
+      ["user-1", [{ type: "text", text: "previous context" } as unknown as Part]],
+      ["assistant-1", [{ type: "text", text: "done" } as unknown as Part]],
+      ["user-2", [{ type: "text", text: "new prompt should not bump ctx immediately" } as unknown as Part]],
+    ])
+
+    const summary = summarizeUsage(
+      [
+        {
+          messages,
+          getParts: (messageID) => parts.get(messageID) ?? [],
+        },
+      ],
+      provider(20_000),
+    )
+
+    expect(summary.context_tokens).toBe(12_200)
+    expect(summary.average_context_percent).toBe(61)
+  })
 })

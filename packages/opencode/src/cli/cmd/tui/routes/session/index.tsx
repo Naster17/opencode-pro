@@ -101,6 +101,7 @@ const GO_UPSELL_LAST_SEEN_AT = "go_upsell_last_seen_at"
 const GO_UPSELL_DONT_SHOW = "go_upsell_dont_show"
 const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
 const STREAM_RATE_WINDOW = 5000
+const STREAM_RATE_MAX_SAMPLES = 120
 const STREAM_RATE_UPDATE_INTERVAL = 250
 const STREAM_RATE_MIN_WINDOW = 1200
 const STREAM_RATE_SMOOTHING = 0.18
@@ -108,11 +109,19 @@ const PROMPT_RATE_MIN_WINDOW = 1500
 const PROMPT_RATE_SMOOTHING = 0.12
 
 type AssistantDerivedMetrics = {
-  startedAt?: number
-  estimatedPromptTokens: number
   estimatedOutputTokens: number
   responseStartedAt?: number
   generationStartedAt?: number
+}
+
+type CodeStats = {
+  additions: number
+  deletions: number
+}
+
+type MessageMetrics = {
+  startedAt?: number
+  codeStats: CodeStats
 }
 
 type LiveAssistantMetrics = {
@@ -369,10 +378,10 @@ export function Session() {
             responseStartedAt: current.responseStartedAt ?? now,
             textStartedAt: current.textStartedAt ?? now,
             firstTokenAt: current.firstTokenAt ?? now,
-            streamSamples: [...current.streamSamples.filter((sample) => now - sample.time <= STREAM_RATE_WINDOW), {
-              time: now,
-              chars: evt.properties.delta.length,
-            }],
+            streamSamples: [
+              ...current.streamSamples.filter((sample) => now - sample.time <= STREAM_RATE_WINDOW),
+              { time: now, chars: evt.properties.delta.length },
+            ].slice(-STREAM_RATE_MAX_SAMPLES),
           },
     )
   })
@@ -1182,6 +1191,58 @@ export function Session() {
     return messages().filter((message) => message.id > cutoff)
   })
 
+  const messageMetrics = createMemo(() => {
+    const result = new Map<string, MessageMetrics>()
+    let startedAt: number | undefined
+    let turnCodeStats = emptyCodeStats()
+
+    for (const message of messages()) {
+      const parts = sync.data.part[message.id] ?? []
+
+      if (message.role === "user") {
+        startedAt = message.time.created
+        turnCodeStats = emptyCodeStats()
+        result.set(message.id, { codeStats: emptyCodeStats() })
+        continue
+      }
+
+      if (message.role === "assistant") {
+        turnCodeStats = mergeCodeStats(turnCodeStats, messageCodeStats(parts))
+        result.set(message.id, { startedAt, codeStats: turnCodeStats })
+        continue
+      }
+    }
+
+    return result
+  })
+
+  const livePromptTokens = createMemo(() => {
+    const assistant = lastAssistant()
+    if (!assistant) return 0
+    if (assistant.time.completed) return 0
+    const sessionMessages = messages()
+    let promptTokens = 0
+    let parent: UserMessage | undefined
+    for (const message of sessionMessages) {
+      promptTokens += (sync.data.part[message.id] ?? []).reduce((sum, part) => sum + estimatePromptPartTokens(part), 0)
+      if (message.id !== assistant.parentID) continue
+      if (message.role === "user") parent = message
+      break
+    }
+    const providerModel = sync.data.provider.find((item) => item.id === assistant.providerID)?.models[assistant.modelID]
+    return (
+      promptTokens +
+      Token.estimate(
+        [
+          ...(providerModel ? SystemPrompt.provider(providerModel as Parameters<typeof SystemPrompt.provider>[0]) : []),
+          parent?.system ?? "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      )
+    )
+  })
+
   createEffect(() => {
     const assistant = lastAssistant()
     if (!assistant) {
@@ -1206,7 +1267,9 @@ export function Session() {
           : {
               ...current,
               now,
-              streamSamples: current.streamSamples.filter((sample) => now - sample.time <= STREAM_RATE_WINDOW),
+              streamSamples: current.streamSamples
+                .filter((sample) => now - sample.time <= STREAM_RATE_WINDOW)
+                .slice(-STREAM_RATE_MAX_SAMPLES),
             },
       )
     }, STREAM_RATE_UPDATE_INTERVAL)
@@ -1347,6 +1410,8 @@ export function Session() {
                         last={lastAssistant()?.id === message.id}
                         message={message as AssistantMessage}
                         parts={sync.data.part[message.id] ?? []}
+                        metrics={messageMetrics().get(message.id)}
+                        estimatedPromptTokens={lastAssistant()?.id === message.id ? livePromptTokens() : 0}
                         live={lastAssistant()?.id === message.id ? liveAssistant() : undefined}
                       />
                     </Match>
@@ -1535,30 +1600,17 @@ function AssistantMessage(props: {
   message: AssistantMessage
   parts: Part[]
   last: boolean
+  metrics?: MessageMetrics
+  estimatedPromptTokens?: number
   live?: LiveAssistantMetrics
 }) {
   const ctx = use()
   const local = useLocal()
   const { theme } = useTheme()
-  const sync = useSync()
   const [smoothedLiveTokensPerSecond, setSmoothedLiveTokensPerSecond] = createSignal(0)
   const [latestLiveTokensPerSecond, setLatestLiveTokensPerSecond] = createSignal(0)
   const [smoothedPromptTokensPerSecond, setSmoothedPromptTokensPerSecond] = createSignal(0)
-  const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
-  const contextMessages = createMemo(() => {
-    const index = messages().findIndex((message) => message.id === props.message.parentID)
-    if (index < 0) return []
-    return messages().slice(0, index + 1)
-  })
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
-  const providerModel = createMemo(
-    () => sync.data.provider.find((item) => item.id === props.message.providerID)?.models[props.message.modelID],
-  )
-  const parentUserMessage = createMemo(() =>
-    messages().find(
-      (message): message is UserMessage => message.role === "user" && message.id === props.message.parentID,
-    ),
-  )
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
@@ -1584,19 +1636,6 @@ function AssistantMessage(props: {
     }
 
     return {
-      startedAt: parentUserMessage()?.time.created,
-      estimatedPromptTokens:
-        contextMessages()
-          .flatMap((message) => sync.data.part[message.id] ?? [])
-          .reduce((total, part) => total + estimatePromptPartTokens(part), 0) +
-        Token.estimate(
-          [
-            ...(providerModel() ? SystemPrompt.provider(providerModel() as Parameters<typeof SystemPrompt.provider>[0]) : []),
-            parentUserMessage()?.system ?? "",
-          ]
-            .filter(Boolean)
-            .join("\n"),
-        ),
       estimatedOutputTokens,
       responseStartedAt,
       generationStartedAt,
@@ -1604,7 +1643,7 @@ function AssistantMessage(props: {
   })
 
   const startedAt = createMemo(() => {
-    return derived().startedAt
+    return props.metrics?.startedAt
   })
 
   const duration = createMemo(() => {
@@ -1616,7 +1655,7 @@ function AssistantMessage(props: {
 
   const estimatedOutputTokens = createMemo(() => derived().estimatedOutputTokens)
 
-  const estimatedPromptTokens = createMemo(() => derived().estimatedPromptTokens)
+  const estimatedPromptTokens = createMemo(() => props.estimatedPromptTokens ?? 0)
 
   const generationDuration = createMemo(() => {
     const generationStartedAt = live()?.textStartedAt ?? live()?.firstTokenAt ?? derived().generationStartedAt
@@ -1743,17 +1782,7 @@ function AssistantMessage(props: {
 
   const codeStats = createMemo(() => {
     if (!final()) return emptyCodeStats()
-    const index = messages().findIndex((message) => message.id === props.message.id)
-    if (index < 0) return messageCodeStats(props.parts)
-    const userIndex = messages()
-      .slice(0, index + 1)
-      .findLastIndex((message) => message.role === "user")
-    return messageCodeStats(
-      messages()
-        .slice(userIndex + 1, index + 1)
-        .filter((message): message is AssistantMessage => message.role === "assistant")
-        .flatMap((message) => sync.data.part[message.id] ?? []),
-    )
+    return props.metrics?.codeStats ?? messageCodeStats(props.parts)
   })
 
   const keybind = useKeybind()
@@ -1882,6 +1911,13 @@ function emptyCodeStats() {
   return { additions: 0, deletions: 0 }
 }
 
+function mergeCodeStats(left: CodeStats, right: CodeStats) {
+  return {
+    additions: left.additions + right.additions,
+    deletions: left.deletions + right.deletions,
+  }
+}
+
 function addCodeStats(sum: { additions: number; deletions: number }, value: unknown) {
   if (!isRecord(value)) return false
   const additions = numberValue(value.additions) ?? 0
@@ -1935,11 +1971,9 @@ function estimatePromptPartTokens(part: Part) {
   }
   if (part.type === "tool") {
     const input = part.state.input ? Token.estimate(JSON.stringify(part.state.input)) : 0
-    const content =
-      part.state.status === "completed" || part.state.status === "error"
-        ? Token.estimate(JSON.stringify(part.state))
-        : 0
-    return input + content
+    if (part.state.status === "completed") return input + Token.estimate(part.state.output)
+    if (part.state.status === "error") return input + Token.estimate(part.state.error)
+    return input
   }
   if (part.type === "retry") return Token.estimate(JSON.stringify(part.error))
   return 0

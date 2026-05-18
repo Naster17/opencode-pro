@@ -1,7 +1,3 @@
----
-model: opencode/gpt-5.4
----
-
 Create `UPCOMING_CHANGELOG.md` from the structured changelog input below.
 If `UPCOMING_CHANGELOG.md` already exists, ignore its current contents completely.
 Do not preserve, merge, or reuse text from the existing file.
