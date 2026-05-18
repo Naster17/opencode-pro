@@ -3,12 +3,11 @@ import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
-import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { Locale } from "@/util/locale"
 import { useTerminalDimensions } from "@opentui/solid"
-import { formatCompactTokens, money } from "../../util/usage"
+import { money, summarizeUsage } from "../../util/usage"
 
 export function SubagentFooter() {
   const route = useRouteData("session")
@@ -33,34 +32,24 @@ export function SubagentFooter() {
   })
 
   const usage = createMemo(() => {
-    const msg = messages()
-    const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
-    if (!last) return
+    const summary = summarizeUsage(
+      [
+        {
+          session: session(),
+          messages: messages(),
+          getParts: (messageID) => sync.data.part[messageID] ?? [],
+        },
+      ],
+      sync.data.provider,
+    )
+    if (summary.context_tokens <= 0) return
 
-    const contextTokens =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    if (contextTokens <= 0) return
-
-    const totalTokens = msg.reduce((sum, item) => {
-      if (item.role !== "assistant") return sum
-      return (
-        sum +
-        item.tokens.input +
-        item.tokens.output +
-        item.tokens.reasoning +
-        item.tokens.cache.read +
-        item.tokens.cache.write
-      )
-    }, 0)
-
-    const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
-    const pct = model?.limit.context ? `${Math.round((contextTokens / model.limit.context) * 100)}%` : undefined
-    const cost = msg.reduce((sum, item) => sum + (item.role === "assistant" ? (item.cost ?? 0) : 0), 0)
+    const pct = summary.average_context_percent !== null ? `${summary.average_context_percent}%` : undefined
 
     return {
-      context: pct ? `${Locale.number(contextTokens)} (${pct})` : Locale.number(contextTokens),
-      total: `total ${Locale.number(totalTokens)}`,
-      cost: money.format(cost),
+      context: pct ? `${Locale.number(summary.context_tokens)} (${pct})` : Locale.number(summary.context_tokens),
+      total: `total ${Locale.number(summary.tokens)}`,
+      cost: money.format(summary.cost),
     }
   })
 

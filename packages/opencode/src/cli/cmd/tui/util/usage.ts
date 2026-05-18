@@ -136,20 +136,43 @@ function estimateCurrentContextTokens(messages: readonly Message[], getParts: (m
   )
 }
 
+function filterCompactedMessages(messages: readonly Message[], getParts: (messageID: string) => readonly Part[]) {
+  const completed = new Set(
+    messages.flatMap((message) => {
+      if (message.role !== "assistant") return []
+      if (message.summary !== true || !message.finish || message.error) return []
+      return [message.parentID]
+    }),
+  )
+  const latest = messages.findLastIndex((message) => {
+    if (message.role !== "user") return false
+    if (!completed.has(message.id)) return false
+    return getParts(message.id).some((part) => part.type === "compaction")
+  })
+  if (latest < 0) return messages
+  return messages.slice(latest)
+}
+
 function currentContextUsage(
   session: Session | undefined,
   messages: readonly Message[],
   getParts: (messageID: string) => readonly Part[],
   providers: readonly Provider[],
 ) {
-  const lastAssistantIndex = messages.findLastIndex((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
-  const lastAssistant = lastAssistantIndex >= 0 ? (messages[lastAssistantIndex] as AssistantMessage) : undefined
-  const latestAssistant = messages.findLast((item): item is AssistantMessage => item.role === "assistant")
-  const latestUser = messages.findLast((item): item is Extract<Message, { role: "user" }> => item.role === "user")
+  const visibleMessages = filterCompactedMessages(messages, getParts)
+  const lastAssistantIndex = visibleMessages.findLastIndex(
+    (item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0,
+  )
+  const lastAssistant = lastAssistantIndex >= 0 ? (visibleMessages[lastAssistantIndex] as AssistantMessage) : undefined
+  const latestAssistant = visibleMessages.findLast((item): item is AssistantMessage => item.role === "assistant")
+  const latestUser = visibleMessages.findLast((item): item is Extract<Message, { role: "user" }> => item.role === "user")
   const exactTokens = lastAssistant ? lastAssistant.tokens.input + lastAssistant.tokens.cache.read + lastAssistant.tokens.cache.write : 0
-  const latestMessageIndex = messages.length - 1
+  const latestMessageIndex = visibleMessages.length - 1
+  const compactedSummary =
+    lastAssistant?.summary === true && getParts(lastAssistant.parentID).some((part) => part.type === "compaction")
   const needsEstimate = latestMessageIndex >= 0 && latestMessageIndex !== lastAssistantIndex
-  const liveTokens = needsEstimate ? Math.max(exactTokens, estimateCurrentContextTokens(messages, getParts)) : exactTokens
+  const estimatedTokens = estimateCurrentContextTokens(visibleMessages, getParts)
+  const liveTokens = compactedSummary ? estimatedTokens : needsEstimate ? Math.max(exactTokens, estimatedTokens) : exactTokens
   if (liveTokens <= 0) return { tokens: 0, percent: null as number | null }
 
   const providerID =
