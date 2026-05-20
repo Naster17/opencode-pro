@@ -61,6 +61,7 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
+import { BtwUsageProvider } from "./context/btw"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { createTuiApi } from "@/cli/cmd/tui/plugin/api"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
@@ -181,9 +182,11 @@ export function tui(input: {
                                           <FrecencyProvider>
                                             <PromptHistoryProvider>
                                               <PromptRefProvider>
-                                                <EditorContextProvider>
-                                                  <App onSnapshot={input.onSnapshot} />
-                                                </EditorContextProvider>
+                                                <BtwUsageProvider>
+                                                  <EditorContextProvider>
+                                                    <App onSnapshot={input.onSnapshot} />
+                                                  </EditorContextProvider>
+                                                </BtwUsageProvider>
                                               </PromptRefProvider>
                                             </PromptHistoryProvider>
                                           </FrecencyProvider>

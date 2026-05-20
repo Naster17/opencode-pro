@@ -31,6 +31,10 @@ export type Event =
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
+  | EventSessionBtwStarted
+  | EventSessionBtwUpdated
+  | EventSessionBtwPartUpdated
+  | EventSessionBtwPartDelta
   | EventProjectUpdated
   | EventVcsBranchUpdated
   | EventWorkspaceReady
@@ -327,81 +331,6 @@ export type EventTuiSessionSelect = {
   }
 }
 
-export type Project = {
-  id: string
-  worktree: string
-  vcs?: "git"
-  name?: string
-  icon?: {
-    url?: string
-    override?: string
-    color?: string
-  }
-  commands?: {
-    /**
-     * Startup script to run when creating a new workspace (worktree)
-     */
-    start?: string
-  }
-  time: {
-    created: number
-    updated: number
-    initialized?: number
-  }
-  sandboxes: Array<string>
-}
-
-export type Pty = {
-  id: string
-  title: string
-  command: string
-  args: Array<string>
-  cwd: string
-  status: "running" | "exited"
-  pid: number
-}
-
-export type OutputFormatText = {
-  type: "text"
-}
-
-export type JsonSchema = {
-  [key: string]: unknown
-}
-
-export type OutputFormatJsonSchema = {
-  type: "json_schema"
-  schema: JsonSchema
-  retryCount?: number
-}
-
-export type OutputFormat = OutputFormatText | OutputFormatJsonSchema
-
-export type UserMessage = {
-  id: string
-  sessionID: string
-  role: "user"
-  time: {
-    created: number
-  }
-  format?: OutputFormat
-  summary?: {
-    title?: string
-    body?: string
-    diffs: Array<SnapshotFileDiff>
-  }
-  agent: string
-  model: {
-    providerID: string
-    modelID: string
-    variant?: string
-  }
-  system?: string
-  tools?: {
-    [key: string]: boolean
-  }
-}
-
 export type AssistantMessage = {
   id: string
   sessionID: string
@@ -443,8 +372,6 @@ export type AssistantMessage = {
   variant?: string
   finish?: string
 }
-
-export type Message = UserMessage | AssistantMessage
 
 export type TextPart = {
   id: string
@@ -709,6 +636,83 @@ export type Part =
   | RetryPart
   | CompactionPart
 
+export type Project = {
+  id: string
+  worktree: string
+  vcs?: "git"
+  name?: string
+  icon?: {
+    url?: string
+    override?: string
+    color?: string
+  }
+  commands?: {
+    /**
+     * Startup script to run when creating a new workspace (worktree)
+     */
+    start?: string
+  }
+  time: {
+    created: number
+    updated: number
+    initialized?: number
+  }
+  sandboxes: Array<string>
+}
+
+export type Pty = {
+  id: string
+  title: string
+  command: string
+  args: Array<string>
+  cwd: string
+  status: "running" | "exited"
+  pid: number
+}
+
+export type OutputFormatText = {
+  type: "text"
+}
+
+export type JsonSchema = {
+  [key: string]: unknown
+}
+
+export type OutputFormatJsonSchema = {
+  type: "json_schema"
+  schema: JsonSchema
+  retryCount?: number
+}
+
+export type OutputFormat = OutputFormatText | OutputFormatJsonSchema
+
+export type UserMessage = {
+  id: string
+  sessionID: string
+  role: "user"
+  time: {
+    created: number
+  }
+  format?: OutputFormat
+  summary?: {
+    title?: string
+    body?: string
+    diffs: Array<SnapshotFileDiff>
+  }
+  agent: string
+  model: {
+    providerID: string
+    modelID: string
+    variant?: string
+  }
+  system?: string
+  tools?: {
+    [key: string]: boolean
+  }
+}
+
+export type Message = UserMessage | AssistantMessage
+
 export type PermissionAction = "allow" | "deny" | "ask"
 
 export type PermissionRule = {
@@ -796,6 +800,10 @@ export type GlobalEvent = {
     | EventMcpToolsChanged
     | EventMcpBrowserOpenFailed
     | EventCommandExecuted
+    | EventSessionBtwStarted
+    | EventSessionBtwUpdated
+    | EventSessionBtwPartUpdated
+    | EventSessionBtwPartDelta
     | EventProjectUpdated
     | EventVcsBranchUpdated
     | EventWorkspaceReady
@@ -1223,9 +1231,18 @@ export type Config = {
   compaction?: {
     auto?: boolean
     prune?: boolean
+    stable_prune?: boolean
     tail_turns?: number
     preserve_recent_tokens?: number
     reserved?: number
+  }
+  caching?: {
+    enabled?: boolean
+    breakpoint_interval?: number
+    min_messages?: number
+    normalize_dates?: boolean
+    log_metrics?: boolean
+    stable_history?: boolean
   }
   experimental?: {
     disable_paste_summary?: boolean
@@ -1524,7 +1541,7 @@ export type LspStatus = {
 
 export type LspInstallResult = {
   ok: boolean
-  message: string
+  message?: string
 }
 
 export type FormatterStatus = {
@@ -2451,6 +2468,49 @@ export type EventCommandExecuted = {
     sessionID: string
     arguments: string
     messageID: string
+  }
+}
+
+export type EventSessionBtwStarted = {
+  id: string
+  type: "session.btw.started"
+  properties: {
+    sessionID: string
+    turnID: string
+    info: AssistantMessage
+  }
+}
+
+export type EventSessionBtwUpdated = {
+  id: string
+  type: "session.btw.updated"
+  properties: {
+    sessionID: string
+    turnID: string
+    info: AssistantMessage
+  }
+}
+
+export type EventSessionBtwPartUpdated = {
+  id: string
+  type: "session.btw.part.updated"
+  properties: {
+    sessionID: string
+    turnID: string
+    part: Part
+  }
+}
+
+export type EventSessionBtwPartDelta = {
+  id: string
+  type: "session.btw.part.delta"
+  properties: {
+    sessionID: string
+    turnID: string
+    messageID: string
+    partID: string
+    field: string
+    delta: string
   }
 }
 
@@ -5719,6 +5779,56 @@ export type SessionPromptAsyncResponses = {
 }
 
 export type SessionPromptAsyncResponse = SessionPromptAsyncResponses[keyof SessionPromptAsyncResponses]
+
+export type SessionBtwData = {
+  body?: {
+    messageID?: string
+    model?: {
+      providerID: string
+      modelID: string
+    }
+    agent?: string
+    tools?: {
+      [key: string]: boolean
+    }
+    system?: string
+    variant?: string
+    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/btw"
+}
+
+export type SessionBtwErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionBtwError = SessionBtwErrors[keyof SessionBtwErrors]
+
+export type SessionBtwResponses = {
+  /**
+   * Created ephemeral BTW response
+   */
+  200: {
+    info: Message
+    parts: Array<Part>
+  }
+}
+
+export type SessionBtwResponse = SessionBtwResponses[keyof SessionBtwResponses]
 
 export type SessionCommandData = {
   body?: {

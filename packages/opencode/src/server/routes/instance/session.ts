@@ -947,6 +947,40 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .post(
+      "/:sessionID/btw",
+      describeRoute({
+        summary: "Send BTW message",
+        description:
+          "Run an ephemeral message against the current session context without saving the prompt or response to history.",
+        operationId: "session.btw",
+        responses: {
+          200: {
+            description: "Created ephemeral BTW response",
+            content: {
+              "application/json": {
+                schema: resolver(MessageV2.WithParts.zod),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator("json", zodObject(SessionPrompt.BtwInput).omit({ sessionID: true })),
+      async (c) =>
+        jsonRequest("SessionRoutes.btw", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json") as Omit<SessionPrompt.BtwInput, "sessionID">
+          const svc = yield* SessionPrompt.Service
+          return yield* svc.btw({ ...body, sessionID })
+        }),
+    )
+    .post(
       "/:sessionID/command",
       describeRoute({
         summary: "Send command",

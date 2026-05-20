@@ -6,6 +6,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { AsyncQueue } from "@/util/queue"
+import "@/session/btw"
 
 const log = Log.create({ service: "server" })
 

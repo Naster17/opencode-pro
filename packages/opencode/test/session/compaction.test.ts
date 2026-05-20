@@ -195,6 +195,7 @@ function fake(
     get message() {
       return msg
     },
+    parts: () => [],
     updateToolCall: Effect.fn("TestSessionProcessor.updateToolCall")(() => Effect.succeed(undefined)),
     completeToolCall: Effect.fn("TestSessionProcessor.completeToolCall")(() => Effect.void),
     process: Effect.fn("TestSessionProcessor.process")(() => Effect.succeed(result)),
@@ -1728,7 +1729,9 @@ describe("session.compaction.process", () => {
           expect(captured).toContain("older context")
           expect(captured).toContain("keep this turn")
           expect(captured).toContain("and this one too")
-          expect(captured).not.toContain("Use the following assistant summary as the conversation context carried forward from the previous chat.")
+          expect(captured).not.toContain(
+            "Use the following assistant summary as the conversation context carried forward from the previous chat.",
+          )
         } finally {
           await rt.dispose()
         }

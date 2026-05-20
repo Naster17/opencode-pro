@@ -57,6 +57,7 @@ import { EventV2 } from "@/v2/event"
 import { SessionEvent } from "@/v2/session-event"
 import { Modelv2 } from "@/v2/model"
 import { AgentAttachment, FileAttachment, Source } from "@/v2/session-prompt"
+import { SessionBtw } from "./btw"
 import * as DateTime from "effect/DateTime"
 import { eq } from "@/storage/db"
 import * as Database from "@/storage/db"
@@ -82,6 +83,7 @@ const elog = EffectLogger.create({ service: "session.prompt" })
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
+  readonly btw: (input: BtwInput) => Effect.Effect<MessageV2.WithParts>
   readonly loop: (input: LoopInput) => Effect.Effect<MessageV2.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
   readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts>
@@ -264,8 +266,7 @@ export const layer = Layer.effect(
           !input.agent.native &&
           input.agent.prompt &&
           !userMessage.parts.some(
-            (part) =>
-              part.type === "text" && part.synthetic && part.text.startsWith(CUSTOM_AGENT_REMINDER_PREFIX),
+            (part) => part.type === "text" && part.synthetic && part.text.startsWith(CUSTOM_AGENT_REMINDER_PREFIX),
           )
         ) {
           userMessage.parts.push({
@@ -946,7 +947,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       return yield* provider.defaultModel()
     })
 
-    const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
+    const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (
+      input: PromptInput,
+      options: { persist?: boolean } = {},
+    ) {
+      const persist = options.persist !== false
       const agentName = input.agent || (yield* agents.defaultAgent())
       const ag = yield* agents.get(agentName)
       if (!ag) {
@@ -981,34 +986,36 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         format: input.format,
       }
 
-      const current = Database.use((db) =>
-        db
-          .select({ agent: SessionTable.agent, model: SessionTable.model })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, input.sessionID))
-          .get(),
-      )
-      if (current?.agent !== info.agent) {
-        EventV2.run(SessionEvent.AgentSwitched.Sync, {
-          sessionID: input.sessionID,
-          timestamp: DateTime.makeUnsafe(info.time.created),
-          agent: info.agent,
-        })
-      }
-      if (
-        current?.model?.providerID !== info.model.providerID ||
-        current.model.id !== info.model.modelID ||
-        current.model.variant !== info.model.variant
-      ) {
-        EventV2.run(SessionEvent.ModelSwitched.Sync, {
-          sessionID: input.sessionID,
-          timestamp: DateTime.makeUnsafe(info.time.created),
-          model: {
-            id: Modelv2.ID.make(info.model.modelID),
-            providerID: Modelv2.ProviderID.make(info.model.providerID),
-            variant: Modelv2.VariantID.make(info.model.variant ?? "default"),
-          },
-        })
+      if (persist) {
+        const current = Database.use((db) =>
+          db
+            .select({ agent: SessionTable.agent, model: SessionTable.model })
+            .from(SessionTable)
+            .where(eq(SessionTable.id, input.sessionID))
+            .get(),
+        )
+        if (current?.agent !== info.agent) {
+          EventV2.run(SessionEvent.AgentSwitched.Sync, {
+            sessionID: input.sessionID,
+            timestamp: DateTime.makeUnsafe(info.time.created),
+            agent: info.agent,
+          })
+        }
+        if (
+          current?.model?.providerID !== info.model.providerID ||
+          current.model.id !== info.model.modelID ||
+          current.model.variant !== info.model.variant
+        ) {
+          EventV2.run(SessionEvent.ModelSwitched.Sync, {
+            sessionID: input.sessionID,
+            timestamp: DateTime.makeUnsafe(info.time.created),
+            model: {
+              id: Modelv2.ID.make(info.model.modelID),
+              providerID: Modelv2.ProviderID.make(info.model.providerID),
+              variant: Modelv2.VariantID.make(info.model.variant ?? "default"),
+            },
+          })
+        }
       }
 
       yield* Effect.addFinalizer(() => instruction.clear(info.id))
@@ -1289,17 +1296,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         Effect.map((x) => x.flat().map(assign)),
       )
 
-      yield* plugin.trigger(
-        "chat.message",
-        {
-          sessionID: input.sessionID,
-          agent: input.agent,
-          model: input.model,
-          messageID: input.messageID,
-          variant: input.variant,
-        },
-        { message: info, parts },
-      )
+      if (persist) {
+        yield* plugin.trigger(
+          "chat.message",
+          {
+            sessionID: input.sessionID,
+            agent: input.agent,
+            model: input.model,
+            messageID: input.messageID,
+            variant: input.variant,
+          },
+          { message: info, parts },
+        )
+      }
 
       const parsed = MessageV2.Info.zod.safeParse(info)
       if (!parsed.success) {
@@ -1325,70 +1334,72 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         })
       })
 
-      yield* sessions.updateMessage(info)
-      for (const part of parts) yield* sessions.updatePart(part)
-      const nextPrompt = parts.reduce(
-        (result, part) => {
-          if (part.type === "text") {
-            if (part.synthetic) result.synthetic.push(part.text)
-            else result.text.push(part.text)
-          }
-          if (part.type === "file") {
-            result.files.push(
-              new FileAttachment({
-                uri: part.url,
-                mime: part.mime,
-                name: part.filename,
-                source: part.source
-                  ? new Source({
-                      start: part.source.text.start,
-                      end: part.source.text.end,
-                      text: part.source.text.value,
-                    })
-                  : undefined,
-              }),
-            )
-          }
-          if (part.type === "agent") {
-            result.agents.push(
-              new AgentAttachment({
-                name: part.name,
-                source: part.source
-                  ? new Source({
-                      start: part.source.start,
-                      end: part.source.end,
-                      text: part.source.value,
-                    })
-                  : undefined,
-              }),
-            )
-          }
-          return result
-        },
-        {
-          text: [] as string[],
-          files: [] as FileAttachment[],
-          agents: [] as AgentAttachment[],
-          synthetic: [] as string[],
-        },
-      )
-      // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-      EventV2.run(SessionEvent.Prompted.Sync, {
-        sessionID: input.sessionID,
-        timestamp: DateTime.makeUnsafe(info.time.created),
-        prompt: {
-          text: nextPrompt.text.join("\n"),
-          files: nextPrompt.files,
-          agents: nextPrompt.agents,
-        },
-      })
-      for (const text of nextPrompt.synthetic) {
+      if (persist) {
+        yield* sessions.updateMessage(info)
+        for (const part of parts) yield* sessions.updatePart(part)
+        const nextPrompt = parts.reduce(
+          (result, part) => {
+            if (part.type === "text") {
+              if (part.synthetic) result.synthetic.push(part.text)
+              else result.text.push(part.text)
+            }
+            if (part.type === "file") {
+              result.files.push(
+                new FileAttachment({
+                  uri: part.url,
+                  mime: part.mime,
+                  name: part.filename,
+                  source: part.source
+                    ? new Source({
+                        start: part.source.text.start,
+                        end: part.source.text.end,
+                        text: part.source.text.value,
+                      })
+                    : undefined,
+                }),
+              )
+            }
+            if (part.type === "agent") {
+              result.agents.push(
+                new AgentAttachment({
+                  name: part.name,
+                  source: part.source
+                    ? new Source({
+                        start: part.source.start,
+                        end: part.source.end,
+                        text: part.source.value,
+                      })
+                    : undefined,
+                }),
+              )
+            }
+            return result
+          },
+          {
+            text: [] as string[],
+            files: [] as FileAttachment[],
+            agents: [] as AgentAttachment[],
+            synthetic: [] as string[],
+          },
+        )
         // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-        EventV2.run(SessionEvent.Synthetic.Sync, {
+        EventV2.run(SessionEvent.Prompted.Sync, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(info.time.created),
-          text,
+          prompt: {
+            text: nextPrompt.text.join("\n"),
+            files: nextPrompt.files,
+            agents: nextPrompt.agents,
+          },
         })
+        for (const text of nextPrompt.synthetic) {
+          // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+          EventV2.run(SessionEvent.Synthetic.Sync, {
+            sessionID: input.sessionID,
+            timestamp: DateTime.makeUnsafe(info.time.created),
+            text,
+          })
+        }
       }
 
       return { info, parts }
@@ -1414,6 +1425,188 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return yield* loop({ sessionID: input.sessionID })
       },
     )
+
+    const btw: (input: BtwInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.btw")(function* (
+      input: BtwInput,
+    ) {
+      let result:
+        | {
+            info: MessageV2.Assistant
+            parts: MessageV2.Part[]
+          }
+        | undefined
+      let active:
+        | {
+            turnID: MessageID
+            handle: SessionProcessor.Handle
+          }
+        | undefined
+
+      const interrupted = Effect.fnUntraced(function* () {
+        if (!active) throw new Error("BTW prompt interrupted before a response was available")
+        const turnID = active.turnID
+        const completed = Date.now()
+        result = { info: active.handle.message, parts: active.handle.parts() }
+        result.info.finish = result.info.finish ?? "cancelled"
+        result.info.time.completed = result.info.time.completed ?? completed
+        result.parts = result.parts.map((part) => {
+          if (part.type !== "tool" || part.state.status !== "running") return part
+          return {
+            ...part,
+            state: {
+              status: "error",
+              error: "Cancelled",
+              input: part.state.input,
+              metadata: part.state.metadata,
+              time: { start: part.state.time.start, end: completed },
+            },
+          } satisfies MessageV2.ToolPart
+        })
+        yield* Effect.forEach(
+          result.parts,
+          (part) =>
+            bus.publish(SessionBtw.Event.PartUpdated, {
+              sessionID: input.sessionID,
+              turnID,
+              part,
+            }),
+          { discard: true },
+        )
+        yield* bus.publish(SessionBtw.Event.Updated, {
+          sessionID: input.sessionID,
+          turnID,
+          info: result.info,
+        })
+        return result
+      })
+
+      return yield* state.ensureRunning(
+        input.sessionID,
+        interrupted(),
+        Effect.gen(function* () {
+          const ctx = yield* InstanceState.context
+          const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+          const user = yield* createUserMessage(
+            {
+              ...input,
+              tools: { ...input.tools, task: false },
+            },
+            { persist: false },
+          )
+          const turnID = user.info.id
+          let msgs = [...(yield* MessageV2.filterCompactedEffect(input.sessionID)), user]
+          let step = 0
+
+          while (true) {
+            step++
+            const lastUser = user.info
+            const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, input.sessionID)
+            const agent = yield* agents.get(lastUser.agent)
+            if (!agent) {
+              const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+              const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
+              throw new NamedError.Unknown({ message: `Agent not found: "${lastUser.agent}".${hint}` })
+            }
+            const assistantMessage: MessageV2.Assistant = {
+              id: MessageID.ascending(),
+              parentID: lastUser.id,
+              role: "assistant",
+              mode: agent.name,
+              agent: agent.name,
+              variant: lastUser.model.variant,
+              path: { cwd: ctx.directory, root: ctx.worktree },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              modelID: model.id,
+              providerID: model.providerID,
+              time: { created: Date.now() },
+              sessionID: input.sessionID,
+            }
+            yield* bus.publish(SessionBtw.Event.Started, {
+              sessionID: input.sessionID,
+              turnID,
+              info: assistantMessage,
+            })
+            const handle = yield* processor.create({
+              assistantMessage,
+              sessionID: input.sessionID,
+              model,
+              ephemeral: true,
+              ephemeralEvents: {
+                messageUpdated: (info) =>
+                  bus.publish(SessionBtw.Event.Updated, {
+                    sessionID: input.sessionID,
+                    turnID,
+                    info,
+                  }),
+                partUpdated: (part) =>
+                  bus.publish(SessionBtw.Event.PartUpdated, {
+                    sessionID: input.sessionID,
+                    turnID,
+                    part,
+                  }),
+                partDelta: (delta) =>
+                  bus.publish(SessionBtw.Event.PartDelta, {
+                    ...delta,
+                    sessionID: input.sessionID,
+                    turnID,
+                  }),
+              },
+            })
+            active = { turnID, handle }
+            result = { info: handle.message, parts: handle.parts() }
+
+            const tools = yield* resolveTools({
+              agent,
+              session,
+              model,
+              tools: { ...lastUser.tools, task: false },
+              processor: handle,
+              bypassAgentCheck: false,
+              messages: msgs,
+            })
+
+            msgs = yield* insertReminders({ messages: msgs, agent, session })
+            yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+
+            const [skills, env, instructions, modelMsgs] = yield* Effect.all([
+              sys.skills(agent),
+              sys.environment(model),
+              instruction.system().pipe(Effect.orDie),
+              MessageV2.toModelMessagesEffect(msgs, model),
+            ])
+            const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+            const outcome = yield* handle
+              .process({
+                user: lastUser,
+                agent,
+                permission: session.permission,
+                sessionID: input.sessionID,
+                parentSessionID: session.parentID,
+                system,
+                messages: [
+                  ...modelMsgs,
+                  ...(step >= (agent.steps ?? Infinity) ? [{ role: "assistant" as const, content: MAX_STEPS }] : []),
+                ],
+                tools,
+                model,
+              })
+              .pipe(Effect.ensuring(instruction.clear(handle.message.id)))
+
+            result = { info: handle.message, parts: handle.parts() }
+            msgs = [...msgs, result]
+
+            const hasToolCalls = result.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted)
+            const finished =
+              handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish) && !hasToolCalls
+            if (outcome === "stop" || outcome === "compact" || finished || step >= (agent.steps ?? Infinity)) break
+          }
+
+          if (!result) throw new Error("BTW prompt did not produce a response")
+          return result
+        }),
+      )
+    })
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
       const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user")
@@ -1791,6 +1984,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     return Service.of({
       cancel,
       prompt,
+      btw,
       loop,
       shell,
       command,
@@ -1858,6 +2052,18 @@ export const PromptInput = Schema.Struct({
   ),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type PromptInput = Schema.Schema.Type<typeof PromptInput>
+
+export const BtwInput = Schema.Struct({
+  sessionID: SessionID,
+  messageID: Schema.optional(MessageID),
+  model: Schema.optional(ModelRef),
+  agent: Schema.optional(Schema.String),
+  tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+  system: Schema.optional(Schema.String),
+  variant: Schema.optional(Schema.String),
+  parts: PromptInput.fields.parts,
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type BtwInput = Schema.Schema.Type<typeof BtwInput>
 
 export class LoopInput extends Schema.Class<LoopInput>("SessionPrompt.LoopInput")({
   sessionID: SessionID,

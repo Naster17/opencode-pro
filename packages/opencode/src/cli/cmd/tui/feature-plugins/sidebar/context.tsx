@@ -8,6 +8,7 @@ import { formatCompactTokens, money, summarizeUsage } from "@tui/util/usage"
 import { Locale } from "@/util/locale"
 import { isCodexModel } from "@/plugin/codex"
 import { clearCodexUsageCache, formatResetDuration, getCodexUsage } from "./codex-usage"
+import { useBtwUsage } from "@tui/context/btw"
 
 const id = "internal:sidebar-metrics"
 const usageWidgetsHiddenKey = "usage_widgets_hidden"
@@ -20,6 +21,7 @@ const codexHotSwapRefreshDelays = [0, 1_000, 3_000, 8_000]
 
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const sync = useSync()
+  const btwUsage = useBtwUsage()
   const theme = () => props.api.theme.current
   const allSessions = createMemo(() => props.api.state.session.all())
   const [now, setNow] = createSignal(Date.now())
@@ -67,10 +69,13 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const scheduleCodexRefresh = (force = false) => {
     if (!showCodexUsage()) return
     if (codexRefreshTimer) clearTimeout(codexRefreshTimer)
-    codexRefreshTimer = setTimeout(() => {
-      setCodexUsageVersion((value) => value + (force ? 1000 : 1))
-      codexRefreshTimer = undefined
-    }, force ? 0 : 150)
+    codexRefreshTimer = setTimeout(
+      () => {
+        setCodexUsageVersion((value) => value + (force ? 1000 : 1))
+        codexRefreshTimer = undefined
+      },
+      force ? 0 : 150,
+    )
   }
   const [codexUsage] = createResource(codexUsageKey, (key) => (key >= 0 ? getCodexUsage(key > 0) : undefined))
 
@@ -101,7 +106,13 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const authWatcher = setInterval(async () => {
     if (!showCodexUsage()) return
     const nextFingerprint = (
-      await Promise.all(authPaths.map((item) => Bun.file(item).stat().catch(() => undefined)))
+      await Promise.all(
+        authPaths.map((item) =>
+          Bun.file(item)
+            .stat()
+            .catch(() => undefined),
+        ),
+      )
     )
       .map((stat) => `${stat?.mtimeMs ?? 0}:${stat?.size ?? 0}`)
       .join("|")
@@ -150,7 +161,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const usage = createMemo(() => {
     const rootSession = allSessions().find((s) => s.id === props.session_id)
     const rootMessages = props.api.state.session.messages(props.session_id)
-    
+
     const descendantSessionsList = descendantSessions().map((id) => ({
       session: allSessions().find((s) => s.id === id),
       messages: props.api.state.session.messages(id),
@@ -171,14 +182,29 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     ]
 
     const aggregated = summarizeUsage(sessions, props.api.state.provider, { respectRevert: false })
-    const rootOnly = summarizeUsage([{
-      session: rootSession,
-      messages: rootMessages,
-      getParts: props.api.state.part,
-    }], props.api.state.provider)
+    const rootOnly = summarizeUsage(
+      [
+        {
+          session: rootSession,
+          messages: rootMessages,
+          getParts: props.api.state.part,
+        },
+      ],
+      props.api.state.provider,
+    )
+    const btw = btwUsage.sum(trackedSessionIDs())
 
     return {
       ...aggregated,
+      input: aggregated.input + btw.input,
+      output: aggregated.output + btw.output,
+      reasoning: aggregated.reasoning + btw.reasoning,
+      cache_read: aggregated.cache_read + btw.cache_read,
+      cache_write: aggregated.cache_write + btw.cache_write,
+      cached: aggregated.cached + btw.cache_read + btw.cache_write,
+      tokens: aggregated.tokens + btw.input + btw.output + btw.reasoning + btw.cache_read + btw.cache_write,
+      cost: aggregated.cost + btw.cost,
+      tools: aggregated.tools + btw.tools,
       context_tokens_formatted: Locale.number(rootOnly.context_tokens),
       average_context_percent: rootOnly.average_context_percent,
     }
@@ -187,7 +213,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const totalStats = createMemo(() => {
     const leftLabels = ["ctx", "in", "total", "tools", "spent", "code"]
     const rightLabels = ["code", "out", "cached", "compact", "avg.gen"]
-    
+
     const leftWidth = Math.max(...leftLabels.map((l) => l.length))
     const rightWidth = Math.max(...rightLabels.map((l) => l.length))
 

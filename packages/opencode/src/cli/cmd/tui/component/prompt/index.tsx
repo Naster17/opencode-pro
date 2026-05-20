@@ -30,6 +30,7 @@ import * as Editor from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import * as Clipboard from "../../util/clipboard"
 import type { AssistantMessage, FilePart, Part, ToolPart, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AgentPartInput, FilePartInput, SubtaskPartInput, TextPartInput } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
@@ -56,6 +57,8 @@ export type PromptProps = {
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
+  onBtwSubmit?: (input: BtwSubmission) => Promise<void> | void
+  activeActionLabel?: () => string | undefined
   ref?: (ref: PromptRef | undefined) => void
   hint?: JSX.Element
   right?: JSX.Element
@@ -64,6 +67,19 @@ export type PromptProps = {
     normal?: string[]
     shell?: string[]
   }
+}
+
+export type BtwSubmission = {
+  sessionID: string
+  messageID: string
+  input: string
+  agent: string
+  model: {
+    providerID: string
+    modelID: string
+  }
+  variant?: string
+  parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
 }
 
 export type PromptRef = {
@@ -84,6 +100,11 @@ const money = new Intl.NumberFormat("en-US", {
 function randomIndex(count: number) {
   if (count <= 0) return 0
   return Math.floor(Math.random() * count)
+}
+
+function parseBtw(input: string) {
+  const match = input.match(/^\/btw(?:\s+([\s\S]*))?$/)
+  return match ? (match[1] ?? "").trim() : undefined
 }
 
 function fadeColor(color: RGBA, alpha: number) {
@@ -483,7 +504,7 @@ export function Prompt(props: PromptProps) {
   const visibleFooterVariantLabel = createMemo(() => resolveVisibleVariantLabel(thinkingLabel(), visibleVariantLabel()))
   const activeActionLabel = createMemo(() => {
     if (!props.sessionID || status().type !== "busy") return
-    return sessionActionLabel(props.sessionID, sync.data.message, sync.data.part)
+    return props.activeActionLabel?.() ?? sessionActionLabel(props.sessionID, sync.data.message, sync.data.part)
   })
 
   createEffect(
@@ -603,6 +624,22 @@ export function Prompt(props: PromptProps) {
             })
             setStore("interrupt", 0)
           }
+          dialog.clear()
+        },
+      },
+      {
+        title: "BTW",
+        description: "Ask without saving to history",
+        category: "Prompt",
+        value: "prompt.btw",
+        slash: {
+          name: "btw",
+        },
+        onSelect: (dialog) => {
+          const next = "/btw "
+          input.setText(next)
+          setStore("prompt", { input: next, parts: [] })
+          input.gotoBufferEnd()
           dialog.clear()
         },
       },
@@ -971,6 +1008,15 @@ export function Prompt(props: PromptProps) {
       void promptModelWarning()
       return false
     }
+    const btwInput = parseBtw(store.prompt.input)
+    if (btwInput !== undefined && !props.onBtwSubmit) {
+      toast.show({ message: "BTW is only available inside an active session", variant: "warning" })
+      return false
+    }
+    if (btwInput !== undefined && !btwInput) {
+      toast.show({ message: "Type a question after /btw", variant: "warning" })
+      return false
+    }
 
     const workspaceSession = props.sessionID ? sync.session.get(props.sessionID) : undefined
     const workspaceID = workspaceSession?.workspaceID
@@ -1070,17 +1116,41 @@ export function Prompt(props: PromptProps) {
           ]
         : []
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
-    const requestParts = [
-      ...editorParts,
-      {
-        id: PartID.ascending(),
-        type: "text" as const,
-        text: inputText,
-      },
-      ...nonTextParts.map(assign),
-    ]
+    const userTextPart = {
+      id: PartID.ascending(),
+      type: "text" as const,
+      text: inputText,
+    }
+    const requestParts = [...editorParts, userTextPart, ...nonTextParts.map(assign)]
+    const expandedBtwInput = btwInput === undefined ? undefined : (parseBtw(inputText) ?? btwInput)
 
-    if (store.mode === "shell") {
+    if (expandedBtwInput !== undefined) {
+      sync.set(
+        produce((draft) => {
+          draft.session_status[sessionID] = { type: "busy" }
+        }),
+      )
+      void (async () => {
+        await props.onBtwSubmit?.({
+          sessionID,
+          messageID,
+          input: expandedBtwInput,
+          agent: agent.name,
+          model: {
+            providerID: selectedModel.providerID,
+            modelID: selectedModel.modelID,
+          },
+          variant,
+          parts: requestParts.map((part) => (part.id === userTextPart.id ? { ...part, text: expandedBtwInput } : part)),
+        })
+      })().finally(() => {
+        sync.set(
+          produce((draft) => {
+            draft.session_status[sessionID] = { type: "idle" }
+          }),
+        )
+      })
+    } else if (store.mode === "shell") {
       void sdk.client.session.shell({
         sessionID,
         agent: agent.name,
@@ -1170,12 +1240,13 @@ export function Prompt(props: PromptProps) {
         })
       if (editorParts.length > 0) editor.markSelectionSent()
     }
-    history.append({
-      ...store.prompt,
-      mode: currentMode,
-    })
-    const currentPrompt = { ...store.prompt }
-    setLastPrompt(currentPrompt)
+    if (btwInput === undefined) {
+      history.append({
+        ...store.prompt,
+        mode: currentMode,
+      })
+      setLastPrompt({ ...store.prompt })
+    }
     input.extmarks.clear()
     setStore("prompt", {
       input: "",

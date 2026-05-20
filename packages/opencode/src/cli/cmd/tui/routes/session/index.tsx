@@ -5,6 +5,7 @@ import {
   createMemo,
   createSignal,
   For,
+  Index,
   Match,
   onCleanup,
   on,
@@ -13,7 +14,6 @@ import {
   Switch,
   useContext,
 } from "solid-js"
-import { Dynamic } from "solid-js/web"
 import path from "path"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useProject } from "@tui/context/project"
@@ -23,7 +23,7 @@ import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { selectedForeground, useTheme } from "@tui/context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
-import { Prompt, type PromptRef } from "@tui/component/prompt"
+import { Prompt, type BtwSubmission, type PromptRef } from "@tui/component/prompt"
 import type {
   AssistantMessage,
   Part,
@@ -94,6 +94,7 @@ import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { Token } from "@/util/token"
 import * as SystemPrompt from "@/session/system"
+import { useBtwUsage } from "../../context/btw"
 
 addDefaultParsers(parsers.parsers)
 
@@ -131,6 +132,21 @@ type LiveAssistantMetrics = {
   textStartedAt?: number
   firstTokenAt?: number
   streamSamples: { time: number; chars: number }[]
+}
+
+type BtwTurn = {
+  id: string
+  sessionID: string
+  question: string
+  status: "pending" | "completed" | "error"
+  footerVisible: boolean
+  responses: BtwResponse[]
+  error?: string
+}
+
+type BtwResponse = {
+  info: AssistantMessage
+  parts: Part[]
 }
 
 const context = createContext<{
@@ -223,6 +239,191 @@ export function Session() {
   const toast = useToast()
   const sdk = useSDK()
   const editor = useEditorContext()
+  const btwUsage = useBtwUsage()
+  const [btwTurns, setBtwTurns] = createSignal<BtwTurn[]>([])
+  const sessionBtwTurns = createMemo(() => btwTurns().filter((turn) => turn.sessionID === route.sessionID))
+  const activeBtwActionLabel = createMemo(() => {
+    const turn = sessionBtwTurns().findLast((item) => item.status === "pending")
+    const response = turn?.responses.at(-1)
+    if (!response) return turn ? "processing" : undefined
+    return btwActionLabel(response.parts)
+  })
+  const queuedBtwPartUpdates = new Map<string, { turnID: string; part: Part }>()
+  const queuedBtwPartDeltas = new Map<
+    string,
+    { turnID: string; messageID: string; partID: string; field: string; delta: string }
+  >()
+  let queuedBtwPartFlush: ReturnType<typeof setTimeout> | undefined
+
+  function upsertBtwResponse(turnID: string, info: AssistantMessage) {
+    setBtwTurns((current) =>
+      current.map((turn) => {
+        if (turn.id !== turnID) return turn
+        const existing = turn.responses.find((response) => response.info.id === info.id)
+        return {
+          ...turn,
+          responses: existing
+            ? turn.responses.map((response) => (response.info.id === info.id ? { ...response, info } : response))
+            : [...turn.responses, { info, parts: [] }],
+        }
+      }),
+    )
+  }
+
+  function flushQueuedBtwPartEvents() {
+    queuedBtwPartFlush = undefined
+    if (queuedBtwPartUpdates.size === 0 && queuedBtwPartDeltas.size === 0) return
+    const updates = [...queuedBtwPartUpdates.values()]
+    const deltas = [...queuedBtwPartDeltas.values()]
+    queuedBtwPartUpdates.clear()
+    queuedBtwPartDeltas.clear()
+
+    setBtwTurns((current) =>
+      current.map((turn) => {
+        const turnUpdates = updates.filter((update) => update.turnID === turn.id)
+        const turnDeltas = deltas.filter((delta) => delta.turnID === turn.id && delta.field === "text")
+        if (turnUpdates.length === 0 && turnDeltas.length === 0) return turn
+
+        return {
+          ...turn,
+          responses: turn.responses.map((response) => ({
+            ...response,
+            parts: response.parts
+              .map((part) => {
+                const updated = turnUpdates.find(
+                  (update) => update.part.messageID === response.info.id && update.part.id === part.id,
+                )?.part
+                const next = updated ?? part
+                if (next.type !== "text" && next.type !== "reasoning") return next
+                const currentText = part.type === "text" || part.type === "reasoning" ? part.text : undefined
+                const deltaText = turnDeltas
+                  .filter((delta) => delta.messageID === response.info.id && delta.partID === next.id)
+                  .map((delta) => delta.delta)
+                  .join("")
+                return {
+                  ...next,
+                  text: updated && next.text !== currentText ? next.text : next.text + deltaText,
+                }
+              })
+              .concat(
+                turnUpdates
+                  .filter(
+                    (update) =>
+                      update.part.messageID === response.info.id &&
+                      !response.parts.some((part) => part.id === update.part.id),
+                  )
+                  .map((update) => {
+                    if (update.part.type !== "text" && update.part.type !== "reasoning") return update.part
+                    if (update.part.time?.end) return update.part
+                    return {
+                      ...update.part,
+                      text:
+                        update.part.text +
+                        turnDeltas
+                          .filter((delta) => delta.messageID === response.info.id && delta.partID === update.part.id)
+                          .map((delta) => delta.delta)
+                          .join(""),
+                    }
+                  }),
+              )
+              .toSorted((a, b) => a.id.localeCompare(b.id)),
+          })),
+        }
+      }),
+    )
+  }
+
+  function scheduleQueuedBtwPartEvents() {
+    if (queuedBtwPartFlush) return
+    queuedBtwPartFlush = setTimeout(flushQueuedBtwPartEvents, 16)
+  }
+
+  onCleanup(() => {
+    if (queuedBtwPartFlush) clearTimeout(queuedBtwPartFlush)
+  })
+
+  function appendBtwPartDelta(input: {
+    turnID: string
+    messageID: string
+    partID: string
+    field: string
+    delta: string
+  }) {
+    if (input.field !== "text") return
+    const key = `${input.turnID}:${input.messageID}:${input.partID}:${input.field}`
+    const existing = queuedBtwPartDeltas.get(key)
+    queuedBtwPartDeltas.set(key, { ...input, delta: (existing?.delta ?? "") + input.delta })
+    scheduleQueuedBtwPartEvents()
+  }
+
+  function countBtwUsage(turnID: string, info: AssistantMessage) {
+    const response = btwTurns()
+      .find((turn) => turn.id === turnID)
+      ?.responses.find((item) => item.info.id === info.id)
+    btwUsage.add(info.sessionID, { info, parts: response?.parts ?? [] })
+  }
+
+  async function submitBtw(input: BtwSubmission) {
+    const turn: BtwTurn = {
+      id: input.messageID,
+      sessionID: input.sessionID,
+      question: input.input,
+      status: "pending",
+      footerVisible: false,
+      responses: [],
+    }
+    setBtwTurns((current) => [...current, turn])
+    toBottom()
+
+    const response = await sdk.client.session
+      .btw({
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        model: input.model,
+        agent: input.agent,
+        variant: input.variant,
+        parts: input.parts,
+      })
+      .catch((error) => ({ error, data: undefined }))
+    if (response.error || !response.data) {
+      const message = errorMessage(response.error ?? "BTW request failed")
+      setBtwTurns((current) =>
+        current.map((item) => (item.id === input.messageID ? { ...item, status: "error", error: message } : item)),
+      )
+      toast.show({ message, variant: "error" })
+      toBottom()
+      return
+    }
+    if (response.data.info.role !== "assistant") {
+      const message = "BTW request returned a non-assistant response"
+      setBtwTurns((current) =>
+        current.map((item) => (item.id === input.messageID ? { ...item, status: "error", error: message } : item)),
+      )
+      toast.show({ message, variant: "error" })
+      toBottom()
+      return
+    }
+
+    const assistant = response.data.info
+
+    setBtwTurns((current) =>
+      current.map((item) =>
+        item.id === input.messageID
+          ? {
+              ...item,
+              status: "completed",
+              footerVisible: true,
+              responses: [
+                ...item.responses.filter((current) => current.info.id !== assistant.id),
+                { info: assistant, parts: response.data.parts },
+              ].toSorted((a, b) => a.info.id.localeCompare(b.info.id)),
+            }
+          : item,
+      ),
+    )
+    btwUsage.add(input.sessionID, { info: assistant, parts: response.data.parts })
+    toBottom()
+  }
 
   createEffect(() => {
     const sessionID = route.sessionID
@@ -384,6 +585,49 @@ export function Session() {
             ].slice(-STREAM_RATE_MAX_SAMPLES),
           },
     )
+  })
+
+  event.on("session.btw.started", (evt) => {
+    if (evt.properties.sessionID !== route.sessionID) return
+    upsertBtwResponse(evt.properties.turnID, evt.properties.info)
+    toBottom()
+  })
+
+  event.on("session.btw.updated", (evt) => {
+    if (evt.properties.sessionID !== route.sessionID) return
+    const info = evt.properties.info
+    if (info.time.completed) {
+      batch(() => {
+        flushQueuedBtwPartEvents()
+        upsertBtwResponse(evt.properties.turnID, info)
+      })
+      countBtwUsage(evt.properties.turnID, info)
+      toBottom()
+      return
+    }
+    upsertBtwResponse(evt.properties.turnID, info)
+    toBottom()
+  })
+
+  event.on("session.btw.part.updated", (evt) => {
+    if (evt.properties.sessionID !== route.sessionID) return
+    queuedBtwPartUpdates.set(`${evt.properties.turnID}:${evt.properties.part.messageID}:${evt.properties.part.id}`, {
+      turnID: evt.properties.turnID,
+      part: evt.properties.part,
+    })
+    scheduleQueuedBtwPartEvents()
+    toBottom()
+  })
+
+  event.on("session.btw.part.delta", (evt) => {
+    if (evt.properties.sessionID !== route.sessionID) return
+    appendBtwPartDelta({
+      turnID: evt.properties.turnID,
+      messageID: evt.properties.messageID,
+      partID: evt.properties.partID,
+      field: evt.properties.field,
+      delta: evt.properties.delta,
+    })
   })
 
   // Allow exit when in child session (prompt is hidden)
@@ -1190,6 +1434,14 @@ export function Session() {
     if (!cutoff) return messages()
     return messages().filter((message) => message.id > cutoff)
   })
+  const renderedBtwTurnsAfter = (message: AssistantMessage | UserMessage, index: number) => {
+    const next = renderedMessages()[index + 1]
+    return sessionBtwTurns().filter((turn) => turn.id > message.id && (!next || turn.id < next.id))
+  }
+  const renderedLeadingBtwTurns = createMemo(() => {
+    const first = renderedMessages()[0]
+    return sessionBtwTurns().filter((turn) => !first || turn.id < first.id)
+  })
 
   const messageMetrics = createMemo(() => {
     const result = new Map<string, MessageMetrics>()
@@ -1277,7 +1529,12 @@ export function Session() {
   })
 
   // snap to bottom when session changes
-  createEffect(on(() => route.sessionID, () => setVisualClearAfter(undefined)))
+  createEffect(
+    on(
+      () => route.sessionID,
+      () => setVisualClearAfter(undefined),
+    ),
+  )
   createEffect(on(() => route.sessionID, toBottom))
 
   return (
@@ -1320,102 +1577,106 @@ export function Session() {
               scrollAcceleration={scrollAcceleration()}
             >
               <box height={1} />
+              <Index each={renderedLeadingBtwTurns()}>{(turn) => <BtwMessage turn={turn} />}</Index>
               <For each={renderedMessages()}>
                 {(message, index) => (
-                  <Switch>
-                    <Match when={message.id === revert()?.messageID}>
-                      {(function () {
-                        const command = useCommandDialog()
-                        const [hover, setHover] = createSignal(false)
-                        const dialog = useDialog()
+                  <>
+                    <Switch>
+                      <Match when={message.id === revert()?.messageID}>
+                        {(function () {
+                          const command = useCommandDialog()
+                          const [hover, setHover] = createSignal(false)
+                          const dialog = useDialog()
 
-                        const handleUnrevert = async () => {
-                          const confirmed = await DialogConfirm.show(
-                            dialog,
-                            "Confirm Redo",
-                            "Are you sure you want to restore the reverted messages?",
-                          )
-                          if (confirmed) {
-                            command.trigger("session.redo")
+                          const handleUnrevert = async () => {
+                            const confirmed = await DialogConfirm.show(
+                              dialog,
+                              "Confirm Redo",
+                              "Are you sure you want to restore the reverted messages?",
+                            )
+                            if (confirmed) {
+                              command.trigger("session.redo")
+                            }
                           }
-                        }
 
-                        return (
-                          <box
-                            onMouseOver={() => setHover(true)}
-                            onMouseOut={() => setHover(false)}
-                            onMouseUp={handleUnrevert}
-                            marginTop={1}
-                            flexShrink={0}
-                            border={["left"]}
-                            customBorderChars={SplitBorder.customBorderChars}
-                            borderColor={theme.backgroundPanel}
-                          >
+                          return (
                             <box
-                              paddingTop={1}
-                              paddingBottom={1}
-                              paddingLeft={2}
-                              backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+                              onMouseOver={() => setHover(true)}
+                              onMouseOut={() => setHover(false)}
+                              onMouseUp={handleUnrevert}
+                              marginTop={1}
+                              flexShrink={0}
+                              border={["left"]}
+                              customBorderChars={SplitBorder.customBorderChars}
+                              borderColor={theme.backgroundPanel}
                             >
-                              <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
-                              <text fg={theme.textMuted}>
-                                <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
-                                restore
-                              </text>
-                              <Show when={revert()!.diffFiles?.length}>
-                                <box marginTop={1}>
-                                  <For each={revert()!.diffFiles}>
-                                    {(file) => (
-                                      <text fg={theme.text}>
-                                        {file.filename}
-                                        <Show when={file.additions > 0}>
-                                          <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
-                                        </Show>
-                                        <Show when={file.deletions > 0}>
-                                          <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
-                                        </Show>
-                                      </text>
-                                    )}
-                                  </For>
-                                </box>
-                              </Show>
+                              <box
+                                paddingTop={1}
+                                paddingBottom={1}
+                                paddingLeft={2}
+                                backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+                              >
+                                <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
+                                <text fg={theme.textMuted}>
+                                  <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
+                                  restore
+                                </text>
+                                <Show when={revert()!.diffFiles?.length}>
+                                  <box marginTop={1}>
+                                    <For each={revert()!.diffFiles}>
+                                      {(file) => (
+                                        <text fg={theme.text}>
+                                          {file.filename}
+                                          <Show when={file.additions > 0}>
+                                            <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
+                                          </Show>
+                                          <Show when={file.deletions > 0}>
+                                            <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
+                                          </Show>
+                                        </text>
+                                      )}
+                                    </For>
+                                  </box>
+                                </Show>
+                              </box>
                             </box>
-                          </box>
-                        )
-                      })()}
-                    </Match>
-                    <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
-                      <></>
-                    </Match>
-                    <Match when={message.role === "user"}>
-                      <UserMessage
-                        index={index()}
-                        onMouseUp={() => {
-                          if (renderer.getSelection()?.getSelectedText()) return
-                          dialog.replace(() => (
-                            <DialogMessage
-                              messageID={message.id}
-                              sessionID={route.sessionID}
-                              setPrompt={(promptInfo) => prompt?.set(promptInfo)}
-                            />
-                          ))
-                        }}
-                        message={message as UserMessage}
-                        parts={sync.data.part[message.id] ?? []}
-                        pending={pending()}
-                      />
-                    </Match>
-                    <Match when={message.role === "assistant"}>
-                      <AssistantMessage
-                        last={lastAssistant()?.id === message.id}
-                        message={message as AssistantMessage}
-                        parts={sync.data.part[message.id] ?? []}
-                        metrics={messageMetrics().get(message.id)}
-                        estimatedPromptTokens={lastAssistant()?.id === message.id ? livePromptTokens() : 0}
-                        live={lastAssistant()?.id === message.id ? liveAssistant() : undefined}
-                      />
-                    </Match>
-                  </Switch>
+                          )
+                        })()}
+                      </Match>
+                      <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
+                        <></>
+                      </Match>
+                      <Match when={message.role === "user"}>
+                        <UserMessage
+                          index={index()}
+                          onMouseUp={() => {
+                            if (renderer.getSelection()?.getSelectedText()) return
+                            dialog.replace(() => (
+                              <DialogMessage
+                                messageID={message.id}
+                                sessionID={route.sessionID}
+                                setPrompt={(promptInfo) => prompt?.set(promptInfo)}
+                              />
+                            ))
+                          }}
+                          message={message as UserMessage}
+                          parts={sync.data.part[message.id] ?? []}
+                          pending={pending()}
+                        />
+                      </Match>
+                      <Match when={message.role === "assistant"}>
+                        <AssistantMessage
+                          last={lastAssistant()?.id === message.id}
+                          message={message as AssistantMessage}
+                          parts={sync.data.part[message.id] ?? []}
+                          metrics={messageMetrics().get(message.id)}
+                          estimatedPromptTokens={lastAssistant()?.id === message.id ? livePromptTokens() : 0}
+                          live={lastAssistant()?.id === message.id ? liveAssistant() : undefined}
+                        />
+                      </Match>
+                    </Switch>
+                    <Index each={renderedBtwTurnsAfter(message, index())}>{(turn) => <BtwMessage turn={turn} />}</Index>
+                  </>
                 )}
               </For>
             </scrollbox>
@@ -1443,6 +1704,8 @@ export function Session() {
                     visible={visible()}
                     ref={bind}
                     disabled={disabled()}
+                    onBtwSubmit={submitBtw}
+                    activeActionLabel={activeBtwActionLabel}
                     onSubmit={() => {
                       toBottom()
                     }}
@@ -1596,6 +1859,95 @@ function UserMessage(props: {
   )
 }
 
+function BtwMessage(props: { turn: () => BtwTurn }) {
+  const { theme } = useTheme()
+
+  return (
+    <>
+      <box
+        id={props.turn().id}
+        border={["left"]}
+        borderColor={theme.warning}
+        customBorderChars={SplitBorder.customBorderChars}
+        marginTop={1}
+        flexShrink={0}
+      >
+        <box paddingTop={1} paddingBottom={1} paddingLeft={2} backgroundColor={theme.backgroundPanel} flexShrink={0}>
+          <text fg={theme.text}>
+            <span style={{ bg: theme.warning, fg: theme.background, bold: true }}> Btw </span> {props.turn().question}
+          </text>
+        </box>
+      </box>
+      <Show when={props.turn().error}>
+        {(error) => (
+          <box paddingLeft={3} paddingTop={1}>
+            <text fg={theme.error}>{error()}</text>
+          </box>
+        )}
+      </Show>
+      <Index each={props.turn().responses}>
+        {(response) => <BtwResponseMessage response={response} footerVisible={() => props.turn().footerVisible} />}
+      </Index>
+    </>
+  )
+}
+
+function BtwResponseMessage(props: { response: () => BtwResponse; footerVisible: () => boolean }) {
+  return (
+    <>
+      <Index each={props.response().parts}>
+        {(part, index) => (
+          <MessagePart
+            part={part()}
+            message={props.response().info}
+            last={index === props.response().parts.length - 1}
+          />
+        )}
+      </Index>
+      <Show when={props.footerVisible() && props.response().parts.length > 0}>
+        <BtwResponseFooter response={props.response()} />
+      </Show>
+    </>
+  )
+}
+
+function BtwResponseFooter(props: { response: BtwResponse }) {
+  const ctx = use()
+  const { theme } = useTheme()
+  const model = createMemo(() =>
+    Model.name(ctx.providers(), props.response.info.providerID, props.response.info.modelID),
+  )
+  const metrics = createMemo(() =>
+    finalAssistantMetrics(props.response.info, props.response.parts, props.response.info.time.created),
+  )
+  const codeStats = createMemo(() => messageCodeStats(props.response.parts))
+
+  return (
+    <box paddingLeft={3}>
+      <text marginTop={1}>
+        <span style={{ fg: theme.warning }}>▣ </span>
+        <span style={{ fg: theme.text }}>Btw</span>
+        <span style={{ fg: theme.textMuted }}> · {model()}</span>
+        <Show when={metrics().length > 0}>
+          <span style={{ fg: theme.textMuted }}> · {metrics().join(" · ")}</span>
+        </Show>
+        <Show when={codeStats().additions > 0 || codeStats().deletions > 0}>
+          <span style={{ fg: theme.textMuted }}> · </span>
+          <Show when={codeStats().additions > 0}>
+            <span style={{ fg: theme.diffAdded }}>+{formatCompactTokens(codeStats().additions)}</span>
+          </Show>
+          <Show when={codeStats().additions > 0 && codeStats().deletions > 0}>
+            <span style={{ fg: theme.textMuted }}> </span>
+          </Show>
+          <Show when={codeStats().deletions > 0}>
+            <span style={{ fg: theme.diffRemoved }}>-{formatCompactTokens(codeStats().deletions)}</span>
+          </Show>
+        </Show>
+      </text>
+    </box>
+  )
+}
+
 function AssistantMessage(props: {
   message: AssistantMessage
   parts: Part[]
@@ -1618,29 +1970,7 @@ function AssistantMessage(props: {
 
   const live = createMemo(() => (!final() && props.last ? props.live : undefined))
 
-  const derived = createMemo<AssistantDerivedMetrics>(() => {
-    let responseStartedAt: number | undefined
-    let generationStartedAt: number | undefined
-    let estimatedOutputTokens = 0
-
-    for (const part of props.parts) {
-      if (part.type === "text") {
-        estimatedOutputTokens += Token.estimate(part.text)
-        generationStartedAt = generationStartedAt ?? part.time?.start
-        responseStartedAt = responseStartedAt ?? part.time?.start
-        continue
-      }
-      if (part.type === "reasoning") {
-        responseStartedAt = responseStartedAt ?? part.time.start
-      }
-    }
-
-    return {
-      estimatedOutputTokens,
-      responseStartedAt,
-      generationStartedAt,
-    }
-  })
+  const derived = createMemo<AssistantDerivedMetrics>(() => assistantDerivedMetrics(props.parts))
 
   const startedAt = createMemo(() => {
     return props.metrics?.startedAt
@@ -1680,7 +2010,9 @@ function AssistantMessage(props: {
 
   const liveWindowTokensPerSecond = createMemo(() => {
     const current = live()?.now ?? 0
-    const recent = (live()?.streamSamples ?? []).filter((sample: { time: number; chars: number }) => current - sample.time <= STREAM_RATE_WINDOW)
+    const recent = (live()?.streamSamples ?? []).filter(
+      (sample: { time: number; chars: number }) => current - sample.time <= STREAM_RATE_WINDOW,
+    )
     if (recent.length === 0) return 0
     const chars = recent.reduce((total: number, sample: { time: number; chars: number }) => total + sample.chars, 0)
     const started = live()?.firstTokenAt ?? live()?.textStartedAt ?? recent[0]?.time
@@ -1790,19 +2122,7 @@ function AssistantMessage(props: {
   return (
     <>
       <For each={props.parts}>
-        {(part, index) => {
-          const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
-          return (
-            <Show when={component()}>
-              <Dynamic
-                last={index() === props.parts.length - 1}
-                component={component()}
-                part={part as any}
-                message={props.message}
-              />
-            </Show>
-          )
-        }}
+        {(part, index) => <MessagePart part={part} message={props.message} last={index() === props.parts.length - 1} />}
       </For>
       <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
         <box paddingTop={1} paddingLeft={3}>
@@ -1873,38 +2193,133 @@ function formatTokensPerSecond(value: number) {
   return `${value.toFixed(2)} t/s`
 }
 
-function messageCodeStats(parts: Part[]) {
-  return parts.reduce(
-    (sum, part) => {
-      if (part.type !== "tool") return sum
-      if (part.state.status !== "completed") return sum
+function assistantDerivedMetrics(parts: Part[]): AssistantDerivedMetrics {
+  let responseStartedAt: number | undefined
+  let generationStartedAt: number | undefined
+  let estimatedOutputTokens = 0
 
-      const countedMetadata = addCodeStats(sum, part.state.metadata)
-      const countedFilediff = countedMetadata ? false : addCodeStats(sum, part.state.metadata?.filediff)
-      const files = part.state.metadata?.files
-      const countedFiles =
-        countedMetadata || countedFilediff
-          ? false
-          : Array.isArray(files)
-            ? files.reduce((counted, file) => addCodeStats(sum, file) || counted, false)
-            : false
-      const countedDiff = countedMetadata || countedFilediff || countedFiles ? false : addDiffStats(sum, part.state.metadata?.diff)
-      const input = isRecord(part.state.input) ? part.state.input : undefined
-      if (
-        !countedMetadata &&
-        !countedFilediff &&
-        !countedFiles &&
-        !countedDiff &&
-        part.tool === "write" &&
-        part.state.metadata?.exists !== true
-      ) {
-        sum.additions += countLines(stringValue(input?.content) ?? "")
-      }
+  for (const part of parts) {
+    if (part.type === "text") {
+      estimatedOutputTokens += Token.estimate(part.text)
+      generationStartedAt = generationStartedAt ?? part.time?.start
+      responseStartedAt = responseStartedAt ?? part.time?.start
+      continue
+    }
+    if (part.type === "reasoning") {
+      responseStartedAt = responseStartedAt ?? part.time.start
+    }
+  }
 
-      return sum
-    },
-    emptyCodeStats(),
+  return {
+    estimatedOutputTokens,
+    responseStartedAt,
+    generationStartedAt,
+  }
+}
+
+function finalAssistantMetrics(message: AssistantMessage, parts: Part[], startedAt: number) {
+  if (!message.time.completed) return []
+  const derived = assistantDerivedMetrics(parts)
+  const duration = Math.max(0, message.time.completed - startedAt)
+  const generationStartedAt = derived.generationStartedAt
+  const generationDuration = generationStartedAt ? Math.max(0, message.time.completed - generationStartedAt) : 0
+  const outputTokens = message.tokens.output > 0 ? message.tokens.output : derived.estimatedOutputTokens
+  const tokensPerSecond = generationDuration > 0 && outputTokens > 0 ? outputTokens / (generationDuration / 1000) : 0
+
+  return [
+    tokensPerSecond > 0 ? formatTokensPerSecond(tokensPerSecond) : "",
+    duration > 0 ? Locale.duration(duration) : "",
+  ].filter(Boolean)
+}
+
+function shortBtwActionLabel(name: string) {
+  if (["bash", "shell", "execute", "command"].includes(name)) return "execute"
+  if (["read", "view"].includes(name)) return "read"
+  if (["write", "edit", "apply_patch"].includes(name)) return "write"
+  if (["glob"].includes(name)) return "glob"
+  if (["grep", "search"].includes(name)) return "search"
+  if (["todowrite", "plan"].includes(name)) return "plan"
+  if (["webfetch", "fetch"].includes(name)) return "fetch"
+  if (["question", "ask"].includes(name)) return "asking"
+  if (["skill", "load"].includes(name)) return "loading"
+  return name.length > 12 ? name.slice(0, 12) : name
+}
+
+function btwTitleActionLabel(title: string, tool: string) {
+  const value = title.trim().toLowerCase()
+  if (!value) return shortBtwActionLabel(tool)
+  if (value.startsWith("read")) return "read"
+  if (value.startsWith("write")) return "write"
+  if (value.startsWith("edit")) return "write"
+  if (value.startsWith("patch")) return "write"
+  if (value.startsWith("search")) return "search"
+  if (value.startsWith("grep")) return "search"
+  if (value.startsWith("glob")) return "glob"
+  if (value.startsWith("find")) return "glob"
+  if (value.startsWith("fetch")) return "fetch"
+  if (value.startsWith("ask")) return "asking"
+  if (value.startsWith("load")) return "loading"
+  if (value.startsWith("updat")) return "plan"
+  if (value.startsWith("think")) return "reasoning"
+  return shortBtwActionLabel(tool)
+}
+
+function btwToolActionLabel(part: ToolPart) {
+  if (part.state.status === "running" || part.state.status === "completed") {
+    if (part.state.title) return btwTitleActionLabel(part.state.title, part.tool)
+  }
+  return shortBtwActionLabel(part.tool)
+}
+
+function btwActionLabel(parts: Part[]) {
+  const runningTool = parts.findLast(
+    (part): part is ToolPart => part.type === "tool" && part.state.status === "running",
   )
+  if (runningTool) return btwToolActionLabel(runningTool)
+
+  const pendingTool = parts.findLast(
+    (part): part is ToolPart => part.type === "tool" && part.state.status === "pending",
+  )
+  if (pendingTool) return btwToolActionLabel(pendingTool)
+
+  const lastPart = parts.at(-1)
+  if (lastPart?.type === "reasoning") return "reasoning"
+  if (lastPart?.type === "text") return "reply"
+  if (parts.some((part) => part.type === "reasoning")) return "reasoning"
+  if (parts.some((part) => part.type === "text")) return "reply"
+  return "processing"
+}
+
+function messageCodeStats(parts: Part[]) {
+  return parts.reduce((sum, part) => {
+    if (part.type !== "tool") return sum
+    if (part.state.status !== "completed") return sum
+
+    const countedMetadata = addCodeStats(sum, part.state.metadata)
+    const countedFilediff = countedMetadata ? false : addCodeStats(sum, part.state.metadata?.filediff)
+    const files = part.state.metadata?.files
+    const countedFiles =
+      countedMetadata || countedFilediff
+        ? false
+        : Array.isArray(files)
+          ? files.reduce((counted, file) => addCodeStats(sum, file) || counted, false)
+          : false
+    const countedDiff =
+      countedMetadata || countedFilediff || countedFiles ? false : addDiffStats(sum, part.state.metadata?.diff)
+    const input = isRecord(part.state.input) ? part.state.input : undefined
+    if (
+      !countedMetadata &&
+      !countedFilediff &&
+      !countedFiles &&
+      !countedDiff &&
+      part.tool === "write" &&
+      part.state.metadata?.exists !== true
+    ) {
+      sum.additions += countLines(stringValue(input?.content) ?? "")
+    }
+
+    return sum
+  }, emptyCodeStats())
 }
 
 function emptyCodeStats() {
@@ -1979,10 +2394,12 @@ function estimatePromptPartTokens(part: Part) {
   return 0
 }
 
-const PART_MAPPING = {
-  text: TextPart,
-  tool: ToolPart,
-  reasoning: ReasoningPart,
+function MessagePart(props: { last: boolean; part: Part; message: AssistantMessage }) {
+  if (props.part.type === "text") return <TextPart last={props.last} part={props.part} message={props.message} />
+  if (props.part.type === "tool") return <ToolPart last={props.last} part={props.part} message={props.message} />
+  if (props.part.type === "reasoning")
+    return <ReasoningPart last={props.last} part={props.part} message={props.message} />
+  return <></>
 }
 
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {

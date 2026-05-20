@@ -35,6 +35,7 @@ export type Event = LLM.Event
 
 export interface Handle {
   readonly message: MessageV2.Assistant
+  readonly parts: () => MessageV2.Part[]
   readonly updateToolCall: (
     toolCallID: string,
     update: (part: MessageV2.ToolPart) => MessageV2.ToolPart,
@@ -55,6 +56,20 @@ type Input = {
   assistantMessage: MessageV2.Assistant
   sessionID: SessionID
   model: Provider.Model
+  ephemeral?: boolean
+  ephemeralEvents?: EphemeralEvents
+}
+
+type EphemeralEvents = {
+  readonly messageUpdated?: (message: MessageV2.Assistant) => Effect.Effect<void>
+  readonly partUpdated?: (part: MessageV2.Part) => Effect.Effect<void>
+  readonly partDelta?: (input: {
+    sessionID: SessionID
+    messageID: MessageV2.Part["messageID"]
+    partID: MessageV2.Part["id"]
+    field: string
+    delta: string
+  }) => Effect.Effect<void>
 }
 
 export interface Interface {
@@ -128,6 +143,7 @@ export const layer: Layer.Layer<
         reasoningMap: {},
       }
       let aborted = false
+      const localParts: MessageV2.Part[] = []
       const slog = log.clone().tag("session.id", input.sessionID).tag("messageID", input.assistantMessage.id)
 
       const parse = (e: unknown) =>
@@ -142,10 +158,66 @@ export const layer: Layer.Layer<
         if (done) yield* Deferred.succeed(done, undefined).pipe(Effect.ignore)
       })
 
+      const updateMessage = (message: MessageV2.Assistant) => {
+        if (input.ephemeral) {
+          return (input.ephemeralEvents?.messageUpdated?.(structuredClone(message)) ?? Effect.void).pipe(
+            Effect.as(message),
+          )
+        }
+        return session.updateMessage(message)
+      }
+
+      const updatePart = <T extends MessageV2.Part>(part: T) => {
+        if (!input.ephemeral) return session.updatePart(part)
+        const index = localParts.findIndex((item) => item.id === part.id && item.messageID === part.messageID)
+        if (index === -1) {
+          localParts.push(part)
+          localParts.sort((a, b) => a.id.localeCompare(b.id))
+          return (input.ephemeralEvents?.partUpdated?.(structuredClone(part)) ?? Effect.void).pipe(Effect.as(part))
+        }
+        localParts[index] = part
+        return (input.ephemeralEvents?.partUpdated?.(structuredClone(part)) ?? Effect.void).pipe(Effect.as(part))
+      }
+
+      const updatePartDelta = Effect.fnUntraced(function* (inputDelta: {
+        sessionID: SessionID
+        messageID: MessageV2.Part["messageID"]
+        partID: MessageV2.Part["id"]
+        field: string
+        delta: string
+      }) {
+        if (input.ephemeral) {
+          yield* input.ephemeralEvents?.partDelta?.(inputDelta) ?? Effect.void
+          return
+        }
+        yield* session.updatePartDelta(inputDelta)
+      })
+
+      const getPart = Effect.fn("SessionProcessor.getPart")(function* (inputPart: {
+        sessionID: SessionID
+        messageID: MessageV2.Part["messageID"]
+        partID: MessageV2.Part["id"]
+      }) {
+        if (input.ephemeral) {
+          return localParts.find(
+            (part) =>
+              part.sessionID === inputPart.sessionID &&
+              part.messageID === inputPart.messageID &&
+              part.id === inputPart.partID,
+          )
+        }
+        return yield* session.getPart(inputPart)
+      })
+
+      const parts = (messageID: MessageV2.Part["messageID"]) => {
+        if (input.ephemeral) return localParts.filter((part) => part.messageID === messageID)
+        return MessageV2.parts(messageID)
+      }
+
       const readToolCall = Effect.fn("SessionProcessor.readToolCall")(function* (toolCallID: string) {
         const call = ctx.toolcalls[toolCallID]
         if (!call) return
-        const part = yield* session.getPart({
+        const part = yield* getPart({
           partID: call.partID,
           messageID: call.messageID,
           sessionID: call.sessionID,
@@ -163,7 +235,7 @@ export const layer: Layer.Layer<
       ) {
         const match = yield* readToolCall(toolCallID)
         if (!match) return
-        const part = yield* session.updatePart(update(match.part))
+        const part = yield* updatePart(update(match.part))
         ctx.toolcalls[toolCallID] = {
           ...match.call,
           partID: part.id,
@@ -184,7 +256,7 @@ export const layer: Layer.Layer<
       ) {
         const match = yield* readToolCall(toolCallID)
         if (!match || match.part.state.status !== "running") return
-        yield* session.updatePart({
+        yield* updatePart({
           ...match.part,
           state: {
             status: "completed",
@@ -202,7 +274,7 @@ export const layer: Layer.Layer<
       const failToolCall = Effect.fn("SessionProcessor.failToolCall")(function* (toolCallID: string, error: unknown) {
         const match = yield* readToolCall(toolCallID)
         if (!match || match.part.state.status !== "running") return false
-        yield* session.updatePart({
+        yield* updatePart({
           ...match.part,
           state: {
             status: "error",
@@ -221,17 +293,19 @@ export const layer: Layer.Layer<
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
         switch (value.type) {
           case "start":
-            yield* status.set(ctx.sessionID, { type: "busy" })
+            if (!input.ephemeral) yield* status.set(ctx.sessionID, { type: "busy" })
             return
 
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            EventV2.run(SessionEvent.Reasoning.Started.Sync, {
-              sessionID: ctx.sessionID,
-              reasoningID: value.id,
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
+            if (!input.ephemeral) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              EventV2.run(SessionEvent.Reasoning.Started.Sync, {
+                sessionID: ctx.sessionID,
+                reasoningID: value.id,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             ctx.reasoningMap[value.id] = {
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -241,14 +315,14 @@ export const layer: Layer.Layer<
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
-            yield* session.updatePart(ctx.reasoningMap[value.id])
+            yield* updatePart(ctx.reasoningMap[value.id])
             return
 
           case "reasoning-delta":
             if (!(value.id in ctx.reasoningMap)) return
             ctx.reasoningMap[value.id].text += value.text
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
-            yield* session.updatePartDelta({
+            yield* updatePartDelta({
               sessionID: ctx.reasoningMap[value.id].sessionID,
               messageID: ctx.reasoningMap[value.id].messageID,
               partID: ctx.reasoningMap[value.id].id,
@@ -259,18 +333,20 @@ export const layer: Layer.Layer<
 
           case "reasoning-end":
             if (!(value.id in ctx.reasoningMap)) return
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            EventV2.run(SessionEvent.Reasoning.Ended.Sync, {
-              sessionID: ctx.sessionID,
-              reasoningID: value.id,
-              text: ctx.reasoningMap[value.id].text,
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
+            if (!input.ephemeral) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              EventV2.run(SessionEvent.Reasoning.Ended.Sync, {
+                sessionID: ctx.sessionID,
+                reasoningID: value.id,
+                text: ctx.reasoningMap[value.id].text,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             // oxlint-disable-next-line no-self-assign -- reactivity trigger
             ctx.reasoningMap[value.id].text = ctx.reasoningMap[value.id].text
             ctx.reasoningMap[value.id].time = { ...ctx.reasoningMap[value.id].time, end: Date.now() }
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
-            yield* session.updatePart(ctx.reasoningMap[value.id])
+            yield* updatePart(ctx.reasoningMap[value.id])
             delete ctx.reasoningMap[value.id]
             return
 
@@ -278,14 +354,16 @@ export const layer: Layer.Layer<
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            EventV2.run(SessionEvent.Tool.Input.Started.Sync, {
-              sessionID: ctx.sessionID,
-              callID: value.id,
-              name: value.toolName,
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
-            const part = yield* session.updatePart({
+            if (!input.ephemeral) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              EventV2.run(SessionEvent.Tool.Input.Started.Sync, {
+                sessionID: ctx.sessionID,
+                callID: value.id,
+                name: value.toolName,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
+            const part = yield* updatePart({
               id: ctx.toolcalls[value.id]?.partID ?? PartID.ascending(),
               messageID: ctx.assistantMessage.id,
               sessionID: ctx.assistantMessage.sessionID,
@@ -307,13 +385,15 @@ export const layer: Layer.Layer<
             return
 
           case "tool-input-end": {
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            EventV2.run(SessionEvent.Tool.Input.Ended.Sync, {
-              sessionID: ctx.sessionID,
-              callID: value.id,
-              text: "",
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
+            if (!input.ephemeral) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              EventV2.run(SessionEvent.Tool.Input.Ended.Sync, {
+                sessionID: ctx.sessionID,
+                callID: value.id,
+                text: "",
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             return
           }
 
@@ -322,18 +402,20 @@ export const layer: Layer.Layer<
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
             const toolCall = yield* readToolCall(value.toolCallId)
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            EventV2.run(SessionEvent.Tool.Called.Sync, {
-              sessionID: ctx.sessionID,
-              callID: value.toolCallId,
-              tool: value.toolName,
-              input: value.input,
-              provider: {
-                executed: toolCall?.part.metadata?.providerExecuted === true,
-                ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
-              },
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
+            if (!input.ephemeral) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              EventV2.run(SessionEvent.Tool.Called.Sync, {
+                sessionID: ctx.sessionID,
+                callID: value.toolCallId,
+                tool: value.toolName,
+                input: value.input,
+                provider: {
+                  executed: toolCall?.part.metadata?.providerExecuted === true,
+                  ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
+                },
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             yield* updateToolCall(value.toolCallId, (match) => ({
               ...match,
               tool: value.toolName,
@@ -348,8 +430,7 @@ export const layer: Layer.Layer<
                 : value.providerMetadata,
             }))
 
-            const parts = MessageV2.parts(ctx.assistantMessage.id)
-            const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
+            const recentParts = parts(ctx.assistantMessage.id).slice(-DOOM_LOOP_THRESHOLD)
 
             if (
               recentParts.length !== DOOM_LOOP_THRESHOLD ||
@@ -378,47 +459,51 @@ export const layer: Layer.Layer<
 
           case "tool-result": {
             const toolCall = yield* readToolCall(value.toolCallId)
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            EventV2.run(SessionEvent.Tool.Success.Sync, {
-              sessionID: ctx.sessionID,
-              callID: value.toolCallId,
-              structured: value.output.metadata,
-              content: [
-                {
-                  type: "text",
-                  text: value.output.output,
+            if (!input.ephemeral) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              EventV2.run(SessionEvent.Tool.Success.Sync, {
+                sessionID: ctx.sessionID,
+                callID: value.toolCallId,
+                structured: value.output.metadata,
+                content: [
+                  {
+                    type: "text",
+                    text: value.output.output,
+                  },
+                  ...(value.output.attachments?.map((item: MessageV2.FilePart) => ({
+                    type: "file",
+                    uri: item.url,
+                    mime: item.mime,
+                    name: item.filename,
+                  })) ?? []),
+                ],
+                provider: {
+                  executed: toolCall?.part.metadata?.providerExecuted === true,
                 },
-                ...(value.output.attachments?.map((item: MessageV2.FilePart) => ({
-                  type: "file",
-                  uri: item.url,
-                  mime: item.mime,
-                  name: item.filename,
-                })) ?? []),
-              ],
-              provider: {
-                executed: toolCall?.part.metadata?.providerExecuted === true,
-              },
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             yield* completeToolCall(value.toolCallId, value.output)
             return
           }
 
           case "tool-error": {
             const toolCall = yield* readToolCall(value.toolCallId)
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            EventV2.run(SessionEvent.Tool.Failed.Sync, {
-              sessionID: ctx.sessionID,
-              callID: value.toolCallId,
-              error: {
-                type: "unknown",
-                message: errorMessage(value.error),
-              },
-              provider: {
-                executed: toolCall?.part.metadata?.providerExecuted === true,
-              },
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
+            if (!input.ephemeral) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              EventV2.run(SessionEvent.Tool.Failed.Sync, {
+                sessionID: ctx.sessionID,
+                callID: value.toolCallId,
+                error: {
+                  type: "unknown",
+                  message: errorMessage(value.error),
+                },
+                provider: {
+                  executed: toolCall?.part.metadata?.providerExecuted === true,
+                },
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             yield* failToolCall(value.toolCallId, value.error)
             return
           }
@@ -428,7 +513,7 @@ export const layer: Layer.Layer<
 
           case "start-step":
             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
-            if (!ctx.assistantMessage.summary) {
+            if (!input.ephemeral && !ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
               EventV2.run(SessionEvent.Step.Started.Sync, {
                 sessionID: ctx.sessionID,
@@ -442,7 +527,7 @@ export const layer: Layer.Layer<
                 timestamp: DateTime.makeUnsafe(Date.now()),
               })
             }
-            yield* session.updatePart({
+            yield* updatePart({
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
               sessionID: ctx.sessionID,
@@ -458,7 +543,7 @@ export const layer: Layer.Layer<
               usage: value.usage,
               metadata: value.providerMetadata,
             })
-            if (!ctx.assistantMessage.summary) {
+            if (!input.ephemeral && !ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
               EventV2.run(SessionEvent.Step.Ended.Sync, {
                 sessionID: ctx.sessionID,
@@ -472,7 +557,7 @@ export const layer: Layer.Layer<
             ctx.assistantMessage.finish = value.finishReason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
-            yield* session.updatePart({
+            yield* updatePart({
               id: PartID.ascending(),
               reason: value.finishReason,
               snapshot: completedSnapshot,
@@ -482,11 +567,11 @@ export const layer: Layer.Layer<
               tokens: usage.tokens,
               cost: usage.cost,
             })
-            yield* session.updateMessage(ctx.assistantMessage)
+            yield* updateMessage(ctx.assistantMessage)
             if (ctx.snapshot) {
               const patch = yield* snapshot.patch(ctx.snapshot)
               if (patch.files.length) {
-                yield* session.updatePart({
+                yield* updatePart({
                   id: PartID.ascending(),
                   messageID: ctx.assistantMessage.id,
                   sessionID: ctx.sessionID,
@@ -497,13 +582,16 @@ export const layer: Layer.Layer<
               }
               ctx.snapshot = undefined
             }
-            yield* summary
-              .summarize({
-                sessionID: ctx.sessionID,
-                messageID: ctx.assistantMessage.parentID,
-              })
-              .pipe(Effect.ignore, Effect.forkIn(scope))
+            if (!input.ephemeral) {
+              yield* summary
+                .summarize({
+                  sessionID: ctx.sessionID,
+                  messageID: ctx.assistantMessage.parentID,
+                })
+                .pipe(Effect.ignore, Effect.forkIn(scope))
+            }
             if (
+              !input.ephemeral &&
               !ctx.assistantMessage.summary &&
               isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
             ) {
@@ -513,7 +601,7 @@ export const layer: Layer.Layer<
           }
 
           case "text-start":
-            if (!ctx.assistantMessage.summary) {
+            if (!input.ephemeral && !ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
               EventV2.run(SessionEvent.Text.Started.Sync, {
                 sessionID: ctx.sessionID,
@@ -529,14 +617,14 @@ export const layer: Layer.Layer<
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
-            yield* session.updatePart(ctx.currentText)
+            yield* updatePart(ctx.currentText)
             return
 
           case "text-delta":
             if (!ctx.currentText) return
             ctx.currentText.text += value.text
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
-            yield* session.updatePartDelta({
+            yield* updatePartDelta({
               sessionID: ctx.currentText.sessionID,
               messageID: ctx.currentText.messageID,
               partID: ctx.currentText.id,
@@ -558,7 +646,7 @@ export const layer: Layer.Layer<
               },
               { text: ctx.currentText.text },
             )).text
-            if (!ctx.assistantMessage.summary) {
+            if (!input.ephemeral && !ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
               EventV2.run(SessionEvent.Text.Ended.Sync, {
                 sessionID: ctx.sessionID,
@@ -571,7 +659,7 @@ export const layer: Layer.Layer<
               ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
             }
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
-            yield* session.updatePart(ctx.currentText)
+            yield* updatePart(ctx.currentText)
             ctx.currentText = undefined
             return
 
@@ -588,7 +676,7 @@ export const layer: Layer.Layer<
         if (ctx.snapshot) {
           const patch = yield* snapshot.patch(ctx.snapshot)
           if (patch.files.length) {
-            yield* session.updatePart({
+            yield* updatePart({
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
               sessionID: ctx.sessionID,
@@ -603,13 +691,13 @@ export const layer: Layer.Layer<
         if (ctx.currentText) {
           const end = Date.now()
           ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
-          yield* session.updatePart(ctx.currentText)
+          yield* updatePart(ctx.currentText)
           ctx.currentText = undefined
         }
 
         for (const part of Object.values(ctx.reasoningMap)) {
           const end = Date.now()
-          yield* session.updatePart({
+          yield* updatePart({
             ...part,
             time: { start: part.time.start ?? end, end },
           })
@@ -628,7 +716,7 @@ export const layer: Layer.Layer<
           const part = match.part
           const end = Date.now()
           const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
-          yield* session.updatePart({
+          yield* updatePart({
             ...part,
             state: {
               ...part.state,
@@ -641,13 +729,17 @@ export const layer: Layer.Layer<
         }
         ctx.toolcalls = {}
         ctx.assistantMessage.time.completed = Date.now()
-        yield* session.updateMessage(ctx.assistantMessage)
+        yield* updateMessage(ctx.assistantMessage)
       })
 
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
         slog.error("process", { error: errorMessage(e), stack: e instanceof Error ? e.stack : undefined })
         const error = parse(e)
         if (MessageV2.ContextOverflowError.isInstance(error) || ProviderError.isOverflow(errorMessage(e))) {
+          if (input.ephemeral) {
+            ctx.assistantMessage.error = error
+            return
+          }
           if ((yield* config.get()).compaction?.auto === false) {
             ctx.assistantMessage.error = error
             yield* bus.publish(Session.Event.Error, { sessionID: ctx.assistantMessage.sessionID, error })
@@ -658,7 +750,7 @@ export const layer: Layer.Layer<
           yield* bus.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return
         }
-        if (!ctx.assistantMessage.summary) {
+        if (!input.ephemeral && !ctx.assistantMessage.summary) {
           // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
           EventV2.run(SessionEvent.Step.Failed.Sync, {
             sessionID: ctx.sessionID,
@@ -670,11 +762,13 @@ export const layer: Layer.Layer<
           })
         }
         ctx.assistantMessage.error = error
-        yield* bus.publish(Session.Event.Error, {
-          sessionID: ctx.assistantMessage.sessionID,
-          error: ctx.assistantMessage.error,
-        })
-        yield* status.set(ctx.sessionID, { type: "idle" })
+        if (!input.ephemeral) {
+          yield* bus.publish(Session.Event.Error, {
+            sessionID: ctx.assistantMessage.sessionID,
+            error: ctx.assistantMessage.error,
+          })
+          yield* status.set(ctx.sessionID, { type: "idle" })
+        }
       })
 
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
@@ -710,6 +804,7 @@ export const layer: Layer.Layer<
               SessionRetry.policy({
                 parse,
                 set: (info) => {
+                  if (input.ephemeral) return Effect.void
                   // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
                   EventV2.run(SessionEvent.Retried.Sync, {
                     sessionID: ctx.sessionID,
@@ -742,6 +837,9 @@ export const layer: Layer.Layer<
       return {
         get message() {
           return ctx.assistantMessage
+        },
+        parts() {
+          return parts(ctx.assistantMessage.id)
         },
         updateToolCall,
         completeToolCall,
