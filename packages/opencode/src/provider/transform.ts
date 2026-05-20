@@ -315,7 +315,18 @@ function normalizeMessages(
   return msgs
 }
 
-function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: { breakpoint_interval?: number; min_messages?: number; enabled?: boolean }): ModelMessage[] {
+type CachingConfig = {
+  breakpoint_interval?: number
+  min_messages?: number
+  enabled?: boolean
+  transient?: boolean
+}
+
+type MessageTransformConfig = {
+  caching?: CachingConfig & { normalize_dates?: boolean }
+}
+
+function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: CachingConfig): ModelMessage[] {
   const cachingEnabled = config?.enabled ?? true
   
   if (!cachingEnabled) {
@@ -328,6 +339,8 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: { br
   // Cache conversation history more aggressively:
   // - All messages except the last user message and its response
   // - This allows the entire conversation history to be cached
+  // Transient calls like /btw can read existing cache points, but should not
+  // advance the durable session cache head to a side-quest turn.
   const nonSystem = msgs.filter((msg) => msg.role !== "system")
   
   // Find the last user message index
@@ -352,6 +365,12 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: { br
   for (let i = CACHE_BREAKPOINT_INTERVAL - 1; i < cacheableHistory.length; i += CACHE_BREAKPOINT_INTERVAL) {
     breakpointIndices.add(i)
   }
+  const transientHistoryBreakpoint = config?.transient
+    ? (() => {
+        const previousUser = cacheableHistory.findLastIndex((msg) => msg.role === "user")
+        return previousUser > 0 ? previousUser - 1 : undefined
+      })()
+    : undefined
 
   const providerOptions = {
     anthropic: {
@@ -401,7 +420,10 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: { br
   // Apply caching to conversation history (all messages before the last user turn)
   for (let i = 0; i < cacheableHistory.length; i++) {
     const msg = cacheableHistory[i]
-    const isBreakpoint = breakpointIndices.has(i) || i === cacheableHistory.length - 1
+    const isBreakpoint =
+      breakpointIndices.has(i) ||
+      i === transientHistoryBreakpoint ||
+      (!config?.transient && i === cacheableHistory.length - 1)
     
     // Only apply cache control at breakpoints to avoid excessive cache entries
     if (!isBreakpoint) continue
@@ -473,7 +495,7 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
   })
 }
 
-export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>, config?: { caching?: { enabled?: boolean; breakpoint_interval?: number; min_messages?: number; normalize_dates?: boolean } }) {
+export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>, config?: MessageTransformConfig) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
   if (

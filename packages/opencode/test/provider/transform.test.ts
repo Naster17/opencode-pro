@@ -2302,6 +2302,46 @@ describe("ProviderTransform.message - bedrock caching with non-bedrock providerI
   })
 })
 
+describe("ProviderTransform.message - transient caching", () => {
+  const model = {
+    id: "anthropic/claude-sonnet-4",
+    providerID: "anthropic",
+    api: {
+      id: "claude-sonnet-4",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Claude Sonnet 4",
+    capabilities: {},
+    options: {},
+    headers: {},
+  } as any
+
+  const messages = () =>
+    [
+      { role: "system", content: "system" },
+      { role: "user", content: "u1" },
+      { role: "assistant", content: "a1" },
+      { role: "user", content: "u2" },
+      { role: "assistant", content: "a2" },
+      { role: "user", content: "btw" },
+    ] as any[]
+
+  test("does not advance the durable cache head for transient turns", () => {
+    const normal = ProviderTransform.message(messages(), model, {}, {
+      caching: { breakpoint_interval: 100, min_messages: 1 },
+    }) as any[]
+    const transient = ProviderTransform.message(messages(), model, {}, {
+      caching: { breakpoint_interval: 100, min_messages: 1, transient: true },
+    }) as any[]
+
+    expect(normal[4].providerOptions?.anthropic?.cacheControl).toEqual({ type: "ephemeral" })
+    expect(transient[2].providerOptions?.anthropic?.cacheControl).toEqual({ type: "ephemeral" })
+    expect(transient[4].providerOptions).toBeUndefined()
+    expect(transient[0].providerOptions?.anthropic?.cacheControl).toEqual({ type: "ephemeral" })
+  })
+})
+
 describe("ProviderTransform.message - cache control on gateway", () => {
   const createModel = (overrides: Partial<any> = {}) =>
     ({

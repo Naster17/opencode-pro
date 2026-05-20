@@ -47,6 +47,7 @@ export type StreamInput = {
   tools: Record<string, Tool>
   retries?: number
   toolChoice?: "auto" | "required" | "none"
+  ephemeral?: boolean
 }
 
 export type StreamRequest = StreamInput & {
@@ -360,7 +361,7 @@ const live: Layer.Layer<
         : undefined
 
       // Track cache statistics and log metrics
-      if (CacheOptimizer.supportsCaching(input.model)) {
+      if (CacheOptimizer.supportsCaching(input.model) && !input.ephemeral) {
         const breakpoints = CacheOptimizer.computeCacheBreakpoints(messages, { config: cfg })
         CacheOptimizer.trackCacheStats({
           sessionID: input.sessionID,
@@ -439,7 +440,10 @@ const live: Layer.Layer<
               async transformParams(args) {
                 if (args.type === "stream") {
                   // @ts-expect-error
-                  args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options, cfg)
+                  args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options, {
+                    ...cfg,
+                    caching: { ...cfg.caching, transient: input.ephemeral },
+                  })
                 }
                 return args.params
               },

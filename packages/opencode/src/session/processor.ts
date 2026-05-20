@@ -780,7 +780,7 @@ export const layer: Layer.Layer<
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
-            const stream = llm.stream(streamInput)
+            const stream = llm.stream({ ...streamInput, ephemeral: input.ephemeral })
 
             yield* stream.pipe(
               Stream.tap((event) => handleEvent(event)),
