@@ -75,7 +75,7 @@ function state(api: TuiPluginApi, item: TuiPluginStatus) {
 
 function source(spec: string) {
   if (!spec.startsWith("file://")) return
-  return fileURLToPath(spec)
+  return decodeURIComponent(new URL(spec).pathname)
 }
 
 function meta(item: TuiPluginStatus, width: number) {
@@ -88,11 +88,11 @@ function meta(item: TuiPluginStatus, width: number) {
 
 function pluginName(spec: string) {
   if (spec.startsWith("file://")) {
-    const file = fileURLToPath(spec)
-    const part = path.basename(file)
+    const file = decodeURIComponent(new URL(spec).pathname)
+    const part = path.posix.basename(file)
     const base = part.includes(".") ? part.slice(0, part.lastIndexOf(".")) : part
     if (base === "index") {
-      const dir = path.basename(path.dirname(file))
+      const dir = path.posix.basename(path.posix.dirname(file))
       return dir || base
     }
     return base

@@ -144,6 +144,7 @@ export function resolve(p: string): string {
 
 export function windowsPath(p: string): string {
   if (process.platform !== "win32") return p
+  const systemDrive = process.env.SystemDrive ?? process.env.HOMEDRIVE ?? "C:"
   return (
     p
       .replace(/^\/([a-zA-Z]):(?:[\\/]|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
@@ -153,6 +154,10 @@ export function windowsPath(p: string): string {
       .replace(/^\/cygdrive\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
       // WSL paths are typically /mnt/<drive>/...
       .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
+      // Some callers pass drive-less absolute paths like /Users/... after stripping
+      // the drive letter. Resolve those against the system drive instead of the
+      // current working drive so they round-trip to the canonical filesystem path.
+      .replace(/^\/(?![a-zA-Z](?:\/|$)|cygdrive\/|mnt\/)/, `${systemDrive}/`)
   )
 }
 export function overlaps(a: string, b: string) {

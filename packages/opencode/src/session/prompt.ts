@@ -1474,13 +1474,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }
 
           step++
-          if (step === 1)
-            yield* title({
-              session,
-              modelID: lastUser.model.modelID,
-              providerID: lastUser.model.providerID,
-              history: msgs,
-            }).pipe(Effect.ignore, Effect.forkIn(scope))
 
           const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
           const task = tasks.pop()
@@ -1615,6 +1608,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               model,
               toolChoice: format.type === "json_schema" ? "required" : undefined,
             })
+
+            if (step === 1 && !handle.message.error) {
+              yield* title({
+                session,
+                modelID: lastUser.model.modelID,
+                providerID: lastUser.model.providerID,
+                history: yield* MessageV2.filterCompactedEffect(sessionID),
+              }).pipe(Effect.ignore, Effect.forkIn(scope))
+            }
 
             if (structured !== undefined) {
               handle.message.structured = structured
