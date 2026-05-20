@@ -1240,13 +1240,11 @@ export function Prompt(props: PromptProps) {
         })
       if (editorParts.length > 0) editor.markSelectionSent()
     }
-    if (btwInput === undefined) {
-      history.append({
-        ...store.prompt,
-        mode: currentMode,
-      })
-      setLastPrompt({ ...store.prompt })
-    }
+    history.append({
+      ...store.prompt,
+      mode: currentMode,
+    })
+    setLastPrompt({ ...store.prompt })
     input.extmarks.clear()
     setStore("prompt", {
       input: "",

@@ -138,8 +138,8 @@ type BtwTurn = {
   id: string
   sessionID: string
   question: string
+  startedAt: number
   status: "pending" | "completed" | "error"
-  footerVisible: boolean
   responses: BtwResponse[]
   error?: string
 }
@@ -147,6 +147,7 @@ type BtwTurn = {
 type BtwResponse = {
   info: AssistantMessage
   parts: Part[]
+  codeStats: CodeStats
 }
 
 const context = createContext<{
@@ -209,6 +210,7 @@ export function Session() {
     now: Date.now(),
     streamSamples: [],
   })
+  const [liveBtwResponses, setLiveBtwResponses] = createSignal<Record<string, LiveAssistantMetrics>>({})
 
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
@@ -263,8 +265,18 @@ export function Session() {
         return {
           ...turn,
           responses: existing
-            ? turn.responses.map((response) => (response.info.id === info.id ? { ...response, info } : response))
-            : [...turn.responses, { info, parts: [] }],
+            ? turn.responses.map((response) =>
+                response.info.id === info.id
+                  ? {
+                      ...response,
+                      info,
+                      codeStats: info.time.completed
+                        ? maxCodeStats(response.codeStats, messageCodeStats(response.parts))
+                        : response.codeStats,
+                    }
+                  : response,
+              )
+            : [...turn.responses, { info, parts: [], codeStats: emptyCodeStats() }],
         }
       }),
     )
@@ -286,9 +298,8 @@ export function Session() {
 
         return {
           ...turn,
-          responses: turn.responses.map((response) => ({
-            ...response,
-            parts: response.parts
+          responses: turn.responses.map((response) => {
+            const parts = response.parts
               .map((part) => {
                 const updated = turnUpdates.find(
                   (update) => update.part.messageID === response.info.id && update.part.id === part.id,
@@ -326,8 +337,13 @@ export function Session() {
                     }
                   }),
               )
-              .toSorted((a, b) => a.id.localeCompare(b.id)),
-          })),
+              .toSorted((a, b) => a.id.localeCompare(b.id))
+            return {
+              ...response,
+              parts,
+              codeStats: messageCodeStats(parts),
+            }
+          }),
         }
       }),
     )
@@ -363,13 +379,20 @@ export function Session() {
     btwUsage.add(info.sessionID, { info, parts: response?.parts ?? [] })
   }
 
+  function updateLiveBtwResponse(messageID: string, update: (current?: LiveAssistantMetrics) => LiveAssistantMetrics) {
+    setLiveBtwResponses((current) => ({
+      ...current,
+      [messageID]: update(current[messageID]),
+    }))
+  }
+
   async function submitBtw(input: BtwSubmission) {
     const turn: BtwTurn = {
       id: input.messageID,
       sessionID: input.sessionID,
       question: input.input,
+      startedAt: Date.now(),
       status: "pending",
-      footerVisible: false,
       responses: [],
     }
     setBtwTurns((current) => [...current, turn])
@@ -409,15 +432,24 @@ export function Session() {
     setBtwTurns((current) =>
       current.map((item) =>
         item.id === input.messageID
-          ? {
-              ...item,
-              status: "completed",
-              footerVisible: true,
-              responses: [
-                ...item.responses.filter((current) => current.info.id !== assistant.id),
-                { info: assistant, parts: response.data.parts },
-              ].toSorted((a, b) => a.info.id.localeCompare(b.info.id)),
-            }
+          ? (() => {
+              const existing = item.responses.find((current) => current.info.id === assistant.id)
+              return {
+                ...item,
+                status: "completed",
+                responses: [
+                  ...item.responses.filter((current) => current.info.id !== assistant.id),
+                  {
+                    info: assistant,
+                    parts: response.data.parts,
+                    codeStats: maxCodeStats(
+                      existing?.codeStats ?? emptyCodeStats(),
+                      messageCodeStats(response.data.parts),
+                    ),
+                  },
+                ].toSorted((a, b) => a.info.id.localeCompare(b.info.id)),
+              }
+            })()
           : item,
       ),
     )
@@ -589,6 +621,15 @@ export function Session() {
 
   event.on("session.btw.started", (evt) => {
     if (evt.properties.sessionID !== route.sessionID) return
+    const now = Date.now()
+    updateLiveBtwResponse(evt.properties.info.id, (current) => ({
+      messageID: evt.properties.info.id,
+      now,
+      responseStartedAt: current?.responseStartedAt,
+      textStartedAt: current?.textStartedAt,
+      firstTokenAt: current?.firstTokenAt,
+      streamSamples: current?.streamSamples ?? [],
+    }))
     upsertBtwResponse(evt.properties.turnID, evt.properties.info)
     toBottom()
   })
@@ -596,6 +637,14 @@ export function Session() {
   event.on("session.btw.updated", (evt) => {
     if (evt.properties.sessionID !== route.sessionID) return
     const info = evt.properties.info
+    updateLiveBtwResponse(info.id, (current) => ({
+      messageID: info.id,
+      now: info.time.completed ?? Date.now(),
+      responseStartedAt: current?.responseStartedAt ?? (info.time.completed ? info.time.created : undefined),
+      textStartedAt: current?.textStartedAt,
+      firstTokenAt: current?.firstTokenAt,
+      streamSamples: current?.streamSamples ?? [],
+    }))
     if (info.time.completed) {
       batch(() => {
         flushQueuedBtwPartEvents()
@@ -611,16 +660,43 @@ export function Session() {
 
   event.on("session.btw.part.updated", (evt) => {
     if (evt.properties.sessionID !== route.sessionID) return
+    const now = Date.now()
+    const textStartedAt =
+      evt.properties.part.type === "text" && evt.properties.part.text.length > 0
+        ? (evt.properties.part.time?.start ?? now)
+        : undefined
     queuedBtwPartUpdates.set(`${evt.properties.turnID}:${evt.properties.part.messageID}:${evt.properties.part.id}`, {
       turnID: evt.properties.turnID,
       part: evt.properties.part,
     })
+    updateLiveBtwResponse(evt.properties.part.messageID, (current) => ({
+      messageID: evt.properties.part.messageID,
+      now,
+      responseStartedAt: current?.responseStartedAt ?? textStartedAt ?? now,
+      textStartedAt: current?.textStartedAt ?? textStartedAt,
+      firstTokenAt: current?.firstTokenAt,
+      streamSamples: current?.streamSamples ?? [],
+    }))
     scheduleQueuedBtwPartEvents()
     toBottom()
   })
 
   event.on("session.btw.part.delta", (evt) => {
     if (evt.properties.sessionID !== route.sessionID) return
+    const now = Date.now()
+    if (evt.properties.field === "text") {
+      updateLiveBtwResponse(evt.properties.messageID, (current) => ({
+        messageID: evt.properties.messageID,
+        now,
+        responseStartedAt: current?.responseStartedAt ?? now,
+        textStartedAt: current?.textStartedAt ?? now,
+        firstTokenAt: current?.firstTokenAt ?? now,
+        streamSamples: [
+          ...(current?.streamSamples ?? []).filter((sample) => now - sample.time <= STREAM_RATE_WINDOW),
+          { time: now, chars: evt.properties.delta.length },
+        ].slice(-STREAM_RATE_MAX_SAMPLES),
+      }))
+    }
     appendBtwPartDelta({
       turnID: evt.properties.turnID,
       messageID: evt.properties.messageID,
@@ -1495,6 +1571,32 @@ export function Session() {
     )
   })
 
+  function estimateBtwPromptTokens(turn: BtwTurn, response: BtwResponse) {
+    if (response.info.tokens.input > 0) return response.info.tokens.input
+    const providerModel = sync.data.provider.find((item) => item.id === response.info.providerID)?.models[
+      response.info.modelID
+    ]
+    const sessionPromptTokens = messages()
+      .filter((message) => message.id < turn.id)
+      .reduce(
+        (sum, message) =>
+          sum +
+          (sync.data.part[message.id] ?? []).reduce((partSum, part) => partSum + estimatePromptPartTokens(part), 0),
+        0,
+      )
+    return (
+      sessionPromptTokens +
+      Token.estimate(
+        [
+          ...(providerModel ? SystemPrompt.provider(providerModel as Parameters<typeof SystemPrompt.provider>[0]) : []),
+          turn.question,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      )
+    )
+  }
+
   createEffect(() => {
     const assistant = lastAssistant()
     if (!assistant) {
@@ -1577,7 +1679,15 @@ export function Session() {
               scrollAcceleration={scrollAcceleration()}
             >
               <box height={1} />
-              <Index each={renderedLeadingBtwTurns()}>{(turn) => <BtwMessage turn={turn} />}</Index>
+              <Index each={renderedLeadingBtwTurns()}>
+                {(turn) => (
+                  <BtwMessage
+                    turn={turn}
+                    live={(messageID) => liveBtwResponses()[messageID]}
+                    estimatedPromptTokens={(response) => estimateBtwPromptTokens(turn(), response)}
+                  />
+                )}
+              </Index>
               <For each={renderedMessages()}>
                 {(message, index) => (
                   <>
@@ -1675,7 +1785,15 @@ export function Session() {
                         />
                       </Match>
                     </Switch>
-                    <Index each={renderedBtwTurnsAfter(message, index())}>{(turn) => <BtwMessage turn={turn} />}</Index>
+                    <Index each={renderedBtwTurnsAfter(message, index())}>
+                      {(turn) => (
+                        <BtwMessage
+                          turn={turn}
+                          live={(messageID) => liveBtwResponses()[messageID]}
+                          estimatedPromptTokens={(response) => estimateBtwPromptTokens(turn(), response)}
+                        />
+                      )}
+                    </Index>
                   </>
                 )}
               </For>
@@ -1859,8 +1977,15 @@ function UserMessage(props: {
   )
 }
 
-function BtwMessage(props: { turn: () => BtwTurn }) {
+function BtwMessage(props: {
+  turn: () => BtwTurn
+  live: (messageID: string) => LiveAssistantMetrics | undefined
+  estimatedPromptTokens: (response: BtwResponse) => number
+}) {
   const { theme } = useTheme()
+  const codeStats = createMemo(() =>
+    props.turn().responses.reduce((sum, response) => mergeCodeStats(sum, response.codeStats), emptyCodeStats()),
+  )
 
   return (
     <>
@@ -1886,13 +2011,29 @@ function BtwMessage(props: { turn: () => BtwTurn }) {
         )}
       </Show>
       <Index each={props.turn().responses}>
-        {(response) => <BtwResponseMessage response={response} footerVisible={() => props.turn().footerVisible} />}
+        {(response, index) => (
+          <BtwResponseMessage
+            response={response}
+            showFooter={() => index === props.turn().responses.length - 1}
+            live={() => props.live(response().info.id)}
+            startedAt={() => props.turn().startedAt}
+            estimatedPromptTokens={() => props.estimatedPromptTokens(response())}
+            codeStats={codeStats}
+          />
+        )}
       </Index>
     </>
   )
 }
 
-function BtwResponseMessage(props: { response: () => BtwResponse; footerVisible: () => boolean }) {
+function BtwResponseMessage(props: {
+  response: () => BtwResponse
+  showFooter: () => boolean
+  live: () => LiveAssistantMetrics | undefined
+  startedAt: () => number
+  estimatedPromptTokens: () => number
+  codeStats: () => CodeStats
+}) {
   return (
     <>
       <Index each={props.response().parts}>
@@ -1904,23 +2045,165 @@ function BtwResponseMessage(props: { response: () => BtwResponse; footerVisible:
           />
         )}
       </Index>
-      <Show when={props.footerVisible() && props.response().parts.length > 0}>
-        <BtwResponseFooter response={props.response()} />
+      <Show when={props.showFooter()}>
+        <BtwResponseFooter
+          response={props.response}
+          live={props.live}
+          startedAt={props.startedAt}
+          estimatedPromptTokens={props.estimatedPromptTokens}
+          codeStats={props.codeStats}
+        />
       </Show>
     </>
   )
 }
 
-function BtwResponseFooter(props: { response: BtwResponse }) {
+function BtwResponseFooter(props: {
+  response: () => BtwResponse
+  live: () => LiveAssistantMetrics | undefined
+  startedAt: () => number
+  estimatedPromptTokens: () => number
+  codeStats: () => CodeStats
+}) {
   const ctx = use()
   const { theme } = useTheme()
+  const [smoothedLiveTokensPerSecond, setSmoothedLiveTokensPerSecond] = createSignal(0)
+  const [latestLiveTokensPerSecond, setLatestLiveTokensPerSecond] = createSignal(0)
+  const [smoothedPromptTokensPerSecond, setSmoothedPromptTokensPerSecond] = createSignal(0)
+  const [now, setNow] = createSignal(Date.now())
   const model = createMemo(() =>
-    Model.name(ctx.providers(), props.response.info.providerID, props.response.info.modelID),
+    Model.name(ctx.providers(), props.response().info.providerID, props.response().info.modelID),
   )
-  const metrics = createMemo(() =>
-    finalAssistantMetrics(props.response.info, props.response.parts, props.response.info.time.created),
-  )
-  const codeStats = createMemo(() => messageCodeStats(props.response.parts))
+  const final = createMemo(() => {
+    const finish = props.response().info.finish
+    return Boolean(finish && !["tool-calls", "unknown"].includes(finish))
+  })
+  const live = createMemo(() => (!final() ? props.live() : undefined))
+  const derived = createMemo(() => assistantDerivedMetrics(props.response().parts))
+  const duration = createMemo(() => {
+    const end = final() ? props.response().info.time.completed : (live()?.now ?? now())
+    if (!end) return 0
+    return Math.max(0, end - props.startedAt())
+  })
+  const generationDuration = createMemo(() => {
+    const generationStartedAt = live()?.textStartedAt ?? live()?.firstTokenAt ?? derived().generationStartedAt
+    if (!generationStartedAt) return 0
+    const end = final() ? props.response().info.time.completed : (live()?.now ?? now())
+    if (!end) return 0
+    return Math.max(0, end - generationStartedAt)
+  })
+  const promptProcessingDuration = createMemo(() => {
+    const end = live()?.responseStartedAt ?? live()?.firstTokenAt ?? derived().responseStartedAt ?? live()?.now ?? now()
+    return Math.max(0, end - props.startedAt())
+  })
+  const promptTokensPerSecond = createMemo(() => {
+    if (props.estimatedPromptTokens() <= 0) return 0
+    const seconds = Math.max(promptProcessingDuration(), PROMPT_RATE_MIN_WINDOW) / 1000
+    return props.estimatedPromptTokens() / seconds
+  })
+  const liveWindowTokensPerSecond = createMemo(() => {
+    const current = live()?.now ?? now()
+    const recent = (live()?.streamSamples ?? []).filter((sample) => current - sample.time <= STREAM_RATE_WINDOW)
+    if (recent.length === 0) return 0
+    const chars = recent.reduce((total, sample) => total + sample.chars, 0)
+    const started = live()?.firstTokenAt ?? live()?.textStartedAt ?? recent[0]?.time
+    if (!started) return 0
+    const seconds = Math.max(current - Math.min(started, recent[0]?.time ?? started), STREAM_RATE_MIN_WINDOW) / 1000
+    return chars / 4 / seconds
+  })
+  const averageLiveTokensPerSecond = createMemo(() => {
+    if (final()) return 0
+    if (derived().estimatedOutputTokens <= 0) return 0
+    if (generationDuration() <= 0) return 0
+    return derived().estimatedOutputTokens / (generationDuration() / 1000)
+  })
+  const liveTokensPerSecond = createMemo(() => {
+    if (final()) return 0
+    const windowed = liveWindowTokensPerSecond()
+    if (windowed > 0) return windowed
+    return averageLiveTokensPerSecond()
+  })
+  const finalTokensPerSecond = createMemo(() => {
+    if (!final()) return 0
+    if (generationDuration() <= 0) return 0
+    const outputTokens =
+      props.response().info.tokens.output > 0 ? props.response().info.tokens.output : derived().estimatedOutputTokens
+    if (outputTokens <= 0) return 0
+    return outputTokens / (generationDuration() / 1000)
+  })
+  const displayLiveTokensPerSecond = createMemo(() => {
+    const smoothed = smoothedLiveTokensPerSecond()
+    if (smoothed > 0) return smoothed
+    return liveTokensPerSecond()
+  })
+  const metrics = createMemo(() => {
+    if (final()) {
+      return [
+        finalTokensPerSecond() > 0 ? formatTokensPerSecond(finalTokensPerSecond()) : "",
+        duration() > 0 ? Locale.duration(duration()) : "",
+      ].filter(Boolean)
+    }
+
+    if (!live()?.textStartedAt && !live()?.firstTokenAt) {
+      return [
+        `↓ ${formatTokensPerSecond(smoothedPromptTokensPerSecond())}`,
+        duration() > 0 ? Locale.duration(duration()) : "",
+      ].filter(Boolean)
+    }
+
+    return [
+      `↑ ${formatTokensPerSecond(displayLiveTokensPerSecond())}`,
+      duration() > 0 ? Locale.duration(duration()) : "",
+    ].filter(Boolean)
+  })
+  const codeStats = createMemo(() => (final() ? props.codeStats() : emptyCodeStats()))
+
+  createEffect(() => {
+    setLatestLiveTokensPerSecond(liveTokensPerSecond())
+  })
+
+  createEffect(() => {
+    if (live()?.textStartedAt || live()?.firstTokenAt) {
+      setSmoothedPromptTokensPerSecond(0)
+      return
+    }
+    const next = promptTokensPerSecond()
+    const prev = smoothedPromptTokensPerSecond()
+    if (next <= 0) {
+      setSmoothedPromptTokensPerSecond(0)
+      return
+    }
+    if (prev <= 0) {
+      setSmoothedPromptTokensPerSecond(next)
+      return
+    }
+    setSmoothedPromptTokensPerSecond(prev + (next - prev) * PROMPT_RATE_SMOOTHING)
+  })
+
+  createEffect(() => {
+    if (final()) return
+    if (!live()) return
+    const timer = setInterval(() => {
+      const next = latestLiveTokensPerSecond()
+      const prev = smoothedLiveTokensPerSecond()
+      if (next <= 0) {
+        setSmoothedLiveTokensPerSecond(prev * (1 - STREAM_RATE_SMOOTHING))
+        return
+      }
+      if (prev <= 0) {
+        setSmoothedLiveTokensPerSecond(next)
+        return
+      }
+      setSmoothedLiveTokensPerSecond(prev + (next - prev) * STREAM_RATE_SMOOTHING)
+    }, STREAM_RATE_UPDATE_INTERVAL)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  createEffect(() => {
+    if (props.response().info.time.completed) return
+    const timer = setInterval(() => setNow(Date.now()), STREAM_RATE_UPDATE_INTERVAL)
+    onCleanup(() => clearInterval(timer))
+  })
 
   return (
     <box paddingLeft={3}>
@@ -2217,21 +2500,6 @@ function assistantDerivedMetrics(parts: Part[]): AssistantDerivedMetrics {
   }
 }
 
-function finalAssistantMetrics(message: AssistantMessage, parts: Part[], startedAt: number) {
-  if (!message.time.completed) return []
-  const derived = assistantDerivedMetrics(parts)
-  const duration = Math.max(0, message.time.completed - startedAt)
-  const generationStartedAt = derived.generationStartedAt
-  const generationDuration = generationStartedAt ? Math.max(0, message.time.completed - generationStartedAt) : 0
-  const outputTokens = message.tokens.output > 0 ? message.tokens.output : derived.estimatedOutputTokens
-  const tokensPerSecond = generationDuration > 0 && outputTokens > 0 ? outputTokens / (generationDuration / 1000) : 0
-
-  return [
-    tokensPerSecond > 0 ? formatTokensPerSecond(tokensPerSecond) : "",
-    duration > 0 ? Locale.duration(duration) : "",
-  ].filter(Boolean)
-}
-
 function shortBtwActionLabel(name: string) {
   if (["bash", "shell", "execute", "command"].includes(name)) return "execute"
   if (["read", "view"].includes(name)) return "read"
@@ -2330,6 +2598,13 @@ function mergeCodeStats(left: CodeStats, right: CodeStats) {
   return {
     additions: left.additions + right.additions,
     deletions: left.deletions + right.deletions,
+  }
+}
+
+function maxCodeStats(left: CodeStats, right: CodeStats) {
+  return {
+    additions: Math.max(left.additions, right.additions),
+    deletions: Math.max(left.deletions, right.deletions),
   }
 }
 
