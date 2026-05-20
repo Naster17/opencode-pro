@@ -16,6 +16,28 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Normalize OpenCode models
+      shell: bash
+      run: |
+        normalize_model() {
+          local value="${1#/}"
+          value="${value%/}"
+
+          if [[ -z "$value" ]]; then
+            return
+          fi
+
+          if [[ "$value" == */* ]]; then
+            printf '%s' "$value"
+            return
+          fi
+
+          printf '%s/%s' "${{ inputs.enabled-provider }}" "$value"
+        }
+
+        echo "OPENCODE_CI_MODEL=$(normalize_model '${{ inputs.model }}')" >> "$GITHUB_ENV"
+        echo "OPENCODE_CI_SMALL_MODEL=$(normalize_model '${{ inputs.small-model }}')" >> "$GITHUB_ENV"
+
     - name: Write OpenCode config
       shell: bash
       run: |
@@ -24,7 +46,7 @@ runs:
         {
           "\$schema": "https://opencode.ai/config.json",
           "enabled_providers": ["${{ inputs.enabled-provider }}"],
-          "model": "${{ inputs.model }}",
-          "small_model": "${{ inputs.small-model }}"
+          "model": "${OPENCODE_CI_MODEL}",
+          "small_model": "${OPENCODE_CI_SMALL_MODEL}"
         }
         EOF
