@@ -248,6 +248,15 @@ jobs:
           VITE_SENTRY_ENVIRONMENT: ${{ (github.ref_name == 'beta' && 'beta') || 'production' }}
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
 
+      - name: Warm Electron cache for Windows ARM64
+        if: matrix.settings.target == 'aarch64-pc-windows-msvc' && (runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true')
+        run: |
+          node -e "const { downloadArtifact } = require('@electron/get'); const version = require('./package.json').devDependencies.electron; downloadArtifact({ version, platform: 'win32', arch: 'arm64' }).then((file) => console.log('cached ' + file)).catch((error) => { console.error(error); process.exit(1) })"
+        working-directory: packages/desktop
+        env:
+          GH_TOKEN: ""
+          GITHUB_TOKEN: ""
+
       - name: Package and publish
         if: needs.version.outputs.release && (runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true')
         run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish always --config electron-builder.config.ts
