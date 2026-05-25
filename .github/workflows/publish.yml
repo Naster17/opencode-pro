@@ -257,9 +257,9 @@ jobs:
           GH_TOKEN: ""
           GITHUB_TOKEN: ""
 
-      - name: Package and publish
+      - name: Package
         if: needs.version.outputs.release && (runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true')
-        run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish always --config electron-builder.config.ts
+        run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
         working-directory: packages/desktop
         timeout-minutes: 60
         env:
@@ -279,11 +279,9 @@ jobs:
         env:
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
 
-      - name: Create and upload macOS .app.tar.gz
+      - name: Create macOS .app.tar.gz
         if: runner.os == 'macOS' && env.HAS_APPLE_CERT == 'true' && needs.version.outputs.release
         working-directory: packages/desktop/dist
-        env:
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
         run: |
           if [[ "${{ matrix.settings.target }}" == "x86_64-apple-darwin" ]]; then
             APP_DIR="mac"
@@ -301,7 +299,15 @@ jobs:
             exit 1
           fi
           tar -czf "$OUT_NAME" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
-          gh release upload "v${{ needs.version.outputs.version }}" "$OUT_NAME" --clobber --repo "${{ needs.version.outputs.repo }}"
+
+      - name: Upload release assets
+        if: needs.version.outputs.release && (runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true')
+        run: bun ./scripts/upload-release-assets.ts
+        working-directory: packages/desktop
+        env:
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          GH_REPO: ${{ needs.version.outputs.repo }}
 
       - uses: actions/upload-artifact@v6
         if: runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true'

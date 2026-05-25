@@ -10,6 +10,7 @@ import {
   createMemo,
   ErrorBoundary,
   createSignal,
+  onCleanup,
   onMount,
   batch,
   Show,
@@ -109,6 +110,26 @@ function errorMessage(error: unknown) {
     return error.data.message
   }
   return FormatUnknownError(error)
+}
+
+function activeTitleState(tool: string) {
+  const label = tool === "shell" || tool === "bash" ? "execute" : tool
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+function titleLabel(state: string) {
+  return state.charAt(0).toUpperCase() + state.slice(1)
+}
+
+function animatedTitle(label: string, frame: number) {
+  return `OC | ${label}${".".repeat((frame % 3) + 1)}`
+}
+
+function sessionHasActiveWork(sessionID: string, sync: ReturnType<typeof useSync>) {
+  const status = sync.data.session_status[sessionID]
+  if (status?.type === "retry") return true
+  if (status?.type !== "busy") return false
+  return sync.session.status(sessionID) === "working"
 }
 
 export function tui(input: {
@@ -316,6 +337,43 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   )
   const [pendingPermissionIDs, setPendingPermissionIDs] = createSignal(new Set<string>())
   const pendingPermissionCount = createMemo(() => pendingPermissionIDs().size)
+  const [titleAnimationFrame, setTitleAnimationFrame] = createSignal(0)
+
+  onMount(() => {
+    const interval = setInterval(() => {
+      setTitleAnimationFrame((prev) => prev + 1)
+    }, 500)
+    onCleanup(() => clearInterval(interval))
+  })
+
+  const activeSessionTitle = createMemo(() => {
+    if (route.data.type !== "session") return
+    if (!sessionHasActiveWork(route.data.sessionID, sync)) return
+
+    const assistant = (sync.data.message[route.data.sessionID] ?? []).findLast(
+      (message) => message.role === "assistant" && !message.time.completed,
+    )
+    if (!assistant) return animatedTitle(titleLabel("processing"), titleAnimationFrame())
+
+    const tool = (sync.data.part[assistant.id] ?? []).findLast(
+      (part) => part.type === "tool" && ["pending", "running"].includes(part.state.status),
+    )
+    if (tool?.type === "tool") {
+      return animatedTitle(activeTitleState(tool.tool), titleAnimationFrame())
+    }
+
+    const hasResponse = (sync.data.part[assistant.id] ?? []).some((part) => {
+      if (part.type === "text") return !!part.text.trim() && !part.synthetic && !part.ignored
+      if (part.type === "reasoning") return !!part.text.trim()
+      if (part.type === "tool") return ["completed", "error"].includes(part.state.status)
+      return false
+    })
+    if (!hasResponse) {
+      return animatedTitle(titleLabel("processing"), titleAnimationFrame())
+    }
+
+    return animatedTitle(titleLabel("response"), titleAnimationFrame())
+  })
 
   event.on("permission.asked", (evt) => {
     setPendingPermissionIDs((prev) => new Set(prev).add(evt.properties.id))
@@ -346,6 +404,12 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     }
 
     if (route.data.type === "session") {
+      const active = activeSessionTitle()
+      if (active) {
+        renderer.setTerminalTitle(active)
+        return
+      }
+
       const session = sync.session.get(route.data.sessionID)
       if (!session || SessionApi.isDefaultTitle(session.title)) {
         renderer.setTerminalTitle("OpenCode")
