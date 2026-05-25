@@ -33,6 +33,17 @@ import { emptyConsoleState, type ConsoleState } from "@/config/console-state"
 import path from "path"
 import { useKV } from "./kv"
 
+function toolStateRank(status: "pending" | "running" | "completed" | "error") {
+  if (status === "pending") return 0
+  if (status === "running") return 1
+  return 2
+}
+
+function shouldPreservePart(current: Part | undefined, next: Part) {
+  if (!current || current.type !== "tool" || next.type !== "tool") return false
+  return toolStateRank(current.state.status) > toolStateRank(next.state.status)
+}
+
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
@@ -115,57 +126,56 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const fullSyncedSessions = new Set<string>()
     const fullHistorySyncedSessions = new Set<string>()
     let syncedWorkspace = project.workspace.current()
-    const queuedPartUpdates = new Map<string, Part>()
-    const queuedPartDeltas = new Map<string, { messageID: string; partID: string; field: string; delta: string }>()
+    const queuedPartEvents: Array<
+      | {
+          type: "update"
+          part: Part
+        }
+      | {
+          type: "delta"
+          messageID: string
+          partID: string
+          field: string
+          delta: string
+        }
+    > = []
     let queuedPartFlush: ReturnType<typeof setTimeout> | undefined
 
     function flushQueuedPartEvents() {
       queuedPartFlush = undefined
-      if (queuedPartUpdates.size === 0 && queuedPartDeltas.size === 0) return
-      const updates = [...queuedPartUpdates.values()]
-      const deltas = [...queuedPartDeltas.values()]
-      queuedPartUpdates.clear()
-      queuedPartDeltas.clear()
-      batch(() => {
-        if (updates.length > 0) {
-          setStore(
-            "part",
-            produce((draft) => {
-              for (const part of updates) {
-                const parts = draft[part.messageID]
-                if (!parts) {
-                  draft[part.messageID] = [part]
-                  continue
-                }
-                const result = Binary.search(parts, part.id, (item) => item.id)
-                if (result.found) {
-                  parts[result.index] = part
-                  continue
-                }
-                parts.splice(result.index, 0, part)
+      if (queuedPartEvents.length === 0) return
+      const events = queuedPartEvents.splice(0)
+      setStore(
+        "part",
+        produce((draft) => {
+          for (const event of events) {
+            if (event.type === "update") {
+              const parts = draft[event.part.messageID]
+              if (!parts) {
+                draft[event.part.messageID] = [event.part]
+                continue
               }
-            }),
-          )
-        }
+              const result = Binary.search(parts, event.part.id, (item) => item.id)
+              if (result.found) {
+                if (shouldPreservePart(parts[result.index], event.part)) continue
+                parts[result.index] = event.part
+                continue
+              }
+              parts.splice(result.index, 0, event.part)
+              continue
+            }
 
-        if (deltas.length > 0) {
-          setStore(
-            "part",
-            produce((draft) => {
-              for (const delta of deltas) {
-                const parts = draft[delta.messageID]
-                if (!parts) continue
-                const result = Binary.search(parts, delta.partID, (part) => part.id)
-                if (!result.found) continue
-                const part = parts[result.index]
-                const field = delta.field as keyof typeof part
-                const existing = part[field] as string | undefined
-                ;(part[field] as string) = (existing ?? "") + delta.delta
-              }
-            }),
-          )
-        }
-      })
+            const parts = draft[event.messageID]
+            if (!parts) continue
+            const result = Binary.search(parts, event.partID, (part) => part.id)
+            if (!result.found) continue
+            const part = parts[result.index]
+            const field = event.field as keyof typeof part
+            const existing = part[field] as string | undefined
+            ;(part[field] as string) = (existing ?? "") + event.delta
+          }
+        }),
+      )
     }
 
     function scheduleQueuedPartEvents() {
@@ -383,19 +393,32 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
         case "message.part.updated": {
-          queuedPartUpdates.set(`${event.properties.part.messageID}:${event.properties.part.id}`, event.properties.part)
+          queuedPartEvents.push({
+            type: "update",
+            part: event.properties.part,
+          })
           scheduleQueuedPartEvents()
           break
         }
 
         case "message.part.delta": {
-          const key = `${event.properties.messageID}:${event.properties.partID}:${event.properties.field}`
-          const existing = queuedPartDeltas.get(key)
-          queuedPartDeltas.set(key, {
+          const previous = queuedPartEvents.at(-1)
+          if (
+            previous?.type === "delta" &&
+            previous.messageID === event.properties.messageID &&
+            previous.partID === event.properties.partID &&
+            previous.field === event.properties.field
+          ) {
+            previous.delta += event.properties.delta
+            scheduleQueuedPartEvents()
+            break
+          }
+          queuedPartEvents.push({
+            type: "delta",
             messageID: event.properties.messageID,
             partID: event.properties.partID,
             field: event.properties.field,
-            delta: (existing?.delta ?? "") + event.properties.delta,
+            delta: event.properties.delta,
           })
           scheduleQueuedPartEvents()
           break

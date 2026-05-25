@@ -47,7 +47,7 @@ import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { reply, TestLLMServer } from "../lib/llm-server"
+import { raw, reply, TestLLMServer } from "../lib/llm-server"
 
 void Log.init({ print: false })
 
@@ -750,6 +750,91 @@ it.live(
         expect((yield* status.get(chat.id)).type).toBe("busy")
         yield* prompt.cancel(chat.id)
         yield* Fiber.await(fiber)
+        expect((yield* status.get(chat.id)).type).toBe("idle")
+      }),
+      { git: true, config: providerCfg },
+    ),
+  10_000,
+)
+
+unix(
+  "loop continues when provider stream stalls after tool result",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const previous = globalThis.process.env.OPENCODE_TEST_TOOL_RESULT_STALL_TIMEOUT_MS
+        globalThis.process.env.OPENCODE_TEST_TOOL_RESULT_STALL_TIMEOUT_MS = "20"
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            if (previous === undefined) delete globalThis.process.env.OPENCODE_TEST_TOOL_RESULT_STALL_TIMEOUT_MS
+            else globalThis.process.env.OPENCODE_TEST_TOOL_RESULT_STALL_TIMEOUT_MS = previous
+          }),
+        )
+
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const status = yield* SessionStatus.Service
+        const chat = yield* sessions.create({
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+
+        yield* llm.push(
+          raw({
+            head: [
+              {
+                id: "chatcmpl-tool-stall",
+                object: "chat.completion.chunk",
+                choices: [{ delta: { role: "assistant" } }],
+              },
+              {
+                id: "chatcmpl-tool-stall",
+                object: "chat.completion.chunk",
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        {
+                          index: 0,
+                          id: "call_1",
+                          type: "function",
+                          function: { name: "bash", arguments: "" },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+              {
+                id: "chatcmpl-tool-stall",
+                object: "chat.completion.chunk",
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        {
+                          index: 0,
+                          function: { arguments: JSON.stringify({ command: "pwd", description: "print cwd" }) },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+              {
+                id: "chatcmpl-tool-stall",
+                object: "chat.completion.chunk",
+                choices: [{ delta: {}, finish_reason: "tool_calls" }],
+              },
+            ],
+            hang: true,
+          }),
+        )
+        yield* llm.text("after-tool")
+        yield* user(chat.id, "run pwd")
+
+        const result = yield* prompt.loop({ sessionID: chat.id })
+
+        expect(result.parts.some((part) => part.type === "text" && part.text === "after-tool")).toBe(true)
         expect((yield* status.get(chat.id)).type).toBe("idle")
       }),
       { git: true, config: providerCfg },

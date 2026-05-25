@@ -10,6 +10,14 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 
+function isTerminalToolState(state: SessionMessageAssistantTool["state"]) {
+  return state.status === "completed" || state.status === "error"
+}
+
+function toolStateInput(state: SessionMessageAssistantTool["state"]) {
+  return typeof state.input === "string" ? {} : state.input
+}
+
 function activeAssistant(messages: SessionMessage[]) {
   const index = messages.findIndex((message) => message.type === "assistant" && !message.time.completed)
   if (index < 0) return
@@ -192,6 +200,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           update(event.properties.sessionID, (draft) => {
             const match = latestTool(activeAssistant(draft), event.properties.callID)
             if (!match) return
+            if (isTerminalToolState(match.state)) return
             match.time.ran = event.properties.timestamp
             match.provider = event.properties.provider
             match.state = { status: "running", input: event.properties.input, structured: {}, content: [] }
@@ -208,10 +217,10 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
         case "session.next.tool.success":
           update(event.properties.sessionID, (draft) => {
             const match = latestTool(activeAssistant(draft), event.properties.callID)
-            if (match?.state.status !== "running") return
+            if (!match || isTerminalToolState(match.state)) return
             match.state = {
               status: "completed",
-              input: match.state.input,
+              input: toolStateInput(match.state),
               structured: event.properties.structured,
               content: [...event.properties.content],
             }
@@ -222,13 +231,13 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
         case "session.next.tool.failed":
           update(event.properties.sessionID, (draft) => {
             const match = latestTool(activeAssistant(draft), event.properties.callID)
-            if (match?.state.status !== "running") return
+            if (!match || isTerminalToolState(match.state)) return
             match.state = {
               status: "error",
               error: event.properties.error,
-              input: match.state.input,
-              structured: match.state.structured,
-              content: match.state.content,
+              input: toolStateInput(match.state),
+              structured: match.state.status === "running" ? match.state.structured : {},
+              content: match.state.status === "running" ? match.state.content : [],
             }
             match.provider = event.properties.provider
             match.time.completed = event.properties.timestamp

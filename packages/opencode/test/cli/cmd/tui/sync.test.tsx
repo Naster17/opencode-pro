@@ -10,6 +10,7 @@ import { ProjectProvider } from "../../../../src/cli/cmd/tui/context/project"
 import { SDKProvider, type EventSource } from "../../../../src/cli/cmd/tui/context/sdk"
 import { SyncProvider, useSync } from "../../../../src/cli/cmd/tui/context/sync"
 import { tmpdir } from "../../../fixture/fixture"
+import type { Event, GlobalEvent } from "@opencode-ai/sdk/v2"
 
 const worktree = "/tmp/opencode"
 const directory = `${worktree}/packages/opencode`
@@ -28,9 +29,12 @@ function json(data: unknown) {
   })
 }
 
-function eventSource(): EventSource {
+function eventSource(input?: { handler?: (event: GlobalEvent) => void }): EventSource {
   return {
-    subscribe: async () => () => {},
+    subscribe: async (handler) => {
+      input && (input.handler = handler)
+      return () => {}
+    },
   }
 }
 
@@ -78,6 +82,7 @@ function createFetch() {
 
 async function mount() {
   const calls = createFetch()
+  const events: { handler?: (event: GlobalEvent) => void } = {}
   let sync!: ReturnType<typeof useSync>
   let kv!: ReturnType<typeof useKV>
   let done!: () => void
@@ -89,7 +94,7 @@ async function mount() {
     <ArgsProvider>
       <ExitProvider>
         <KVProvider>
-          <SDKProvider url="http://test" directory={directory} fetch={calls.fetch} events={eventSource()}>
+          <SDKProvider url="http://test" directory={directory} fetch={calls.fetch} events={eventSource(events)}>
             <ProjectProvider>
               <SyncProvider>
                 <Probe
@@ -109,7 +114,15 @@ async function mount() {
 
   await ready
   await wait(() => sync.status === "complete")
-  return { app, kv, sync, session: calls.session }
+  return {
+    app,
+    kv,
+    sync,
+    session: calls.session,
+    emit(payload: Event) {
+      events.handler?.({ directory, payload } as GlobalEvent)
+    },
+  }
 }
 
 function Probe(props: { onReady: (ctx: { kv: ReturnType<typeof useKV>; sync: ReturnType<typeof useSync> }) => void }) {
@@ -141,6 +154,68 @@ describe("tui sync", () => {
 
       expect(session.at(-1)?.searchParams.get("scope")).toBe("project")
       expect(session.at(-1)?.searchParams.get("path")).toBeNull()
+    } finally {
+      app.renderer.destroy()
+      Global.Path.state = previous
+    }
+  })
+
+  test("preserves completed tool state when stale running update arrives in same flush", async () => {
+    const previous = Global.Path.state
+    await using tmp = await tmpdir()
+    Global.Path.state = tmp.path
+    await Bun.write(`${tmp.path}/kv.json`, "{}")
+    const { app, emit, sync } = await mount()
+
+    try {
+      const base = {
+        id: "part_tool",
+        sessionID: "session_1",
+        messageID: "message_1",
+        type: "tool" as const,
+        tool: "read",
+        callID: "call_1",
+      }
+      emit({
+        id: "event_completed",
+        type: "message.part.updated",
+        properties: {
+          sessionID: "session_1",
+          time: 1,
+          part: {
+            ...base,
+            state: {
+              status: "completed",
+              input: { filePath: "a.ts" },
+              output: "ok",
+              title: "Read",
+              metadata: {},
+              time: { start: 1, end: 2 },
+            },
+          },
+        },
+      })
+      emit({
+        id: "event_running",
+        type: "message.part.updated",
+        properties: {
+          sessionID: "session_1",
+          time: 2,
+          part: {
+            ...base,
+            state: {
+              status: "running",
+              input: { filePath: "a.ts" },
+              time: { start: 1 },
+            },
+          },
+        },
+      })
+
+      await wait(() => sync.data.part.message_1?.[0]?.type === "tool")
+      const part = sync.data.part.message_1?.[0]
+      expect(part?.type).toBe("tool")
+      if (part?.type === "tool") expect(part.state.status).toBe("completed")
     } finally {
       app.renderer.destroy()
       Global.Path.state = previous

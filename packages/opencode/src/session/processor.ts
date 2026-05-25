@@ -27,6 +27,7 @@ import * as DateTime from "effect/DateTime"
 import { ProviderError } from "@/provider/error"
 
 const DOOM_LOOP_THRESHOLD = 3
+const TOOL_RESULT_STALL_TIMEOUT = 60_000
 const log = Log.create({ service: "session.processor" })
 
 export type Result = "compact" | "stop" | "continue"
@@ -235,6 +236,7 @@ export const layer: Layer.Layer<
       ) {
         const match = yield* readToolCall(toolCallID)
         if (!match) return
+        if (match.part.state.status === "completed" || match.part.state.status === "error") return match.part
         const part = yield* updatePart(update(match.part))
         ctx.toolcalls[toolCallID] = {
           ...match.call,
@@ -255,7 +257,12 @@ export const layer: Layer.Layer<
         },
       ) {
         const match = yield* readToolCall(toolCallID)
-        if (!match || match.part.state.status !== "running") return
+        if (!match) return
+        if (match.part.state.status === "completed" || match.part.state.status === "error") {
+          yield* settleToolCall(toolCallID)
+          return
+        }
+        const start = match.part.state.status === "running" ? match.part.state.time.start : Date.now()
         yield* updatePart({
           ...match.part,
           state: {
@@ -264,7 +271,7 @@ export const layer: Layer.Layer<
             output: output.output,
             metadata: output.metadata,
             title: output.title,
-            time: { start: match.part.state.time.start, end: Date.now() },
+            time: { start, end: Date.now() },
             attachments: output.attachments,
           },
         })
@@ -273,14 +280,19 @@ export const layer: Layer.Layer<
 
       const failToolCall = Effect.fn("SessionProcessor.failToolCall")(function* (toolCallID: string, error: unknown) {
         const match = yield* readToolCall(toolCallID)
-        if (!match || match.part.state.status !== "running") return false
+        if (!match) return false
+        if (match.part.state.status === "completed" || match.part.state.status === "error") {
+          yield* settleToolCall(toolCallID)
+          return false
+        }
+        const start = match.part.state.status === "running" ? match.part.state.time.start : Date.now()
         yield* updatePart({
           ...match.part,
           state: {
             status: "error",
             input: match.part.state.input,
             error: errorMessage(error),
-            time: { start: match.part.state.time.start, end: Date.now() },
+            time: { start, end: Date.now() },
           },
         })
         if (error instanceof Permission.RejectedError || error instanceof Question.RejectedError) {
@@ -775,6 +787,24 @@ export const layer: Layer.Layer<
         slog.info("process")
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+        const toolResultStallTimeout = () =>
+          Number(globalThis.process.env.OPENCODE_TEST_TOOL_RESULT_STALL_TIMEOUT_MS ?? TOOL_RESULT_STALL_TIMEOUT)
+        const toolResultSettled = yield* Deferred.make<void>()
+        const signalToolResultSettled = Effect.fnUntraced(function* (event: StreamEvent) {
+          if (event.type !== "tool-result" && event.type !== "tool-error") return
+          if (Object.keys(ctx.toolcalls).length > 0) return
+          yield* Deferred.succeed(toolResultSettled, undefined).pipe(Effect.ignore)
+        })
+        const toolResultStall = Deferred.await(toolResultSettled).pipe(
+          Effect.andThen(() => Effect.sleep(toolResultStallTimeout())),
+          Effect.tap(() =>
+            Effect.sync(() =>
+              slog.warn("stream stalled after tool result", {
+                timeout: toolResultStallTimeout(),
+              }),
+            ),
+          ),
+        )
 
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
@@ -782,10 +812,13 @@ export const layer: Layer.Layer<
             ctx.reasoningMap = {}
             const stream = llm.stream({ ...streamInput, ephemeral: input.ephemeral })
 
-            yield* stream.pipe(
-              Stream.tap((event) => handleEvent(event)),
-              Stream.takeUntil(() => ctx.needsCompaction),
-              Stream.runDrain,
+            yield* Effect.raceFirst(
+              stream.pipe(
+                Stream.tap((event) => handleEvent(event).pipe(Effect.andThen(signalToolResultSettled(event)))),
+                Stream.takeUntil(() => ctx.needsCompaction),
+                Stream.runDrain,
+              ),
+              toolResultStall,
             )
           }).pipe(
             Effect.onInterrupt(() =>

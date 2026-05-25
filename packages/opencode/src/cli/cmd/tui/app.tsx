@@ -501,6 +501,15 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   )
 
   const connected = useConnected()
+  function cycleAgent(direction: 1 | -1) {
+    const model = local.model.current()
+    const variant = local.model.variant.current()
+    local.agent.move(direction)
+    if (!model) return
+    local.model.set(model)
+    local.model.variant.set(variant)
+  }
+
   command.register(() => [
     {
       title: "Switch session",
@@ -616,7 +625,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.agent.move(1)
+        cycleAgent(1)
       },
     },
     {
@@ -658,7 +667,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.agent.move(-1)
+        cycleAgent(-1)
       },
     },
     {

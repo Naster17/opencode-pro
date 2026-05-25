@@ -3231,7 +3231,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
       if (current()) {
         const state = current()!.state
         const title = state.status === "running" || state.status === "completed" ? state.title : undefined
-        content.push(`↳ ${Locale.titlecase(current()!.tool)} ${title}`)
+        content.push(`↳ ${Locale.titlecase(shortBtwActionLabel(current()!.tool))} ${title}`)
       } else content.push(`↳ ${tools().length} toolcalls`)
     }
 
