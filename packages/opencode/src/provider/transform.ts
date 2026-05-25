@@ -80,65 +80,69 @@ function normalizeMessages(
   model: Provider.Model,
   _options: Record<string, unknown>,
 ): ModelMessage[] {
-  const sanitizeToolResultOutput = (content: ToolResultPart) => {
-    if (content.output.type === "text" || content.output.type === "error-text") {
-      content.output.value = sanitizeSurrogates(content.output.value)
+  const sanitizeToolResultOutput = (content: ToolResultPart): ToolResultPart => {
+    const cloned = { ...content, output: { ...content.output } }
+    if (cloned.output.type === "text" || cloned.output.type === "error-text") {
+      cloned.output.value = sanitizeSurrogates(cloned.output.value)
     }
-    if (content.output.type === "content") {
-      content.output.value = content.output.value.map((item) => {
+    if (cloned.output.type === "content") {
+      cloned.output.value = cloned.output.value.map((item) => {
         if (item.type === "text") {
-          item.text = sanitizeSurrogates(item.text)
+          return { ...item, text: sanitizeSurrogates(item.text) }
         }
         return item
       })
     }
-    return content
+    return cloned
   }
 
   msgs = msgs.map((msg) => {
     switch (msg.role) {
       case "tool":
         if (!Array.isArray(msg.content)) return msg
-        msg.content = msg.content.map((content) => {
-          if (content.type === "tool-result") {
-            return sanitizeToolResultOutput(content)
-          }
-          return content
-        })
-        return msg
+        return {
+          ...msg,
+          content: msg.content.map((content) => {
+            if (content.type === "tool-result") {
+              return sanitizeToolResultOutput(content)
+            }
+            return content
+          }),
+        }
 
       case "system":
-        msg.content = sanitizeSurrogates(msg.content)
-        return msg
+        return { ...msg, content: sanitizeSurrogates(msg.content) }
 
       case "user":
         if (typeof msg.content === "string") {
-          msg.content = sanitizeSurrogates(msg.content)
-        } else {
-          msg.content = msg.content.map((content) => {
+          return { ...msg, content: sanitizeSurrogates(msg.content) }
+        }
+        return {
+          ...msg,
+          content: msg.content.map((content) => {
             if (content.type === "text") {
-              content.text = sanitizeSurrogates(content.text)
+              return { ...content, text: sanitizeSurrogates(content.text) }
             }
             return content
-          })
+          }),
         }
-        return msg
 
       case "assistant":
         if (typeof msg.content === "string") {
-          msg.content = sanitizeSurrogates(msg.content)
-        } else {
-          msg.content = msg.content.map((content) => {
+          return { ...msg, content: sanitizeSurrogates(msg.content) }
+        }
+        return {
+          ...msg,
+          content: msg.content.map((content) => {
             if (content.type === "text" || content.type === "reasoning") {
-              content.text = sanitizeSurrogates(content.text)
+              return { ...content, text: sanitizeSurrogates(content.text) }
             }
             if (content.type === "tool-result") {
               return sanitizeToolResultOutput(content)
             }
             return content
-          })
+          }),
         }
-        return msg
     }
   })
 
@@ -332,6 +336,8 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: Cach
   if (!cachingEnabled) {
     return msgs
   }
+
+  msgs = structuredClone(msgs)
 
   // Cache system prompts (first 2)
   const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)

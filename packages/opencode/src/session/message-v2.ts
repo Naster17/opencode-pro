@@ -732,7 +732,7 @@ function providerMeta(metadata: Record<string, any> | undefined) {
 export const toModelMessagesEffect = Effect.fnUntraced(function* (
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
+  options?: { stripMedia?: boolean; toolOutputMaxChars?: number; compactToolOutput?: boolean },
 ) {
   // Try to get Storage and Config services if available
   const storage = yield* Effect.serviceOption(Storage.Service)
@@ -741,7 +741,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   const cfg = config._tag === "Some" ? yield* config.value.get() : undefined
   const stablePrune = cfg?.compaction?.stable_prune ?? true
   
-  if (storage._tag === "Some") {
+  if (options?.compactToolOutput && storage._tag === "Some") {
     if (stablePrune) {
       const sessionID = input[0]?.info.sessionID
       const toolPartIds = input.flatMap((msg) =>
@@ -775,6 +775,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   
   // Helper to check if a tool part is compacted
   const isCompacted = (part: ToolPart): boolean => {
+    if (!options?.compactToolOutput) return false
     // Check legacy compacted timestamp (when stable_prune is disabled)
     if (part.state.status === "completed" && part.state.time.compacted) {
       return true
@@ -1048,7 +1049,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 export function toModelMessages(
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
+  options?: { stripMedia?: boolean; toolOutputMaxChars?: number; compactToolOutput?: boolean },
 ): Promise<ModelMessage[]> {
   return Effect.runPromise(toModelMessagesEffect(input, model, options).pipe(Effect.provide(EffectLogger.layer)))
 }

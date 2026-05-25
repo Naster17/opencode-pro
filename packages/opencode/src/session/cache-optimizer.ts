@@ -6,6 +6,18 @@ import { createHash } from "crypto"
 
 const log = Log.create({ service: "cache-optimizer" })
 
+function stableHashValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableHashValue)
+  if (!value || typeof value !== "object") return value
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => key !== "providerOptions" && key !== "providerMetadata" && key !== "callProviderMetadata")
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, item]) => [key, stableHashValue(item)]),
+  )
+}
+
 /**
  * Cache optimization utilities for reducing token usage through intelligent caching
  */
@@ -46,9 +58,8 @@ export function hashConversationHistory(messages: ModelMessage[]): string {
   const conversationMessages = messages
     .filter((msg) => msg.role !== "system")
     .map((msg) => {
-      // Create a stable representation of the message
       const role = msg.role
-      const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content)
+      const content = typeof msg.content === "string" ? msg.content : JSON.stringify(stableHashValue(msg.content))
       return `${role}:${content}`
     })
     .join("|")

@@ -367,7 +367,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("uses session-scoped stable prune metadata without reading each tool marker", async () => {
+  test("preserves provider-visible tool output by default with stable prune metadata", async () => {
     const userID = "m-user-pruned"
     const assistantID = "m-assistant-pruned"
     const input: MessageV2.WithParts[] = [
@@ -396,15 +396,6 @@ describe("session.message-v2.toModelMessage", () => {
               title: "Bash",
               metadata: {},
               time: { start: 0, end: 1 },
-              attachments: [
-                {
-                  ...basePart(assistantID, "file-pruned"),
-                  type: "file",
-                  mime: "image/png",
-                  filename: "attachment.png",
-                  url: "data:image/png;base64,Zm9v",
-                },
-              ],
             },
           },
         ] as MessageV2.Part[],
@@ -458,6 +449,96 @@ describe("session.message-v2.toModelMessage", () => {
           {
             type: "tool-result",
             toolCallId: "call-pruned",
+            toolName: "bash",
+            output: { type: "text", value: "very long output" },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("uses session-scoped stable prune metadata when compaction requests compact output", async () => {
+    const userID = "m-user-pruned-explicit"
+    const assistantID = "m-assistant-pruned-explicit"
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u-pruned-explicit"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a-pruned-explicit"),
+            type: "tool",
+            callID: "call-pruned-explicit",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "very long output",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await Effect.runPromise(
+      MessageV2.toModelMessagesEffect(input, model, { compactToolOutput: true }).pipe(
+        Effect.provide(EffectLogger.layer),
+        Effect.provide(TestConfig.layer({ get: () => Effect.succeed({ compaction: { stable_prune: true } }) })),
+        Effect.provide(
+          Layer.succeed(
+            Storage.Service,
+            Storage.Service.of({
+              remove: () => Effect.void,
+              update: () => Effect.die("unexpected storage.update"),
+              write: () => Effect.die("unexpected storage.write"),
+              list: () => Effect.succeed([]),
+              read: <T,>(key: string[]) => {
+                if (key[0] === "compacted_tool_session") {
+                  return Effect.succeed({ partIDs: ["a-pruned-explicit"] } as T)
+                }
+                return Effect.die(`unexpected storage.read: ${key.join("/")}`)
+              },
+            }),
+          ),
+        ),
+      ),
+    )
+
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-pruned-explicit",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-pruned-explicit",
             toolName: "bash",
             output: { type: "text", value: "[Old tool result content cleared]" },
           },
@@ -632,7 +713,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("replaces compacted tool output with placeholder", async () => {
+  test("preserves compacted tool output by default", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
 
@@ -669,6 +750,73 @@ describe("session.message-v2.toModelMessage", () => {
     ]
 
     expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "bash",
+            output: { type: "text", value: "this should be cleared" },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("replaces compacted tool output with placeholder when requested", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "this should be cleared",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1, compacted: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model, { compactToolOutput: true })).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],

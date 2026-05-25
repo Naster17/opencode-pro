@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { ProviderTransform } from "@/provider/transform"
+import { CacheOptimizer } from "@/session/cache-optimizer"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 
 describe("ProviderTransform.options - setCacheKey", () => {
@@ -2339,6 +2340,49 @@ describe("ProviderTransform.message - transient caching", () => {
     expect(transient[2].providerOptions?.anthropic?.cacheControl).toEqual({ type: "ephemeral" })
     expect(transient[4].providerOptions).toBeUndefined()
     expect(transient[0].providerOptions?.anthropic?.cacheControl).toEqual({ type: "ephemeral" })
+  })
+
+  test("does not mutate messages while applying cache controls", () => {
+    const input = messages()
+    const before = structuredClone(input)
+
+    ProviderTransform.message(input, model, {}, {
+      caching: { breakpoint_interval: 100, min_messages: 1 },
+    })
+
+    expect(input).toStrictEqual(before)
+  })
+})
+
+describe("ProviderTransform.message - stable hashing", () => {
+  test("ignores dynamic provider metadata in conversation hashes", () => {
+    const base = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "stable",
+          },
+        ],
+      },
+    ] as any[]
+    const withMetadata = [
+      {
+        role: "assistant",
+        providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+        content: [
+          {
+            type: "text",
+            text: "stable",
+            providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+            providerMetadata: { dynamic: true },
+          },
+        ],
+      },
+    ] as any[]
+
+    expect(CacheOptimizer.hashConversationHistory(withMetadata)).toBe(CacheOptimizer.hashConversationHistory(base))
   })
 })
 
