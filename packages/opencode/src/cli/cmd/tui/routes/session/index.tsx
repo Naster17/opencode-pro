@@ -2503,7 +2503,8 @@ function assistantDerivedMetrics(parts: Part[]): AssistantDerivedMetrics {
 function shortBtwActionLabel(name: string) {
   if (["bash", "shell", "execute", "command"].includes(name)) return "execute"
   if (["read", "view"].includes(name)) return "read"
-  if (["write", "edit", "apply_patch"].includes(name)) return "write"
+  if (["write", "edit"].includes(name)) return "write"
+  if (["apply_patch"].includes(name)) return "patching"
   if (["glob"].includes(name)) return "glob"
   if (["grep", "search"].includes(name)) return "search"
   if (["todowrite", "plan"].includes(name)) return "plan"
@@ -2519,7 +2520,7 @@ function btwTitleActionLabel(title: string, tool: string) {
   if (value.startsWith("read")) return "read"
   if (value.startsWith("write")) return "write"
   if (value.startsWith("edit")) return "write"
-  if (value.startsWith("patch")) return "write"
+  if (value.startsWith("patch")) return "patching"
   if (value.startsWith("search")) return "search"
   if (value.startsWith("grep")) return "search"
   if (value.startsWith("glob")) return "glob"

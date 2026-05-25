@@ -113,6 +113,7 @@ function errorMessage(error: unknown) {
 }
 
 function activeTitleState(tool: string) {
+  if (tool === "apply_patch") return "Patching"
   const label = tool === "shell" || tool === "bash" ? "execute" : tool
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
