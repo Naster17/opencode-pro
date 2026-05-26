@@ -2895,6 +2895,7 @@ function InlineTool(props: {
   const sync = useSync()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
+  const complete = createMemo(() => props.part.state.status === "error" || !!props.complete)
 
   const permission = createMemo(() => {
     const callID = sync.data.permission[ctx.sessionID]?.at(0)?.tool?.callID
@@ -2905,7 +2906,7 @@ function InlineTool(props: {
   const fg = createMemo(() => {
     if (permission()) return theme.warning
     if (hover() && props.onClick) return theme.text
-    if (props.complete) return theme.textMuted
+    if (complete()) return theme.textMuted
     return theme.text
   })
 
@@ -2958,7 +2959,7 @@ function InlineTool(props: {
         </Match>
         <Match when={true}>
           <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
-            <Show fallback={<>~ {props.pending}</>} when={props.complete}>
+            <Show fallback={<>~ {props.pending}</>} when={complete()}>
               <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
             </Show>
           </text>

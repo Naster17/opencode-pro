@@ -1352,6 +1352,72 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ])
   })
+
+  test("sends failed apply_patch output back to the model as a tool result", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+    const message = "apply_patch verification failed: Failed to find expected lines"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "patch file",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-patch",
+            tool: "apply_patch",
+            state: {
+              status: "error",
+              input: { patchText: "*** Begin Patch\n*** End Patch" },
+              error: message,
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "patch file" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-patch",
+            toolName: "apply_patch",
+            input: { patchText: "*** Begin Patch\n*** End Patch" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-patch",
+            toolName: "apply_patch",
+            output: { type: "error-text", value: message },
+          },
+        ],
+      },
+    ])
+  })
 })
 
 describe("session.message-v2.fromError", () => {

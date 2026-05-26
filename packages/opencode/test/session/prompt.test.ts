@@ -775,6 +775,7 @@ unix(
         const sessions = yield* Session.Service
         const status = yield* SessionStatus.Service
         const chat = yield* sessions.create({
+          title: "Pinned",
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         })
 

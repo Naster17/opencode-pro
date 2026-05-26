@@ -532,7 +532,7 @@ function InlineTool(props: {
   const [hover, setHover] = createSignal(false)
   const [showError, setShowError] = createSignal(false)
   const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error.message : undefined))
-  const complete = createMemo(() => !!props.complete)
+  const complete = createMemo(() => props.part.state.status === "error" || !!props.complete)
   const denied = createMemo(() => {
     const message = error()
     if (!message) return false

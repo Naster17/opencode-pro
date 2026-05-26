@@ -27,6 +27,7 @@ import * as DateTime from "effect/DateTime"
 import { ProviderError } from "@/provider/error"
 
 const DOOM_LOOP_THRESHOLD = 3
+const TOOL_ERROR_STALL_TIMEOUT = 5_000
 const TOOL_RESULT_STALL_TIMEOUT = 60_000
 const log = Log.create({ service: "session.processor" })
 
@@ -787,20 +788,23 @@ export const layer: Layer.Layer<
         slog.info("process")
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
-        const toolResultStallTimeout = () =>
-          Number(globalThis.process.env.OPENCODE_TEST_TOOL_RESULT_STALL_TIMEOUT_MS ?? TOOL_RESULT_STALL_TIMEOUT)
-        const toolResultSettled = yield* Deferred.make<void>()
+        const toolResultStallTimeout = (event: StreamEvent) =>
+          Number(
+            globalThis.process.env.OPENCODE_TEST_TOOL_RESULT_STALL_TIMEOUT_MS ??
+              (event.type === "tool-error" ? TOOL_ERROR_STALL_TIMEOUT : TOOL_RESULT_STALL_TIMEOUT),
+          )
+        const toolResultSettled = yield* Deferred.make<number>()
         const signalToolResultSettled = Effect.fnUntraced(function* (event: StreamEvent) {
           if (event.type !== "tool-result" && event.type !== "tool-error") return
           if (Object.keys(ctx.toolcalls).length > 0) return
-          yield* Deferred.succeed(toolResultSettled, undefined).pipe(Effect.ignore)
+          yield* Deferred.succeed(toolResultSettled, toolResultStallTimeout(event)).pipe(Effect.ignore)
         })
         const toolResultStall = Deferred.await(toolResultSettled).pipe(
-          Effect.andThen(() => Effect.sleep(toolResultStallTimeout())),
-          Effect.tap(() =>
+          Effect.flatMap((timeout) => Effect.sleep(timeout).pipe(Effect.as(timeout))),
+          Effect.tap((timeout) =>
             Effect.sync(() =>
-              slog.warn("stream stalled after tool result", {
-                timeout: toolResultStallTimeout(),
+              slog.warn("stream stalled after settled tool call", {
+                timeout,
               }),
             ),
           ),
