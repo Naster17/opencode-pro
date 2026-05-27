@@ -26,6 +26,8 @@ const dir = process.env.LATEST_YML_DIR
 if (!dir) throw new Error("LATEST_YML_DIR is required")
 const root = dir
 
+const desktopDir = process.env.DESKTOP_DIST_DIR
+
 const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN
 if (!token) throw new Error("GH_TOKEN or GITHUB_TOKEN is required")
 
@@ -51,6 +53,13 @@ type Release = {
 
 const assets = ((await rel.json()) as Release).assets ?? []
 const amap = new Map(assets.map((item) => [item.name, item]))
+
+const lmap = new Map<string, string>()
+if (desktopDir) {
+  for await (const file of new Bun.Glob("**/*").scan({ cwd: desktopDir, absolute: true, onlyFiles: true })) {
+    lmap.set(path.basename(file), file)
+  }
+}
 
 type Item = {
   url: string
@@ -172,20 +181,24 @@ async function resolveTauriSigningKey() {
 
 async function sign(url: string, key: string) {
   const name = decodeURIComponent(new URL(url).pathname.split("/").pop() ?? key)
-  const asset = amap.get(name)
-  const res = await fetch(asset?.url ?? url, {
-    headers: {
-      Authorization: `token ${token}`,
-      ...(asset ? { Accept: "application/octet-stream" } : {}),
-    },
-  })
-  if (!res.ok) {
-    throw new Error(`Failed to fetch file ${name}: ${res.status} ${res.statusText} (${asset?.url ?? url})`)
-  }
-
   const tmp = process.env.RUNNER_TEMP ?? "/tmp"
   const file = path.join(tmp, name)
-  await Bun.write(file, await res.arrayBuffer())
+  const local = lmap.get(name)
+  if (local) {
+    await Bun.write(file, Bun.file(local))
+  } else {
+    const asset = amap.get(name)
+    const res = await fetch(asset?.url ?? url, {
+      headers: {
+        Authorization: `token ${token}`,
+        ...(asset ? { Accept: "application/octet-stream" } : {}),
+      },
+    })
+    if (!res.ok) {
+      throw new Error(`Failed to fetch file ${name}: ${res.status} ${res.statusText} (${asset?.url ?? url})`)
+    }
+    await Bun.write(file, await res.arrayBuffer())
+  }
   await $`bunx @tauri-apps/cli signer sign ${file}`
   const sigFile = Bun.file(`${file}.sig`)
   if (!(await sigFile.exists())) throw new Error(`Signature file not found for ${name}`)

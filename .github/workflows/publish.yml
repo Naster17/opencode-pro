@@ -300,15 +300,6 @@ jobs:
           fi
           tar -czf "$OUT_NAME" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
 
-      - name: Upload release assets
-        if: needs.version.outputs.release && (runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true')
-        run: bun ./scripts/upload-release-assets.ts
-        working-directory: packages/desktop
-        env:
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          GH_REPO: ${{ needs.version.outputs.repo }}
-
       - uses: actions/upload-artifact@v6
         if: runner.os != 'macOS' || env.HAS_APPLE_CERT == 'true'
         with:
@@ -379,6 +370,13 @@ jobs:
           pattern: latest-yml-*
           path: /tmp/latest-yml
 
+      - uses: actions/download-artifact@v6
+        if: needs.version.outputs.release
+        continue-on-error: true
+        with:
+          pattern: opencode-desktop-*
+          path: /tmp/opencode-desktop
+
       - name: Setup git committer
         id: committer
         uses: ./.github/actions/setup-git-committer
@@ -415,5 +413,6 @@ jobs:
           NPM_CONFIG_PROVENANCE: false
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           LATEST_YML_DIR: /tmp/latest-yml
+          DESKTOP_DIST_DIR: /tmp/opencode-desktop
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
