@@ -3001,13 +3001,7 @@ function InlineTool(props: {
       renderBefore={function () {
         const el = this as BoxRenderable
         const parent = el.parent
-        if (!parent) {
-          return
-        }
-        if (el.height > 1) {
-          setMargin(1)
-          return
-        }
+        if (!parent) return
         const children = parent.getChildren()
         const index = children.indexOf(el)
         const previous = children[index - 1]
@@ -3015,10 +3009,11 @@ function InlineTool(props: {
           setMargin(0)
           return
         }
-        if (previous.height > 1 || previous.id.startsWith("text-")) {
+        if (previous.id.startsWith("text-") || previous.id.startsWith("tool-block-")) {
           setMargin(1)
           return
         }
+        setMargin(0)
       }}
     >
       <Switch>
@@ -3051,6 +3046,20 @@ function longRunningToolActive(part: ToolPart) {
   return part.state.status === "pending" || part.state.status === "running"
 }
 
+function blockToolTitle(title: string) {
+  return title.replace(/^#\s*/, "")
+}
+
+function shellOutput(raw: string) {
+  const metadata = raw.match(/\n*<shell_metadata>\n([\s\S]*?)\n<\/shell_metadata>\s*$/)
+  const notes = metadata?.[1]?.split("\n").filter(Boolean) ?? []
+  const output = (metadata ? raw.slice(0, metadata.index).trim() : raw).trim()
+  return {
+    output: output === "(no output)" ? "" : output,
+    notes,
+  }
+}
+
 function BlockTool(props: {
   title: string
   children: JSX.Element
@@ -3058,6 +3067,8 @@ function BlockTool(props: {
   part?: ToolPart
   spinner?: boolean
   spinnerInterval?: number
+  marker?: boolean
+  markerColor?: RGBA
 }) {
   const { theme } = useTheme()
   const renderer = useRenderer()
@@ -3065,6 +3076,7 @@ function BlockTool(props: {
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
   return (
     <box
+      id={`tool-block-${props.part?.id ?? blockToolTitle(props.title)}`}
       border={["left"]}
       paddingTop={1}
       paddingBottom={1}
@@ -3085,13 +3097,16 @@ function BlockTool(props: {
       <Show
         when={props.spinner}
         fallback={
-          <text paddingLeft={3} fg={theme.textMuted}>
-            {props.title}
-          </text>
+          <box flexDirection="row" gap={1}>
+            <Show when={props.marker}>
+              <text fg={props.markerColor ?? theme.textMuted}>#</text>
+            </Show>
+            <text fg={theme.textMuted}>{blockToolTitle(props.title)}</text>
+          </box>
         }
       >
         <Spinner color={theme.textMuted} interval={props.spinnerInterval}>
-          {props.title.replace(/^# /, "")}
+          {blockToolTitle(props.title)}
         </Spinner>
       </Show>
       {props.children}
@@ -3107,7 +3122,11 @@ function Shell(props: ToolProps<typeof ShellTool>) {
   const ctx = use()
   const sync = useSync()
   const isRunning = createMemo(() => props.part.state.status === "running")
-  const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
+  const parsed = createMemo(() => shellOutput(stripAnsi((props.output ?? props.metadata.output ?? "").trim())))
+  const output = createMemo(() => parsed().output)
+  const notes = createMemo(() => parsed().notes)
+  const exit = createMemo(() => (typeof props.metadata.exit === "number" || props.metadata.exit === null ? props.metadata.exit : undefined))
+  const markerColor = createMemo(() => (exit() === 0 ? theme.success : exit() !== undefined ? theme.error : theme.textMuted))
   const previewWidth = createMemo(() => Math.max(20, ctx.width - 28))
   const clip = (line: string) => (line.length > previewWidth() ? line.slice(0, previewWidth() - 1) + "…" : line)
   const [expanded, setExpanded] = createSignal(false)
@@ -3119,7 +3138,7 @@ function Shell(props: ToolProps<typeof ShellTool>) {
   })
   const runningPreview = createMemo(() => {
     const visible = (output() ? lines().slice(-3) : ["waiting for command output..."]).map(clip)
-    return [...visible, ...Array(Math.max(0, 3 - visible.length)).fill("")].join("\n")
+    return visible.join("\n")
   })
 
   const workdirDisplay = createMemo(() => {
@@ -3151,7 +3170,7 @@ function Shell(props: ToolProps<typeof ShellTool>) {
     <Switch>
       <Match when={isRunning()}>
         <BlockTool title={title()} part={props.part} spinner={true} spinnerInterval={180}>
-          <box gap={1}>
+          <box gap={0}>
             <text fg={theme.text}>$ {clip(props.input.command ?? "")}</text>
             <code
               conceal={false}
@@ -3169,6 +3188,8 @@ function Shell(props: ToolProps<typeof ShellTool>) {
         <BlockTool
           title={title()}
           part={props.part}
+          marker
+          markerColor={markerColor()}
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={0}>
@@ -3176,6 +3197,7 @@ function Shell(props: ToolProps<typeof ShellTool>) {
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
             </Show>
+            <For each={notes()}>{(note) => <text fg={theme.warning}>{note}</text>}</For>
             <Show when={overflow()}>
               <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
             </Show>

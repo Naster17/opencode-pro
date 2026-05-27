@@ -5,7 +5,7 @@ import { Spinner } from "@tui/component/spinner"
 import { useTheme } from "@tui/context/theme"
 import { useLocal } from "@tui/context/local"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import { TextAttributes, type BoxRenderable, type SyntaxStyle } from "@opentui/core"
+import { TextAttributes, type BoxRenderable, type RGBA, type SyntaxStyle } from "@opentui/core"
 import { Locale } from "@/util/locale"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import path from "path"
@@ -518,6 +518,20 @@ function GenericTool(props: ToolProps) {
   )
 }
 
+function blockToolTitle(title: string) {
+  return title.replace(/^#\s*/, "")
+}
+
+function shellOutput(raw: string) {
+  const metadata = raw.match(/\n*<shell_metadata>\n([\s\S]*?)\n<\/shell_metadata>\s*$/)
+  const notes = metadata?.[1]?.split("\n").filter(Boolean) ?? []
+  const output = (metadata ? raw.slice(0, metadata.index).trim() : raw).trim()
+  return {
+    output: output === "(no output)" ? "" : output,
+    notes,
+  }
+}
+
 function InlineTool(props: {
   icon: string
   complete: unknown
@@ -573,7 +587,8 @@ function InlineTool(props: {
           setMargin(0)
           return
         }
-        if (previous.id.startsWith("text")) setMargin(1)
+        if (previous.id.startsWith("text") || previous.id.startsWith("tool-block-")) setMargin(1)
+        else setMargin(0)
       }}
     >
       <box flexShrink={0}>
@@ -624,6 +639,8 @@ function BlockTool(props: {
   part?: SessionMessageAssistantTool
   onClick?: () => void
   spinner?: boolean
+  marker?: boolean
+  markerColor?: RGBA
 }) {
   const { theme } = useTheme()
   const renderer = useRenderer()
@@ -631,6 +648,7 @@ function BlockTool(props: {
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error.message : undefined))
   return (
     <box
+      id={`tool-block-${props.part?.id ?? blockToolTitle(props.title)}`}
       border={["left"]}
       paddingTop={1}
       paddingBottom={1}
@@ -651,12 +669,15 @@ function BlockTool(props: {
       <Show
         when={props.spinner}
         fallback={
-          <text paddingLeft={3} fg={theme.textMuted}>
-            {props.title}
-          </text>
+          <box flexDirection="row" gap={1}>
+            <Show when={props.marker}>
+              <text fg={props.markerColor ?? theme.textMuted}>#</text>
+            </Show>
+            <text fg={theme.textMuted}>{blockToolTitle(props.title)}</text>
+          </box>
         }
       >
-        <Spinner color={theme.textMuted}>{props.title.replace(/^# /, "")}</Spinner>
+        <Spinner color={theme.textMuted}>{blockToolTitle(props.title)}</Spinner>
       </Show>
       {props.children}
       <Show when={error()}>
@@ -668,7 +689,11 @@ function BlockTool(props: {
 
 function Bash(props: ToolProps) {
   const { theme } = useTheme()
-  const output = createMemo(() => stripAnsi((stringValue(props.metadata.output) ?? props.output ?? "").trim()))
+  const parsed = createMemo(() => shellOutput(stripAnsi((props.output ?? stringValue(props.metadata.output) ?? "").trim())))
+  const output = createMemo(() => parsed().output)
+  const notes = createMemo(() => parsed().notes)
+  const exit = createMemo(() => numberValue(props.metadata.exit) ?? (props.metadata.exit === null ? null : undefined))
+  const markerColor = createMemo(() => (exit() === 0 ? theme.success : exit() !== undefined ? theme.error : theme.textMuted))
   const command = createMemo(() => stringValue(props.input.command) ?? pendingInput(props.part))
   const title = createMemo(() => `# ${stringValue(props.input.description) ?? "Shell"}`)
   const [expanded, setExpanded] = createSignal(false)
@@ -685,11 +710,16 @@ function Bash(props: ToolProps) {
           title={title()}
           part={props.part}
           spinner={props.part.state.status === "running"}
+          marker
+          markerColor={markerColor()}
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
-          <box gap={1}>
+          <box gap={0}>
             <text fg={theme.text}>$ {command()}</text>
-            <text fg={theme.text}>{limited()}</text>
+            <Show when={output()}>
+              <text fg={theme.text}>{limited()}</text>
+            </Show>
+            <For each={notes()}>{(note) => <text fg={theme.warning}>{note}</text>}</For>
             <Show when={overflow()}>
               <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
             </Show>
