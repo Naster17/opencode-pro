@@ -3,7 +3,7 @@ import { createMemo, For, Show, createSignal } from "solid-js"
 import { TodoItem } from "../../component/todo-item"
 
 const id = "internal:sidebar-todo"
-const collapsedTodoLength = 33
+const collapsedTodoLength = 32
 
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const [open, setOpen] = createSignal(true)
