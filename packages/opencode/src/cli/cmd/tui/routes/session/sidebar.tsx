@@ -21,6 +21,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     return project.workspace.get(workspaceID)
   }
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+  const hasMetadata = createMemo(
+    () => InstallationChannel !== "latest" || !!session()?.workspaceID || !!session()?.share?.url,
+  )
 
   return (
     <Show when={session()}>
@@ -34,6 +37,19 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         paddingRight={2}
         position={props.overlay ? "absolute" : "relative"}
       >
+        <box flexShrink={0} paddingRight={1} paddingBottom={1}>
+          <TuiPluginRuntime.Slot
+            name="sidebar_title"
+            mode="single_winner"
+            session_id={props.sessionID}
+            title={session()!.title}
+            share_url={session()!.share?.url}
+          >
+            <text fg={theme.text}>
+              <b>{session()!.title}</b>
+            </text>
+          </TuiPluginRuntime.Slot>
+        </box>
         <scrollbox
           flexGrow={1}
           scrollAcceleration={scrollAcceleration()}
@@ -45,17 +61,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           }}
         >
           <box flexShrink={0} gap={1} paddingRight={1}>
-            <TuiPluginRuntime.Slot
-              name="sidebar_title"
-              mode="single_winner"
-              session_id={props.sessionID}
-              title={session()!.title}
-              share_url={session()!.share?.url}
-            >
+            <Show when={hasMetadata()}>
               <box paddingRight={1}>
-                <text fg={theme.text}>
-                  <b>{session()!.title}</b>
-                </text>
                 <Show when={InstallationChannel !== "latest"}>
                   <text fg={theme.textMuted}>{props.sessionID}</text>
                 </Show>
@@ -80,7 +87,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   <text fg={theme.textMuted}>{session()!.share!.url}</text>
                 </Show>
               </box>
-            </TuiPluginRuntime.Slot>
+            </Show>
             <TuiPluginRuntime.Slot name="sidebar_content" session_id={props.sessionID} />
           </box>
         </scrollbox>
