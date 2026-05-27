@@ -3048,6 +3048,7 @@ function BlockTool(props: {
       paddingTop={1}
       paddingBottom={1}
       paddingLeft={2}
+      paddingRight={2}
       marginTop={1}
       gap={1}
       backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
@@ -3081,19 +3082,19 @@ function BlockTool(props: {
 }
 
 function Shell(props: ToolProps<typeof ShellTool>) {
-  const { theme } = useTheme()
+  const { theme, syntax } = useTheme()
   const ctx = use()
   const sync = useSync()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
-  const previewWidth = createMemo(() => Math.max(20, ctx.width - 12))
+  const previewWidth = createMemo(() => Math.max(20, ctx.width - 28))
   const clip = (line: string) => (line.length > previewWidth() ? line.slice(0, previewWidth() - 1) + "…" : line)
   const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
   const overflow = createMemo(() => lines().length > 10)
   const limited = createMemo(() => {
     if (expanded() || !overflow()) return output()
-    return [...lines().slice(0, 10), "…"].join("\n")
+    return lines().slice(0, 10).join("\n")
   })
   const runningPreview = createMemo(() => {
     const visible = (output() ? lines().slice(-3) : ["waiting for command output..."]).map(clip)
@@ -3131,7 +3132,15 @@ function Shell(props: ToolProps<typeof ShellTool>) {
         <BlockTool title={title()} part={props.part} spinner={true} spinnerInterval={180}>
           <box gap={1}>
             <text fg={theme.text}>$ {clip(props.input.command ?? "")}</text>
-            <text fg={output() ? theme.text : theme.textMuted}>{runningPreview()}</text>
+            <code
+              conceal={false}
+              fg={output() ? theme.text : theme.textMuted}
+              filetype="text"
+              syntaxStyle={syntax()}
+              wrapMode="none"
+              truncate={true}
+              content={runningPreview()}
+            />
           </box>
         </BlockTool>
       </Match>
@@ -3141,7 +3150,7 @@ function Shell(props: ToolProps<typeof ShellTool>) {
           part={props.part}
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
-          <box gap={1}>
+          <box gap={0}>
             <text fg={theme.text}>$ {props.input.command}</text>
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
@@ -3163,7 +3172,6 @@ function Shell(props: ToolProps<typeof ShellTool>) {
 
 function PendingToolPreview(props: { content: string; filePath?: string; title: string; filetype?: string; part: ToolPart }) {
   const { theme, syntax } = useTheme()
-  const ctx = use()
   const normalized = createMemo(() => props.content.replace(/\r\n/g, "\n").replace(/\r/g, "\n"))
   const display = createMemo(() => normalized() || "waiting for streamed tool input...")
   const lines = createMemo(() => display().split("\n"))
@@ -3171,11 +3179,8 @@ function PendingToolPreview(props: { content: string; filePath?: string; title: 
   const firstLine = createMemo(() => Math.max(1, lines().length - visibleLines().length + 1))
   const currentLine = createMemo(() => Math.max(1, lines().length))
   const lineNumberWidth = createMemo(() => Math.max(3, String(currentLine()).length))
-  const lineWidth = createMemo(() => Math.max(20, ctx.width - lineNumberWidth() - 18))
   const preview = createMemo(() =>
-    [...visibleLines(), ...Array(Math.max(0, 3 - visibleLines().length)).fill("")]
-      .map((line) => (line.length > lineWidth() ? line.slice(0, lineWidth() - 1) + "…" : line))
-      .join("\n"),
+    [...visibleLines(), ...Array(Math.max(0, 3 - visibleLines().length)).fill("")].join("\n"),
   )
 
   return (
@@ -3187,6 +3192,8 @@ function PendingToolPreview(props: { content: string; filePath?: string; title: 
           filetype={props.filetype ?? filetype(props.filePath)}
           syntaxStyle={syntax()}
           streaming={true}
+          wrapMode="none"
+          truncate={true}
           content={preview()}
         />
       </line_number>
@@ -3223,6 +3230,8 @@ function CollapsibleCodeBlock(props: { content: string; filePath?: string }) {
           fg={theme.text}
           filetype={filetype(props.filePath)}
           syntaxStyle={syntax()}
+          wrapMode="none"
+          truncate={true}
           content={visibleContent()}
         />
       </line_number>
@@ -3243,8 +3252,7 @@ function CollapsibleDiffBlock(props: { diff: string; filePath?: string; view: "s
   const lines = createMemo(() => props.diff.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n"))
   const limit = createMemo(() => Math.max(1, ctx.tui.code_block?.collapse_lines ?? 10))
   const overflow = createMemo(() => lines().length > limit())
-  const visibleContent = createMemo(() => lines().slice(0, limit()).join("\n"))
-  const lineNumberWidth = createMemo(() => Math.max(3, String(lines().length).length))
+  const preview = createMemo(() => diffPreview(props.diff, limit()))
   const hidden = createMemo(() => Math.max(0, lines().length - limit()))
 
   createEffect(on(ctx.codeBlockExpansion, (mode) => setExpanded(mode === "extend")))
@@ -3260,26 +3268,29 @@ function CollapsibleDiffBlock(props: { diff: string; filePath?: string; view: "s
     >
       <Show
         when={expanded() || !overflow()}
-        fallback={
-          <line_number fg={theme.textMuted} minWidth={lineNumberWidth()} paddingRight={1}>
-            <code
-              conceal={false}
-              fg={theme.text}
-              filetype="diff"
-              syntaxStyle={syntax()}
-              content={visibleContent()}
-            />
-          </line_number>
-        }
+        fallback={<DiffView diff={preview()} filePath={props.filePath} view={props.view} wrapMode="none" />}
       >
+        <DiffView diff={props.diff} filePath={props.filePath} view={props.view} />
+      </Show>
+      <Show when={overflow()}>
+        <text paddingLeft={4} fg={theme.textMuted}>
+          {expanded() ? "Click to collapse" : `${hidden()} more lines · Click to extend`}
+        </text>
+      </Show>
+    </box>
+  )
+
+  function DiffView(input: { diff: string; filePath?: string; view: "split" | "unified"; wrapMode?: "word" | "none" }) {
+    return (
+      <>
         <diff
-          diff={props.diff}
-          view={props.view}
-          filetype={filetype(props.filePath)}
+          diff={input.diff}
+          view={input.view}
+          filetype={filetype(input.filePath)}
           syntaxStyle={syntax()}
           showLineNumbers={true}
           width="100%"
-          wrapMode={ctx.diffWrapMode()}
+          wrapMode={input.wrapMode ?? ctx.diffWrapMode()}
           fg={theme.text}
           addedBg={theme.diffAddedBg}
           removedBg={theme.diffRemovedBg}
@@ -3291,14 +3302,46 @@ function CollapsibleDiffBlock(props: { diff: string; filePath?: string; view: "s
           addedLineNumberBg={theme.diffAddedLineNumberBg}
           removedLineNumberBg={theme.diffRemovedLineNumberBg}
         />
-      </Show>
-      <Show when={overflow()}>
-        <text paddingLeft={4} fg={theme.textMuted}>
-          {expanded() ? "Click to collapse" : `${hidden()} more lines · Click to extend`}
-        </text>
-      </Show>
-    </box>
+      </>
+    )
+  }
+}
+
+function diffPreview(diff: string, limit: number) {
+  const lines = diff.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")
+  const oldHeader = lines.find((line) => line.startsWith("--- ")) ?? "--- a/file"
+  const newHeader = lines.find((line) => line.startsWith("+++ ")) ?? "+++ b/file"
+  const hunkIndex = lines.findIndex((line) => line.startsWith("@@ "))
+  if (hunkIndex === -1) return [oldHeader, newHeader, ...lines.slice(0, limit)].join("\n")
+
+  const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/.exec(lines[hunkIndex])
+  if (!match) return [oldHeader, newHeader, ...lines.slice(hunkIndex, hunkIndex + limit + 1)].join("\n")
+
+  const nextHunkIndex = lines.findIndex((line, index) => index > hunkIndex && line.startsWith("@@ "))
+  const content = lines.slice(hunkIndex + 1, nextHunkIndex === -1 ? undefined : nextHunkIndex)
+  const firstChange = content.findIndex((line) => isDiffChangeLine(line))
+  const start = Math.max(0, (firstChange === -1 ? 0 : firstChange) - 4)
+  const selected = content.slice(start, start + limit)
+  const oldStart = Number(match[1]) + countDiffLines(content.slice(0, start), "old")
+  const newStart = Number(match[3]) + countDiffLines(content.slice(0, start), "new")
+  const oldCount = countDiffLines(selected, "old")
+  const newCount = countDiffLines(selected, "new")
+  return [oldHeader, newHeader, `@@ -${oldStart},${oldCount} +${newStart},${newCount} @@${match[5] ?? ""}`, ...selected].join(
+    "\n",
   )
+}
+
+function isDiffChangeLine(line: string) {
+  return (line.startsWith("+") && !line.startsWith("+++")) || (line.startsWith("-") && !line.startsWith("---"))
+}
+
+function countDiffLines(lines: string[], side: "old" | "new") {
+  return lines.reduce((count, line) => {
+    if (line.startsWith("\\")) return count
+    if (line.startsWith("+") && !line.startsWith("+++")) return side === "new" ? count + 1 : count
+    if (line.startsWith("-") && !line.startsWith("---")) return side === "old" ? count + 1 : count
+    return count + 1
+  }, 0)
 }
 
 function pendingToolRaw(part: ToolPart) {
