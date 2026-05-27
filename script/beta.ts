@@ -3,7 +3,7 @@
 import { $ } from "bun"
 import fs from "fs/promises"
 
-const model = process.env.OPENCODE_BETA_MODEL ?? process.env.OPENCODE_MODEL ?? "google/gemini-2.5-pro"
+const model = process.env.OPENCODE_BETA_MODEL ?? process.env.OPENCODE_MODEL ?? "google/gemma-4-31b-it"
 
 interface PR {
   number: number
@@ -168,7 +168,7 @@ async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: n
   ].join("\n")
 
   try {
-    await $`opencode run -m ${model} ${prompt}`
+    await $`bun ./script/opencode-run.ts run --model ${model} ${prompt}`
   } catch (err) {
     console.log(`  opencode failed: ${err}`)
     return false
@@ -206,7 +206,7 @@ async function smoke(prs: PR[], applied: number[]) {
   ].join("\n")
 
   try {
-    await $`opencode run -m ${model} ${prompt}`
+    await $`bun ./script/opencode-run.ts run --model ${model} ${prompt}`
   } catch (err) {
     console.log(`Smoke fix failed: ${err}`)
     return false

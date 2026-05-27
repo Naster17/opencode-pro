@@ -35,8 +35,10 @@ jobs:
       - name: Configure OpenCode for Gemini
         uses: ./.github/actions/setup-opencode-gemini
         with:
-          model: ${{ vars.OPENCODE_DOCS_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}
-          small-model: ${{ vars.OPENCODE_SMALL_MODEL || 'google/gemini-2.5-flash' }}
+          model: ${{ vars.OPENCODE_DOCS_MODEL || vars.OPENCODE_MODEL || 'google/gemma-4-31b-it' }}
+          small-model: ${{ vars.OPENCODE_SMALL_MODEL || vars.OPENCODE_FALLBACK_MODEL || 'google/gemma-4-26b-a4b-it' }}
+          fallback-model: ${{ vars.OPENCODE_FALLBACK_MODEL || vars.OPENCODE_SMALL_MODEL || 'google/gemma-4-26b-a4b-it' }}
+          variant: none
 
       - name: Compute changed English docs
         id: changes
@@ -73,7 +75,7 @@ jobs:
               }
             }
         run: |
-          opencode run --agent docs --model "${{ vars.OPENCODE_DOCS_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}" <<'EOF'
+          bun ./script/opencode-run.ts run --agent docs <<'EOF'
             Update localized docs to match the latest English docs changes.
 
             Changed English doc files:

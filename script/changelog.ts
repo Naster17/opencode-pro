@@ -6,12 +6,6 @@ import { parseArgs } from "util"
 
 const root = path.resolve(import.meta.dir, "..")
 const file = path.join(root, "UPCOMING_CHANGELOG.md")
-const normalizeModel = (value: string | undefined, provider = "google") => {
-  const model = value?.trim().replace(/^\/+|\/+$/g, "")
-  if (!model) return
-  if (model.includes("/")) return model
-  return `${provider}/${model}`
-}
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
@@ -54,11 +48,7 @@ Examples:
 await rm(file, { force: true })
 
 const quiet = values.quiet
-const cmd = ["opencode", "run"]
-const model = normalizeModel(process.env.OPENCODE_CHANGELOG_MODEL ?? process.env.OPENCODE_MODEL)
-if (model) {
-  cmd.push("--model", model)
-}
+const cmd = ["bun", "script/opencode-run.ts", "run"]
 cmd.push("--variant", values.variant)
 cmd.push("--command", "changelog", "--", ...args)
 

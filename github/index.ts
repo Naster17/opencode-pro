@@ -310,6 +310,34 @@ function useEnvModel() {
   return { providerID, modelID }
 }
 
+function useEnvFallbackModel() {
+  const value = process.env["MODEL_FALLBACK"]
+  if (!value) return
+
+  const [providerID, ...rest] = value.split("/")
+  const modelID = rest.join("/")
+
+  if (!providerID?.length || !modelID.length)
+    throw new Error(`Invalid fallback model ${value}. Model must be in the format "provider/model".`)
+  return { providerID, modelID }
+}
+
+function shouldRetryWithFallback(error: unknown) {
+  const text = error instanceof Error ? error.message : String(error)
+  const lower = text.toLowerCase()
+  return [
+    "thinking level is not supported for this model",
+    "rate limit",
+    "too many requests",
+    "resource_exhausted",
+    "quota",
+    "429",
+    "provider is overloaded",
+    "overloaded",
+    "service unavailable",
+  ].some((item) => lower.includes(item))
+}
+
 function useEnvRunUrl() {
   const { repo } = useContext()
 
@@ -608,39 +636,48 @@ async function resolveAgent(): Promise<string | undefined> {
 
 async function chat(text: string, files: PromptFiles = []) {
   console.log("Sending message to opencode...")
-  const { providerID, modelID } = useEnvModel()
+  const primary = useEnvModel()
+  const fallback = useEnvFallbackModel()
   const agent = await resolveAgent()
 
-  const chat = await client.session.chat<true>({
-    path: session,
-    body: {
-      providerID,
-      modelID,
-      agent,
-      parts: [
-        {
-          type: "text",
-          text,
-        },
-        ...files.flatMap((f) => [
+  const send = async (model: { providerID: string; modelID: string }) =>
+    client.session.chat<true>({
+      path: session,
+      body: {
+        providerID: model.providerID,
+        modelID: model.modelID,
+        agent,
+        parts: [
           {
-            type: "file" as const,
-            mime: f.mime,
-            url: `data:${f.mime};base64,${f.content}`,
-            filename: f.filename,
-            source: {
-              type: "file" as const,
-              text: {
-                value: f.replacement,
-                start: f.start,
-                end: f.end,
-              },
-              path: f.filename,
-            },
+            type: "text",
+            text,
           },
-        ]),
-      ],
-    },
+          ...files.flatMap((f) => [
+            {
+              type: "file" as const,
+              mime: f.mime,
+              url: `data:${f.mime};base64,${f.content}`,
+              filename: f.filename,
+              source: {
+                type: "file" as const,
+                text: {
+                  value: f.replacement,
+                  start: f.start,
+                  end: f.end,
+                },
+                path: f.filename,
+              },
+            },
+          ]),
+        ],
+      },
+    })
+
+  const chat = await send(primary).catch(async (error) => {
+    if (!fallback || (fallback.providerID === primary.providerID && fallback.modelID === primary.modelID)) throw error
+    if (!shouldRetryWithFallback(error)) throw error
+    console.warn(`Primary model failed, retrying with fallback ${fallback.providerID}/${fallback.modelID}`)
+    return send(fallback)
   })
 
   // @ts-ignore

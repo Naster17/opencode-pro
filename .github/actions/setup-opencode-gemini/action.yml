@@ -4,11 +4,19 @@ inputs:
   model:
     description: "Default model in provider/model format"
     required: false
-    default: "google/gemini-2.5-pro"
+    default: "google/gemma-4-31b-it"
   small-model:
     description: "Small model in provider/model format"
     required: false
-    default: "google/gemini-2.5-flash"
+    default: "google/gemma-4-26b-a4b-it"
+  fallback-model:
+    description: "Fallback model in provider/model format used when the primary model is rate limited or unsupported"
+    required: false
+    default: "google/gemma-4-26b-a4b-it"
+  variant:
+    description: "Default run variant for CI wrappers"
+    required: false
+    default: "none"
   enabled-provider:
     description: "Provider ID to allow in CI"
     required: false
@@ -37,6 +45,8 @@ runs:
 
         echo "OPENCODE_CI_MODEL=$(normalize_model '${{ inputs.model }}')" >> "$GITHUB_ENV"
         echo "OPENCODE_CI_SMALL_MODEL=$(normalize_model '${{ inputs.small-model }}')" >> "$GITHUB_ENV"
+        echo "OPENCODE_CI_FALLBACK_MODEL=$(normalize_model '${{ inputs.fallback-model }}')" >> "$GITHUB_ENV"
+        echo "OPENCODE_CI_VARIANT=${{ inputs.variant }}" >> "$GITHUB_ENV"
 
     - name: Write OpenCode config
       shell: bash

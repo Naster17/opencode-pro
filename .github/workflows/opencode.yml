@@ -28,13 +28,18 @@ jobs:
       - name: Configure OpenCode for Gemini
         uses: ./.github/actions/setup-opencode-gemini
         with:
-          model: ${{ vars.OPENCODE_ACTION_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}
-          small-model: ${{ vars.OPENCODE_SMALL_MODEL || 'google/gemini-2.5-flash' }}
+          model: ${{ vars.OPENCODE_ACTION_MODEL || vars.OPENCODE_MODEL || 'google/gemma-4-31b-it' }}
+          small-model: ${{ vars.OPENCODE_SMALL_MODEL || vars.OPENCODE_FALLBACK_MODEL || 'google/gemma-4-26b-a4b-it' }}
+          fallback-model: ${{ vars.OPENCODE_FALLBACK_MODEL || vars.OPENCODE_SMALL_MODEL || 'google/gemma-4-26b-a4b-it' }}
+          variant: none
+
+      - name: Install OpenCode
+        run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Run opencode
-        uses: anomalyco/opencode/github@latest
         env:
           GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
           OPENCODE_PERMISSION: '{"bash": "deny"}'
-        with:
-          model: ${{ vars.OPENCODE_ACTION_MODEL || vars.OPENCODE_MODEL || 'google/gemini-2.5-pro' }}
+          MODEL: ${{ vars.OPENCODE_ACTION_MODEL || vars.OPENCODE_MODEL || 'google/gemma-4-31b-it' }}
+          MODEL_FALLBACK: ${{ vars.OPENCODE_FALLBACK_MODEL || vars.OPENCODE_SMALL_MODEL || 'google/gemma-4-26b-a4b-it' }}
+        run: bun github/index.ts

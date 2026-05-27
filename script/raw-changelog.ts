@@ -120,8 +120,7 @@ async function commits(from: string, to: string) {
     data.set(item.sha, { login: item.login, message: item.message.split("\n")[0] ?? "" })
   }
 
-  const log =
-    await $`git log ${base}..${head} --format=%H -- packages/opencode packages/sdk packages/plugin packages/desktop packages/app sdks/vscode packages/extensions github`.text()
+  const log = await $`git log ${base}..${head} --format=%H`.text()
 
   const list: Commit[] = []
   for (const hash of log.split("\n").filter(Boolean)) {
@@ -133,16 +132,30 @@ async function commits(from: string, to: string) {
     const areas = new Set<string>()
 
     for (const file of diff.split("\n").filter(Boolean)) {
-      if (file.startsWith("packages/opencode/src/cli/cmd/")) areas.add("tui")
+      if (file.startsWith("packages/opencode/src/cli/")) areas.add("tui")
       else if (file.startsWith("packages/opencode/")) areas.add("core")
       else if (file.startsWith("packages/desktop/src-tauri/")) areas.add("tauri")
       else if (file.startsWith("packages/desktop/") || file.startsWith("packages/app/")) areas.add("app")
       else if (file.startsWith("packages/sdk/") || file.startsWith("packages/plugin/")) areas.add("sdk")
       else if (file.startsWith("packages/extensions/")) areas.add("extensions/zed")
       else if (file.startsWith("sdks/vscode/") || file.startsWith("github/")) areas.add("extensions/vscode")
+      else if (
+        file.startsWith("script/") ||
+        file.startsWith(".github/") ||
+        file.startsWith("packages/core/") ||
+        file.startsWith("packages/ui/") ||
+        file.startsWith("packages/web/") ||
+        file.startsWith("packages/function/") ||
+        file.startsWith("packages/script/") ||
+        file.startsWith("packages/storybook/") ||
+        file.startsWith("packages/enterprise/") ||
+        file === "package.json" ||
+        file === "bun.lock"
+      )
+        areas.add("core")
     }
 
-    if (areas.size === 0) continue
+    if (areas.size === 0) areas.add("core")
 
     list.push({
       hash: hash.slice(0, 7),
