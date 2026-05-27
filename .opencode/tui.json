@@ -1,5 +1,9 @@
 {
   "$schema": "https://opencode.ai/tui.json",
+  "code_block": {
+    "default_mode": "collapsed",
+    "collapse_lines": 10
+  },
   "plugin": [
     [
       "./plugins/tui-smoke.tsx",

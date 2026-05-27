@@ -158,6 +158,7 @@ const context = createContext<{
   showTimestamps: () => boolean
   showDetails: () => boolean
   showGenericToolOutput: () => boolean
+  codeBlockExpansion: () => "collapse" | "extend"
   diffWrapMode: () => "word" | "none"
   providers: () => ReadonlyMap<string, Provider>
   sync: ReturnType<typeof useSync>
@@ -224,6 +225,10 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [codeBlockExpansion, setCodeBlockExpansion] = kv.signal<"collapse" | "extend">(
+    "code_block_expansion",
+    tuiConfig.code_block?.default_mode === "extended" ? "extend" : "collapse",
+  )
   const [visualClearAfter, setVisualClearAfter] = createSignal<string>()
 
   const wide = createMemo(() => dimensions().width > 120)
@@ -1153,6 +1158,30 @@ export function Session() {
       },
     },
     {
+      title: "Collapse code blocks",
+      value: "session.code_blocks.collapse",
+      category: "Session",
+      slash: {
+        name: "collapse",
+      },
+      onSelect: (dialog) => {
+        setCodeBlockExpansion(() => "collapse")
+        dialog.clear()
+      },
+    },
+    {
+      title: "Extend code blocks",
+      value: "session.code_blocks.extend",
+      category: "Session",
+      slash: {
+        name: "extend",
+      },
+      onSelect: (dialog) => {
+        setCodeBlockExpansion(() => "extend")
+        dialog.clear()
+      },
+    },
+    {
       title: "Toggle session scrollbar",
       value: "session.toggle.scrollbar",
       keybind: "scrollbar_toggle",
@@ -1679,6 +1708,7 @@ export function Session() {
         showTimestamps,
         showDetails,
         showGenericToolOutput,
+        codeBlockExpansion,
         diffWrapMode,
         providers,
         sync,
@@ -3006,6 +3036,7 @@ function BlockTool(props: {
   onClick?: () => void
   part?: ToolPart
   spinner?: boolean
+  spinnerInterval?: number
 }) {
   const { theme } = useTheme()
   const renderer = useRenderer()
@@ -3037,7 +3068,9 @@ function BlockTool(props: {
           </text>
         }
       >
-        <Spinner color={theme.textMuted}>{props.title.replace(/^# /, "")}</Spinner>
+        <Spinner color={theme.textMuted} interval={props.spinnerInterval}>
+          {props.title.replace(/^# /, "")}
+        </Spinner>
       </Show>
       {props.children}
       <Show when={error()}>
@@ -3049,15 +3082,22 @@ function BlockTool(props: {
 
 function Shell(props: ToolProps<typeof ShellTool>) {
   const { theme } = useTheme()
+  const ctx = use()
   const sync = useSync()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
+  const previewWidth = createMemo(() => Math.max(20, ctx.width - 12))
+  const clip = (line: string) => (line.length > previewWidth() ? line.slice(0, previewWidth() - 1) + "…" : line)
   const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
   const overflow = createMemo(() => lines().length > 10)
   const limited = createMemo(() => {
     if (expanded() || !overflow()) return output()
     return [...lines().slice(0, 10), "…"].join("\n")
+  })
+  const runningPreview = createMemo(() => {
+    const visible = (output() ? lines().slice(-3) : ["waiting for command output..."]).map(clip)
+    return [...visible, ...Array(Math.max(0, 3 - visible.length)).fill("")].join("\n")
   })
 
   const workdirDisplay = createMemo(() => {
@@ -3087,11 +3127,18 @@ function Shell(props: ToolProps<typeof ShellTool>) {
 
   return (
     <Switch>
+      <Match when={isRunning()}>
+        <BlockTool title={title()} part={props.part} spinner={true} spinnerInterval={180}>
+          <box gap={1}>
+            <text fg={theme.text}>$ {clip(props.input.command ?? "")}</text>
+            <text fg={output() ? theme.text : theme.textMuted}>{runningPreview()}</text>
+          </box>
+        </BlockTool>
+      </Match>
       <Match when={props.metadata.output !== undefined}>
         <BlockTool
           title={title()}
           part={props.part}
-          spinner={isRunning()}
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
@@ -3147,6 +3194,113 @@ function PendingToolPreview(props: { content: string; filePath?: string; title: 
   )
 }
 
+function CollapsibleCodeBlock(props: { content: string; filePath?: string }) {
+  const ctx = use()
+  const { theme, syntax } = useTheme()
+  const renderer = useRenderer()
+  const [expanded, setExpanded] = createSignal(ctx.codeBlockExpansion() === "extend")
+  const lines = createMemo(() => props.content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n"))
+  const limit = createMemo(() => Math.max(1, ctx.tui.code_block?.collapse_lines ?? 10))
+  const overflow = createMemo(() => lines().length > limit())
+  const visibleLines = createMemo(() => (expanded() || !overflow() ? lines() : lines().slice(0, limit())))
+  const visibleContent = createMemo(() => visibleLines().join("\n"))
+  const lineNumberWidth = createMemo(() => Math.max(3, String(lines().length).length))
+  const hidden = createMemo(() => Math.max(0, lines().length - limit()))
+
+  createEffect(on(ctx.codeBlockExpansion, (mode) => setExpanded(mode === "extend")))
+
+  return (
+    <box
+      onMouseUp={() => {
+        if (!overflow()) return
+        if (renderer.getSelection()?.getSelectedText()) return
+        setExpanded((prev) => !prev)
+      }}
+    >
+      <line_number fg={theme.textMuted} minWidth={lineNumberWidth()} paddingRight={1}>
+        <code
+          conceal={false}
+          fg={theme.text}
+          filetype={filetype(props.filePath)}
+          syntaxStyle={syntax()}
+          content={visibleContent()}
+        />
+      </line_number>
+      <Show when={overflow()}>
+        <text paddingLeft={lineNumberWidth() + 4} fg={theme.textMuted}>
+          {expanded() ? "Click to collapse" : `${hidden()} more lines · Click to extend`}
+        </text>
+      </Show>
+    </box>
+  )
+}
+
+function CollapsibleDiffBlock(props: { diff: string; filePath?: string; view: "split" | "unified" }) {
+  const ctx = use()
+  const { theme, syntax } = useTheme()
+  const renderer = useRenderer()
+  const [expanded, setExpanded] = createSignal(ctx.codeBlockExpansion() === "extend")
+  const lines = createMemo(() => props.diff.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n"))
+  const limit = createMemo(() => Math.max(1, ctx.tui.code_block?.collapse_lines ?? 10))
+  const overflow = createMemo(() => lines().length > limit())
+  const visibleContent = createMemo(() => lines().slice(0, limit()).join("\n"))
+  const lineNumberWidth = createMemo(() => Math.max(3, String(lines().length).length))
+  const hidden = createMemo(() => Math.max(0, lines().length - limit()))
+
+  createEffect(on(ctx.codeBlockExpansion, (mode) => setExpanded(mode === "extend")))
+
+  return (
+    <box
+      paddingLeft={1}
+      onMouseUp={() => {
+        if (!overflow()) return
+        if (renderer.getSelection()?.getSelectedText()) return
+        setExpanded((prev) => !prev)
+      }}
+    >
+      <Show
+        when={expanded() || !overflow()}
+        fallback={
+          <line_number fg={theme.textMuted} minWidth={lineNumberWidth()} paddingRight={1}>
+            <code
+              conceal={false}
+              fg={theme.text}
+              filetype="diff"
+              syntaxStyle={syntax()}
+              content={visibleContent()}
+            />
+          </line_number>
+        }
+      >
+        <diff
+          diff={props.diff}
+          view={props.view}
+          filetype={filetype(props.filePath)}
+          syntaxStyle={syntax()}
+          showLineNumbers={true}
+          width="100%"
+          wrapMode={ctx.diffWrapMode()}
+          fg={theme.text}
+          addedBg={theme.diffAddedBg}
+          removedBg={theme.diffRemovedBg}
+          contextBg={theme.diffContextBg}
+          addedSignColor={theme.diffHighlightAdded}
+          removedSignColor={theme.diffHighlightRemoved}
+          lineNumberFg={theme.diffLineNumber}
+          lineNumberBg={theme.diffContextBg}
+          addedLineNumberBg={theme.diffAddedLineNumberBg}
+          removedLineNumberBg={theme.diffRemovedLineNumberBg}
+        />
+      </Show>
+      <Show when={overflow()}>
+        <text paddingLeft={4} fg={theme.textMuted}>
+          {expanded() ? "Click to collapse" : `${hidden()} more lines · Click to extend`}
+        </text>
+      </Show>
+    </box>
+  )
+}
+
 function pendingToolRaw(part: ToolPart) {
   if (part.state.status !== "pending") return ""
   return part.state.raw
@@ -3190,7 +3344,6 @@ function jsonStringPrefix(raw: string, key: string) {
 }
 
 function Write(props: ToolProps<typeof WriteTool>) {
-  const { theme, syntax } = useTheme()
   const raw = createMemo(() => pendingToolRaw(props.part))
   const filePathValue = createMemo(() => props.input.filePath ?? jsonStringPrefix(raw(), "filePath") ?? "")
   const code = createMemo(() => {
@@ -3202,15 +3355,7 @@ function Write(props: ToolProps<typeof WriteTool>) {
     <Switch>
       <Match when={props.part.state.status === "completed" && code()}>
         <BlockTool title={"# Wrote " + normalizePath(filePathValue())} part={props.part}>
-          <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
-            <code
-              conceal={false}
-              fg={theme.text}
-              filetype={filetype(filePathValue())}
-              syntaxStyle={syntax()}
-              content={code()}
-            />
-          </line_number>
+          <CollapsibleCodeBlock content={code()} filePath={filePathValue()} />
           <Diagnostics diagnostics={props.metadata.diagnostics} filePath={filePathValue()} />
         </BlockTool>
       </Match>
@@ -3376,7 +3521,6 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
 function Edit(props: ToolProps<typeof EditTool>) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
   const raw = createMemo(() => pendingToolRaw(props.part))
   const filePathValue = createMemo(() => props.input.filePath ?? jsonStringPrefix(raw(), "filePath") ?? "")
   const newString = createMemo(() => props.input.newString ?? jsonStringPrefix(raw(), "newString") ?? "")
@@ -3391,35 +3535,13 @@ function Edit(props: ToolProps<typeof EditTool>) {
     return ctx.width > 120 ? "split" : "unified"
   })
 
-  const ft = createMemo(() => filetype(filePathValue()))
-
   const diffContent = createMemo(() => props.metadata.diff)
 
   return (
     <Switch>
       <Match when={props.metadata.diff !== undefined}>
         <BlockTool title={"← Edit " + normalizePath(filePathValue())} part={props.part}>
-          <box paddingLeft={1}>
-            <diff
-              diff={diffContent()}
-              view={view()}
-              filetype={ft()}
-              syntaxStyle={syntax()}
-              showLineNumbers={true}
-              width="100%"
-              wrapMode={ctx.diffWrapMode()}
-              fg={theme.text}
-              addedBg={theme.diffAddedBg}
-              removedBg={theme.diffRemovedBg}
-              contextBg={theme.diffContextBg}
-              addedSignColor={theme.diffHighlightAdded}
-              removedSignColor={theme.diffHighlightRemoved}
-              lineNumberFg={theme.diffLineNumber}
-              lineNumberBg={theme.diffContextBg}
-              addedLineNumberBg={theme.diffAddedLineNumberBg}
-              removedLineNumberBg={theme.diffRemovedLineNumberBg}
-            />
-          </box>
+          <CollapsibleDiffBlock diff={diffContent() ?? ""} filePath={filePathValue()} view={view()} />
           <Diagnostics diagnostics={props.metadata.diagnostics} filePath={filePathValue()} />
         </BlockTool>
       </Match>
@@ -3442,7 +3564,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
 
 function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { theme } = useTheme()
   const raw = createMemo(() => pendingToolRaw(props.part))
   const patchText = createMemo(() => props.input.patchText ?? jsonStringPrefix(raw(), "patchText") ?? raw())
   const showStreamingPreview = createMemo(() => props.part.state.status === "pending" || props.part.state.status === "running")
@@ -3454,32 +3576,6 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
     if (diffStyle === "stacked") return "unified"
     return ctx.width > 120 ? "split" : "unified"
   })
-
-  function Diff(p: { diff: string; filePath: string }) {
-    return (
-      <box paddingLeft={1}>
-        <diff
-          diff={p.diff}
-          view={view()}
-          filetype={filetype(p.filePath)}
-          syntaxStyle={syntax()}
-          showLineNumbers={true}
-          width="100%"
-          wrapMode={ctx.diffWrapMode()}
-          fg={theme.text}
-          addedBg={theme.diffAddedBg}
-          removedBg={theme.diffRemovedBg}
-          contextBg={theme.diffContextBg}
-          addedSignColor={theme.diffHighlightAdded}
-          removedSignColor={theme.diffHighlightRemoved}
-          lineNumberFg={theme.diffLineNumber}
-          lineNumberBg={theme.diffContextBg}
-          addedLineNumberBg={theme.diffAddedLineNumberBg}
-          removedLineNumberBg={theme.diffRemovedLineNumberBg}
-        />
-      </box>
-    )
-  }
 
   function title(file: { type: string; relativePath: string; filePath: string; deletions: number }) {
     if (file.type === "delete") return "# Deleted " + file.relativePath
@@ -3502,7 +3598,7 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
                   </text>
                 }
               >
-                <Diff diff={file.patch} filePath={file.filePath} />
+                <CollapsibleDiffBlock diff={file.patch} filePath={file.filePath} view={view()} />
                 <Diagnostics diagnostics={props.metadata.diagnostics} filePath={file.movePath ?? file.filePath} />
               </Show>
             </BlockTool>
