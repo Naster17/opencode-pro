@@ -633,6 +633,7 @@ export function Prompt(props: PromptProps) {
         description: "Ask without saving to history",
         category: "Prompt",
         value: "prompt.btw",
+        hideFromPalette: true,
         slash: {
           name: "btw",
         },

@@ -27,6 +27,7 @@ export type CommandOption = DialogSelectOption<string> & {
   suggested?: boolean
   slash?: Slash
   hidden?: boolean
+  hideFromPalette?: boolean
   enabled?: boolean
 }
 
@@ -49,8 +50,9 @@ function init() {
   const isVisible = (option: CommandOption) => isEnabled(option) && !option.hidden
 
   const visibleOptions = createMemo(() => entries().filter((option) => isVisible(option)))
+  const paletteOptions = createMemo(() => visibleOptions().filter((option) => !option.hideFromPalette))
   const suggestedOptions = createMemo(() =>
-    visibleOptions()
+    paletteOptions()
       .filter((option) => option.suggested)
       .map((option) => ({
         ...option,
@@ -104,7 +106,7 @@ function init() {
     },
     suspended,
     show() {
-      dialog.replace(() => <DialogCommand options={visibleOptions()} suggestedOptions={suggestedOptions()} />)
+      dialog.replace(() => <DialogCommand options={paletteOptions()} suggestedOptions={suggestedOptions()} />)
     },
     register(cb: () => CommandOption[]) {
       const owner = getOwner() ?? root
