@@ -21,7 +21,7 @@ import { useSync } from "@tui/context/sync"
 import { useEvent } from "@tui/context/event"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
-import { selectedForeground, useTheme } from "@tui/context/theme"
+import { selectedForeground, tint, useTheme } from "@tui/context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type BtwSubmission, type PromptRef } from "@tui/component/prompt"
 import type {
@@ -2902,6 +2902,7 @@ type ToolProps<T> = {
 function GenericTool(props: ToolProps<any>) {
   const { theme } = useTheme()
   const ctx = use()
+  const active = createMemo(() => longRunningToolActive(props.part))
   const output = createMemo(() => props.output?.trim() ?? "")
   const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
@@ -2916,7 +2917,14 @@ function GenericTool(props: ToolProps<any>) {
     <Show
       when={props.output && ctx.showGenericToolOutput()}
       fallback={
-        <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
+        <InlineTool
+          icon="⚙"
+          pending="Running tool..."
+          complete={props.part.state.status === "completed"}
+          spinner={active()}
+          subtleSpinner={true}
+          part={props.part}
+        >
           {props.tool} {input(props.input)}
         </InlineTool>
       }
@@ -2943,6 +2951,7 @@ function InlineTool(props: {
   complete: any
   pending: string
   spinner?: boolean
+  subtleSpinner?: boolean
   children: JSX.Element
   part: ToolPart
   onClick?: () => void
@@ -2969,6 +2978,7 @@ function InlineTool(props: {
   })
 
   const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error : undefined))
+  const subtleSpinnerColor = createMemo(() => tint(theme.textMuted, theme.text, 0.18))
 
   const denied = createMemo(
     () =>
@@ -3013,7 +3023,12 @@ function InlineTool(props: {
     >
       <Switch>
         <Match when={props.spinner}>
-          <Spinner color={fg()} children={props.children} />
+          <Spinner
+            color={props.subtleSpinner ? subtleSpinnerColor() : fg()}
+            frames={props.subtleSpinner ? inlineToolSpinnerFrames : undefined}
+            interval={props.subtleSpinner ? 120 : undefined}
+            children={props.children}
+          />
         </Match>
         <Match when={true}>
           <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
@@ -3028,6 +3043,12 @@ function InlineTool(props: {
       </Show>
     </box>
   )
+}
+
+const inlineToolSpinnerFrames = ["◜", "◠", "◝", "◞", "◡", "◟"]
+
+function longRunningToolActive(part: ToolPart) {
+  return part.state.status === "pending" || part.state.status === "running"
 }
 
 function BlockTool(props: {
@@ -3420,8 +3441,16 @@ function Write(props: ToolProps<typeof WriteTool>) {
 }
 
 function Glob(props: ToolProps<typeof GlobTool>) {
+  const active = createMemo(() => longRunningToolActive(props.part))
   return (
-    <InlineTool icon="✱" pending="Finding files..." complete={props.input.pattern} part={props.part}>
+    <InlineTool
+      icon="✱"
+      pending="Finding files..."
+      complete={props.part.state.status === "completed" && props.input.pattern}
+      spinner={active()}
+      subtleSpinner={true}
+      part={props.part}
+    >
       Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
       <Show when={props.metadata.count}>
         ({props.metadata.count} {props.metadata.count === 1 ? "match" : "matches"})
@@ -3465,8 +3494,16 @@ function Read(props: ToolProps<typeof ReadTool>) {
 }
 
 function Grep(props: ToolProps<typeof GrepTool>) {
+  const active = createMemo(() => longRunningToolActive(props.part))
   return (
-    <InlineTool icon="✱" pending="Searching content..." complete={props.input.pattern} part={props.part}>
+    <InlineTool
+      icon="✱"
+      pending="Searching content..."
+      complete={props.part.state.status === "completed" && props.input.pattern}
+      spinner={active()}
+      subtleSpinner={true}
+      part={props.part}
+    >
       Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
       <Show when={props.metadata.matches}>
         ({props.metadata.matches} {props.metadata.matches === 1 ? "match" : "matches"})
@@ -3476,8 +3513,16 @@ function Grep(props: ToolProps<typeof GrepTool>) {
 }
 
 function WebFetch(props: ToolProps<typeof WebFetchTool>) {
+  const active = createMemo(() => longRunningToolActive(props.part))
   return (
-    <InlineTool icon="%" pending="Fetching from the web..." complete={props.input.url} part={props.part}>
+    <InlineTool
+      icon="%"
+      pending="Fetching from the web..."
+      complete={props.part.state.status === "completed" && props.input.url}
+      spinner={active()}
+      subtleSpinner={true}
+      part={props.part}
+    >
       WebFetch {props.input.url}
     </InlineTool>
   )
@@ -3485,8 +3530,16 @@ function WebFetch(props: ToolProps<typeof WebFetchTool>) {
 
 function WebSearch(props: ToolProps<typeof WebSearchTool>) {
   const metadata = props.metadata as { numResults?: number }
+  const active = createMemo(() => longRunningToolActive(props.part))
   return (
-    <InlineTool icon="◈" pending="Searching web..." complete={props.input.query} part={props.part}>
+    <InlineTool
+      icon="◈"
+      pending="Searching web..."
+      complete={props.part.state.status === "completed" && props.input.query}
+      spinner={active()}
+      subtleSpinner={true}
+      part={props.part}
+    >
       Exa Web Search "{props.input.query}" <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
     </InlineTool>
   )
@@ -3515,7 +3568,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
     tools().findLast((x) => (x.state.status === "running" || x.state.status === "completed") && x.state.title),
   )
 
-  const isRunning = createMemo(() => props.part.state.status === "running")
+  const active = createMemo(() => longRunningToolActive(props.part))
 
   const duration = createMemo(() => {
     const first = messages().find((x) => x.role === "user")?.time.created
@@ -3528,7 +3581,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
     if (!props.input.description) return ""
     let content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${props.input.description}`]
 
-    if (isRunning() && tools().length > 0) {
+    if (active() && tools().length > 0) {
       // content[0] += ` · ${tools().length} toolcalls`
       if (current()) {
         const state = current()!.state
@@ -3547,8 +3600,9 @@ function Task(props: ToolProps<typeof TaskTool>) {
   return (
     <InlineTool
       icon="│"
-      spinner={isRunning()}
-      complete={props.input.description}
+      spinner={active()}
+      subtleSpinner={true}
+      complete={props.part.state.status === "completed" && props.input.description}
       pending="Delegating..."
       part={props.part}
       onClick={() => {

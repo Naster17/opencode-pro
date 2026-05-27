@@ -363,9 +363,14 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       return animatedTitle(activeTitleState(tool.tool), titleAnimationFrame())
     }
 
-    const hasResponse = (sync.data.part[assistant.id] ?? []).some((part) => {
+    const parts = sync.data.part[assistant.id] ?? []
+    const lastPart = parts.at(-1)
+    if (lastPart?.type === "reasoning" || parts.some((part) => part.type === "reasoning")) {
+      return animatedTitle(titleLabel("reasoning"), titleAnimationFrame())
+    }
+
+    const hasResponse = parts.some((part) => {
       if (part.type === "text") return !!part.text.trim() && !part.synthetic && !part.ignored
-      if (part.type === "reasoning") return !!part.text.trim()
       if (part.type === "tool") return ["completed", "error"].includes(part.state.status)
       return false
     })
