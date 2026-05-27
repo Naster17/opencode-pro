@@ -2883,6 +2883,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "skill"}>
           <Skill {...toolprops} />
         </Match>
+        <Match when={props.part.tool === "invalid"}>
+          <InvalidToolCall {...toolprops} />
+        </Match>
         <Match when={true}>
           <GenericTool {...toolprops} />
         </Match>
@@ -2899,6 +2902,61 @@ type ToolProps<T> = {
   output?: string
   part: ToolPart
 }
+
+function invalidToolError(value: string) {
+  const compact = value.replace(/\\n/g, " ").replace(/\s+/g, " ").trim()
+  const json = compact.match(/JSON Parse error:[^\]]+/i)?.[0]
+  if (json) return json
+  const message = compact.split("Error message:").at(-1)?.replace(/\]+$/, "").trim()
+  return Locale.truncate(message || compact || "Invalid arguments", 140)
+}
+
+function toolErrorSummary(value: string) {
+  const compact = value.replace(/\\n/g, " ").replace(/\s+/g, " ").trim()
+  const patch = compact.match(/^(apply_patch verification failed: Error: Failed to find expected lines in [^:]+):/)
+  if (patch) return Locale.truncate(patch[1], 180)
+  const json = compact.match(/JSON Parse error:[^\]]+/i)?.[0]
+  if (json) return json
+  return Locale.truncate(compact || "Tool error", 180)
+}
+
+function ToolErrorText(props: { error: string; title?: string; icon?: string }) {
+  const { theme } = useTheme()
+  const renderer = useRenderer()
+  const [expanded, setExpanded] = createSignal(false)
+  const error = createMemo(() => props.error.trim())
+  const summary = createMemo(() => `${props.title ?? "Tool error"} · ${toolErrorSummary(error())}`)
+  return (
+    <box
+      flexDirection="row"
+      gap={1}
+      onMouseUp={(evt) => {
+        evt.stopPropagation()
+        if (renderer.getSelection()?.getSelectedText()) return
+        setExpanded((prev) => !prev)
+      }}
+    >
+      <Show when={props.icon}>
+        {(icon) => <text fg={theme.error}>{icon()}</text>}
+      </Show>
+      <text fg={theme.error} wrapMode={expanded() ? "word" : "none"} overflow={expanded() ? undefined : "hidden"}>
+        {expanded() ? error() : summary()}
+      </text>
+    </box>
+  )
+}
+
+function InvalidToolCall(props: ToolProps<any>) {
+  const input = props.input as Record<string, unknown>
+  const tool = stringValue(input.tool) ?? "tool"
+  const error = createMemo(() => stringValue(input.error) ?? props.output ?? "")
+  return (
+    <box paddingLeft={3} marginTop={1} flexShrink={0}>
+      <ToolErrorText icon="!" title={`Invalid ${tool} call`} error={error() || invalidToolError(error())} />
+    </box>
+  )
+}
+
 function GenericTool(props: ToolProps<any>) {
   const { theme } = useTheme()
   const ctx = use()
@@ -3033,8 +3091,8 @@ function InlineTool(props: {
           </text>
         </Match>
       </Switch>
-      <Show when={error() && !denied()}>
-        <text fg={theme.error}>{error()}</text>
+      <Show when={denied() ? undefined : error()}>
+        {(message) => <ToolErrorText error={message()} />}
       </Show>
     </box>
   )
@@ -3111,7 +3169,7 @@ function BlockTool(props: {
       </Show>
       {props.children}
       <Show when={error()}>
-        <text fg={theme.error}>{error()}</text>
+        {(message) => <ToolErrorText error={message()} />}
       </Show>
     </box>
   )
@@ -3429,6 +3487,19 @@ function jsonStringPrefix(raw: string, key: string) {
   return result
 }
 
+function patchPreviewTitle(patchText: string) {
+  const files = patchText
+    .split("\n")
+    .flatMap((line) => {
+      const match = /^\*\*\* (?:Add|Update|Delete) File: (.+)$/.exec(line.trim())
+      return match?.[1] ? [normalizePath(match[1])] : []
+    })
+    .filter((value, index, items) => items.indexOf(value) === index)
+  if (!files[0]) return "# Patch"
+  if (files.length === 1) return `# Patch ${files[0]}`
+  return `# Patch ${files[0]} +${files.length - 1}`
+}
+
 function Write(props: ToolProps<typeof WriteTool>) {
   const raw = createMemo(() => pendingToolRaw(props.part))
   const filePathValue = createMemo(() => props.input.filePath ?? jsonStringPrefix(raw(), "filePath") ?? "")
@@ -3600,8 +3671,10 @@ function Task(props: ToolProps<typeof TaskTool>) {
   })
 
   const content = createMemo(() => {
-    if (!props.input.description) return ""
-    let content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${props.input.description}`]
+    const title = `${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${
+      props.input.description || "Preparing task..."
+    }`
+    const content = [title]
 
     if (active() && tools().length > 0) {
       // content[0] += ` · ${tools().length} toolcalls`
@@ -3624,7 +3697,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
       icon="│"
       spinner={active()}
       subtleSpinner={true}
-      complete={props.part.state.status === "completed" && props.input.description}
+      complete={props.part.state.status === "completed"}
       pending="Delegating..."
       part={props.part}
       onClick={() => {
@@ -3725,7 +3798,7 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
         </For>
       </Match>
       <Match when={showStreamingPreview()}>
-        <PendingToolPreview content={patchText()} title="# Patch" filetype="diff" part={props.part} />
+        <PendingToolPreview content={patchText()} title={patchPreviewTitle(patchText())} filetype="diff" part={props.part} />
       </Match>
       <Match when={true}>
         <InlineTool icon="%" pending="Preparing patch..." complete={false} part={props.part}>

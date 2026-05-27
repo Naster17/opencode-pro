@@ -468,6 +468,9 @@ function AssistantTool(props: { part: SessionMessageAssistantTool }) {
       <Match when={props.part.name === "task"}>
         <Task {...toolprops} />
       </Match>
+      <Match when={props.part.name === "invalid"}>
+        <InvalidToolCall {...toolprops} />
+      </Match>
       <Match when={true}>
         <GenericTool {...toolprops} />
       </Match>
@@ -480,6 +483,59 @@ type ToolProps = {
   metadata: Record<string, unknown>
   output?: string
   part: SessionMessageAssistantTool
+}
+
+function invalidToolError(value: string) {
+  const compact = value.replace(/\\n/g, " ").replace(/\s+/g, " ").trim()
+  const json = compact.match(/JSON Parse error:[^\]]+/i)?.[0]
+  if (json) return json
+  const message = compact.split("Error message:").at(-1)?.replace(/\]+$/, "").trim()
+  return Locale.truncate(message || compact || "Invalid arguments", 140)
+}
+
+function toolErrorSummary(value: string) {
+  const compact = value.replace(/\\n/g, " ").replace(/\s+/g, " ").trim()
+  const patch = compact.match(/^(apply_patch verification failed: Error: Failed to find expected lines in [^:]+):/)
+  if (patch) return Locale.truncate(patch[1], 180)
+  const json = compact.match(/JSON Parse error:[^\]]+/i)?.[0]
+  if (json) return json
+  return Locale.truncate(compact || "Tool error", 180)
+}
+
+function ToolErrorText(props: { error: string; title?: string; icon?: string }) {
+  const { theme } = useTheme()
+  const renderer = useRenderer()
+  const [expanded, setExpanded] = createSignal(false)
+  const error = createMemo(() => props.error.trim())
+  const summary = createMemo(() => `${props.title ?? "Tool error"} · ${toolErrorSummary(error())}`)
+  return (
+    <box
+      flexDirection="row"
+      gap={1}
+      onMouseUp={(evt) => {
+        evt.stopPropagation()
+        if (renderer.getSelection()?.getSelectedText()) return
+        setExpanded((prev) => !prev)
+      }}
+    >
+      <Show when={props.icon}>
+        {(icon) => <text fg={theme.error}>{icon()}</text>}
+      </Show>
+      <text fg={theme.error} wrapMode={expanded() ? "word" : "none"} overflow={expanded() ? undefined : "hidden"}>
+        {expanded() ? error() : summary()}
+      </text>
+    </box>
+  )
+}
+
+function InvalidToolCall(props: ToolProps) {
+  const tool = stringValue(props.input.tool) ?? "tool"
+  const error = createMemo(() => stringValue(props.input.error) ?? props.output ?? "")
+  return (
+    <box paddingLeft={3} marginTop={1} flexShrink={0}>
+      <ToolErrorText icon="!" title={`Invalid ${tool} call`} error={error() || invalidToolError(error())} />
+    </box>
+  )
 }
 
 function GenericTool(props: ToolProps) {
@@ -541,10 +597,8 @@ function InlineTool(props: {
   part: SessionMessageAssistantTool
 }) {
   const { theme } = useTheme()
-  const renderer = useRenderer()
   const [margin, setMargin] = createSignal(0)
   const [hover, setHover] = createSignal(false)
-  const [showError, setShowError] = createSignal(false)
   const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error.message : undefined))
   const complete = createMemo(() => props.part.state.status === "error" || !!props.complete)
   const denied = createMemo(() => {
@@ -573,11 +627,6 @@ function InlineTool(props: {
       backgroundColor={hover() && error() ? theme.backgroundMenu : undefined}
       onMouseOver={() => error() && setHover(true)}
       onMouseOut={() => setHover(false)}
-      onMouseUp={() => {
-        if (!error()) return
-        if (renderer.getSelection()?.getSelectedText()) return
-        setShowError((prev) => !prev)
-      }}
       renderBefore={function () {
         const el = this as BoxRenderable
         const parent = el.parent
@@ -623,10 +672,8 @@ function InlineTool(props: {
             </Match>
           </Switch>
         </box>
-        <Show when={showError() && error()}>
-          <box>
-            <text fg={theme.error}>{error()}</text>
-          </box>
+        <Show when={error()}>
+          {(message) => <ToolErrorText error={message()} />}
         </Show>
       </box>
     </box>
@@ -681,7 +728,7 @@ function BlockTool(props: {
       </Show>
       {props.children}
       <Show when={error()}>
-        <text fg={theme.error}>{error()}</text>
+        {(message) => <ToolErrorText error={message()} />}
       </Show>
     </box>
   )
@@ -1028,8 +1075,7 @@ function Skill(props: ToolProps) {
 function Task(props: ToolProps) {
   const content = createMemo(() => {
     const description = stringValue(props.input.description)
-    if (!description) return pendingInput(props.part)
-    return `${Locale.titlecase(stringValue(props.input.subagent_type) ?? "General")} Task — ${description}`
+    return `${Locale.titlecase(stringValue(props.input.subagent_type) ?? "General")} Task — ${description || "Preparing task..."}`
   })
   return (
     <InlineTool
