@@ -394,8 +394,28 @@ export const layer: Layer.Layer<
             }
             return
 
-          case "tool-input-delta":
+          case "tool-input-delta": {
+            const toolCall = yield* readToolCall(value.id)
+            if (!input.ephemeral) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              EventV2.run(SessionEvent.Tool.Input.Delta.Sync, {
+                sessionID: ctx.sessionID,
+                callID: value.id,
+                delta: value.delta,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
+            if (toolCall?.part.state.status !== "pending") return
+            toolCall.part.state.raw += value.delta
+            yield* updatePartDelta({
+              sessionID: toolCall.part.sessionID,
+              messageID: toolCall.part.messageID,
+              partID: toolCall.part.id,
+              field: "raw",
+              delta: value.delta,
+            })
             return
+          }
 
           case "tool-input-end": {
             if (!input.ephemeral) {

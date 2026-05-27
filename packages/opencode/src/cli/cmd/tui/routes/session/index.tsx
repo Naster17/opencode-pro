@@ -293,7 +293,7 @@ export function Session() {
     setBtwTurns((current) =>
       current.map((turn) => {
         const turnUpdates = updates.filter((update) => update.turnID === turn.id)
-        const turnDeltas = deltas.filter((delta) => delta.turnID === turn.id && delta.field === "text")
+        const turnDeltas = deltas.filter((delta) => delta.turnID === turn.id)
         if (turnUpdates.length === 0 && turnDeltas.length === 0) return turn
 
         return {
@@ -305,10 +305,25 @@ export function Session() {
                   (update) => update.part.messageID === response.info.id && update.part.id === part.id,
                 )?.part
                 const next = updated ?? part
+                const partDeltas = turnDeltas.filter((delta) => delta.messageID === response.info.id && delta.partID === next.id)
+                if (next.type === "tool" && next.state.status === "pending") {
+                  const currentRaw = part.type === "tool" && part.state.status === "pending" ? part.state.raw : undefined
+                  const deltaRaw = partDeltas
+                    .filter((delta) => delta.field === "raw")
+                    .map((delta) => delta.delta)
+                    .join("")
+                  return {
+                    ...next,
+                    state: {
+                      ...next.state,
+                      raw: updated && next.state.raw !== currentRaw ? next.state.raw : next.state.raw + deltaRaw,
+                    },
+                  }
+                }
                 if (next.type !== "text" && next.type !== "reasoning") return next
                 const currentText = part.type === "text" || part.type === "reasoning" ? part.text : undefined
-                const deltaText = turnDeltas
-                  .filter((delta) => delta.messageID === response.info.id && delta.partID === next.id)
+                const deltaText = partDeltas
+                  .filter((delta) => delta.field === "text")
                   .map((delta) => delta.delta)
                   .join("")
                 return {
@@ -324,6 +339,16 @@ export function Session() {
                       !response.parts.some((part) => part.id === update.part.id),
                   )
                   .map((update) => {
+                    if (update.part.type === "tool" && update.part.state.status === "pending") {
+                      const deltaRaw = turnDeltas
+                        .filter(
+                          (delta) =>
+                            delta.messageID === response.info.id && delta.partID === update.part.id && delta.field === "raw",
+                        )
+                        .map((delta) => delta.delta)
+                        .join("")
+                      return { ...update.part, state: { ...update.part.state, raw: update.part.state.raw + deltaRaw } }
+                    }
                     if (update.part.type !== "text" && update.part.type !== "reasoning") return update.part
                     if (update.part.time?.end) return update.part
                     return {
@@ -331,7 +356,10 @@ export function Session() {
                       text:
                         update.part.text +
                         turnDeltas
-                          .filter((delta) => delta.messageID === response.info.id && delta.partID === update.part.id)
+                          .filter(
+                            (delta) =>
+                              delta.messageID === response.info.id && delta.partID === update.part.id && delta.field === "text",
+                          )
                           .map((delta) => delta.delta)
                           .join(""),
                     }
@@ -365,7 +393,7 @@ export function Session() {
     field: string
     delta: string
   }) {
-    if (input.field !== "text") return
+    if (input.field !== "text" && input.field !== "raw") return
     const key = `${input.turnID}:${input.messageID}:${input.partID}:${input.field}`
     const existing = queuedBtwPartDeltas.get(key)
     queuedBtwPartDeltas.set(key, { ...input, delta: (existing?.delta ?? "") + input.delta })
@@ -3086,32 +3114,117 @@ function Shell(props: ToolProps<typeof ShellTool>) {
   )
 }
 
+function PendingToolPreview(props: { content: string; filePath?: string; title: string; filetype?: string; part: ToolPart }) {
+  const { theme, syntax } = useTheme()
+  const ctx = use()
+  const normalized = createMemo(() => props.content.replace(/\r\n/g, "\n").replace(/\r/g, "\n"))
+  const display = createMemo(() => normalized() || "waiting for streamed tool input...")
+  const lines = createMemo(() => display().split("\n"))
+  const visibleLines = createMemo(() => lines().slice(-3))
+  const firstLine = createMemo(() => Math.max(1, lines().length - visibleLines().length + 1))
+  const currentLine = createMemo(() => Math.max(1, lines().length))
+  const lineNumberWidth = createMemo(() => Math.max(3, String(currentLine()).length))
+  const lineWidth = createMemo(() => Math.max(20, ctx.width - lineNumberWidth() - 18))
+  const preview = createMemo(() =>
+    [...visibleLines(), ...Array(Math.max(0, 3 - visibleLines().length)).fill("")]
+      .map((line) => (line.length > lineWidth() ? line.slice(0, lineWidth() - 1) + "…" : line))
+      .join("\n"),
+  )
+
+  return (
+    <BlockTool title={`${props.title} · line ${currentLine()}`} part={props.part} spinner={true}>
+      <line_number fg={theme.textMuted} minWidth={lineNumberWidth()} paddingRight={1} lineNumberOffset={firstLine() - 1}>
+        <code
+          conceal={false}
+          fg={normalized() ? theme.text : theme.textMuted}
+          filetype={props.filetype ?? filetype(props.filePath)}
+          syntaxStyle={syntax()}
+          streaming={true}
+          content={preview()}
+        />
+      </line_number>
+    </BlockTool>
+  )
+}
+
+function pendingToolRaw(part: ToolPart) {
+  if (part.state.status !== "pending") return ""
+  return part.state.raw
+}
+
+function jsonStringPrefix(raw: string, key: string) {
+  const keyIndex = raw.indexOf(`"${key}"`)
+  if (keyIndex === -1) return undefined
+  const colonIndex = raw.indexOf(":", keyIndex + key.length + 2)
+  if (colonIndex === -1) return undefined
+  const quoteIndex = raw.indexOf('"', colonIndex + 1)
+  if (quoteIndex === -1) return undefined
+
+  let result = ""
+  for (let index = quoteIndex + 1; index < raw.length; index++) {
+    const char = raw[index]
+    if (!char) return result
+    if (char === '"') return result
+    if (char !== "\\") {
+      result += char
+      continue
+    }
+
+    index++
+    const escaped = raw[index]
+    if (!escaped) return result
+    if (escaped === "n") result += "\n"
+    else if (escaped === "r") result += "\r"
+    else if (escaped === "t") result += "\t"
+    else if (escaped === "b") result += "\b"
+    else if (escaped === "f") result += "\f"
+    else if (escaped === "u") {
+      const hex = raw.slice(index + 1, index + 5)
+      const code = /^[0-9a-fA-F]{4}$/.test(hex) ? Number.parseInt(hex, 16) : Number.NaN
+      if (Number.isNaN(code)) continue
+      result += String.fromCharCode(code)
+      index += 4
+    } else result += escaped
+  }
+  return result
+}
+
 function Write(props: ToolProps<typeof WriteTool>) {
   const { theme, syntax } = useTheme()
+  const raw = createMemo(() => pendingToolRaw(props.part))
+  const filePathValue = createMemo(() => props.input.filePath ?? jsonStringPrefix(raw(), "filePath") ?? "")
   const code = createMemo(() => {
-    if (!props.input.content) return ""
-    return props.input.content
+    return props.input.content ?? jsonStringPrefix(raw(), "content") ?? raw()
   })
+  const showStreamingPreview = createMemo(() => props.part.state.status === "pending" || props.part.state.status === "running")
 
   return (
     <Switch>
-      <Match when={props.metadata.diagnostics !== undefined}>
-        <BlockTool title={"# Wrote " + normalizePath(props.input.filePath!)} part={props.part}>
+      <Match when={props.part.state.status === "completed" && code()}>
+        <BlockTool title={"# Wrote " + normalizePath(filePathValue())} part={props.part}>
           <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
             <code
               conceal={false}
               fg={theme.text}
-              filetype={filetype(props.input.filePath!)}
+              filetype={filetype(filePathValue())}
               syntaxStyle={syntax()}
               content={code()}
             />
           </line_number>
-          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={props.input.filePath ?? ""} />
+          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={filePathValue()} />
         </BlockTool>
       </Match>
+      <Match when={showStreamingPreview()}>
+        <PendingToolPreview
+          content={code()}
+          filePath={filePathValue()}
+          title={"# Write" + (filePathValue() ? " " + normalizePath(filePathValue()) : "")}
+          part={props.part}
+        />
+      </Match>
       <Match when={true}>
-        <InlineTool icon="←" pending="Preparing write..." complete={props.input.filePath} part={props.part}>
-          Write {normalizePath(props.input.filePath!)}
+        <InlineTool icon="←" pending="Preparing write..." complete={filePathValue()} part={props.part}>
+          Write {normalizePath(filePathValue())}
         </InlineTool>
       </Match>
     </Switch>
@@ -3264,6 +3377,12 @@ function Task(props: ToolProps<typeof TaskTool>) {
 function Edit(props: ToolProps<typeof EditTool>) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const raw = createMemo(() => pendingToolRaw(props.part))
+  const filePathValue = createMemo(() => props.input.filePath ?? jsonStringPrefix(raw(), "filePath") ?? "")
+  const newString = createMemo(() => props.input.newString ?? jsonStringPrefix(raw(), "newString") ?? "")
+  const oldString = createMemo(() => props.input.oldString ?? jsonStringPrefix(raw(), "oldString") ?? "")
+  const preview = createMemo(() => newString() || oldString() || raw())
+  const showStreamingPreview = createMemo(() => props.part.state.status === "pending" || props.part.state.status === "running")
 
   const view = createMemo(() => {
     const diffStyle = ctx.tui.diff_style
@@ -3272,14 +3391,14 @@ function Edit(props: ToolProps<typeof EditTool>) {
     return ctx.width > 120 ? "split" : "unified"
   })
 
-  const ft = createMemo(() => filetype(props.input.filePath))
+  const ft = createMemo(() => filetype(filePathValue()))
 
   const diffContent = createMemo(() => props.metadata.diff)
 
   return (
     <Switch>
       <Match when={props.metadata.diff !== undefined}>
-        <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)} part={props.part}>
+        <BlockTool title={"← Edit " + normalizePath(filePathValue())} part={props.part}>
           <box paddingLeft={1}>
             <diff
               diff={diffContent()}
@@ -3301,12 +3420,20 @@ function Edit(props: ToolProps<typeof EditTool>) {
               removedLineNumberBg={theme.diffRemovedLineNumberBg}
             />
           </box>
-          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={props.input.filePath ?? ""} />
+          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={filePathValue()} />
         </BlockTool>
       </Match>
+      <Match when={showStreamingPreview()}>
+        <PendingToolPreview
+          content={preview()}
+          filePath={filePathValue()}
+          title={"# Edit" + (filePathValue() ? " " + normalizePath(filePathValue()) : "")}
+          part={props.part}
+        />
+      </Match>
       <Match when={true}>
-        <InlineTool icon="←" pending="Preparing edit..." complete={props.input.filePath} part={props.part}>
-          Edit {normalizePath(props.input.filePath!)} {input({ replaceAll: props.input.replaceAll })}
+        <InlineTool icon="←" pending="Preparing edit..." complete={filePathValue()} part={props.part}>
+          Edit {normalizePath(filePathValue())} {input({ replaceAll: props.input.replaceAll })}
         </InlineTool>
       </Match>
     </Switch>
@@ -3316,6 +3443,9 @@ function Edit(props: ToolProps<typeof EditTool>) {
 function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const raw = createMemo(() => pendingToolRaw(props.part))
+  const patchText = createMemo(() => props.input.patchText ?? jsonStringPrefix(raw(), "patchText") ?? raw())
+  const showStreamingPreview = createMemo(() => props.part.state.status === "pending" || props.part.state.status === "running")
 
   const files = createMemo(() => props.metadata.files ?? [])
 
@@ -3378,6 +3508,9 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
             </BlockTool>
           )}
         </For>
+      </Match>
+      <Match when={showStreamingPreview()}>
+        <PendingToolPreview content={patchText()} title="# Patch" filetype="diff" part={props.part} />
       </Match>
       <Match when={true}>
         <InlineTool icon="%" pending="Preparing patch..." complete={false} part={props.part}>

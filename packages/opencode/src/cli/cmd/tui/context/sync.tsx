@@ -170,6 +170,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             const result = Binary.search(parts, event.partID, (part) => part.id)
             if (!result.found) continue
             const part = parts[result.index]
+            if (event.field === "raw" && part.type === "tool" && part.state.status === "pending") {
+              part.state.raw += event.delta
+              continue
+            }
             const field = event.field as keyof typeof part
             const existing = part[field] as string | undefined
             ;(part[field] as string) = (existing ?? "") + event.delta
