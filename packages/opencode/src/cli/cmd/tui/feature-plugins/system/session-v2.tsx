@@ -321,18 +321,8 @@ function AssistantMessage(props: {
         <MissingData label="Assistant content" detail={`Assistant message ${props.message.id} has no content items.`} />
       </Show>
       <Show when={props.message.error}>
-        <box
-          border={["left"]}
-          paddingTop={1}
-          paddingBottom={1}
-          paddingLeft={2}
-          marginTop={1}
-          backgroundColor={theme.backgroundPanel}
-          customBorderChars={SplitBorder.customBorderChars}
-          borderColor={theme.error}
-          flexShrink={0}
-        >
-          <text fg={theme.textMuted}>{props.message.error}</text>
+        <box paddingLeft={3} flexShrink={0}>
+          <CompactErrorBlock title="Message error" error={props.message.error?.message ?? ""} />
         </box>
       </Show>
       <Show when={props.last || final() || props.message.error}>
@@ -502,28 +492,53 @@ function toolErrorSummary(value: string) {
   return Locale.truncate(compact || "Tool error", 180)
 }
 
-function ToolErrorText(props: { error: string; title?: string; icon?: string }) {
+function toolErrorTitle(value: string, fallback = "Tool error") {
+  const compact = value.replace(/\\n/g, " ").replace(/\s+/g, " ").trim()
+  if (/QuestionRejectedError|rejected permission|specified a rule|user dismissed/i.test(compact)) return "Permission rejected"
+  if (/apply_patch verification failed|patch rejected/i.test(compact)) return "Patch failed"
+  if (/timed?\s*out|timeout/i.test(compact)) return "Command timed out"
+  if (/aborted|abort/i.test(compact)) return "Command aborted"
+  if (/JSON Parse error|Invalid arguments/i.test(compact)) return "Invalid tool call"
+  return fallback
+}
+
+function CompactErrorBlock(props: { error: string; title?: string; icon?: string; marginTop?: number }) {
   const { theme } = useTheme()
   const renderer = useRenderer()
   const [expanded, setExpanded] = createSignal(false)
+  const [hover, setHover] = createSignal(false)
   const error = createMemo(() => props.error.trim())
-  const summary = createMemo(() => `${props.title ?? "Tool error"} · ${toolErrorSummary(error())}`)
+  const title = createMemo(() => props.title ?? toolErrorTitle(error()))
+  const summary = createMemo(() => toolErrorSummary(error()))
   return (
     <box
-      flexDirection="row"
+      border={["left"]}
+      paddingLeft={2}
+      paddingRight={2}
+      paddingTop={1}
+      paddingBottom={1}
+      marginTop={props.marginTop ?? 1}
       gap={1}
+      backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
+      borderColor={theme.error}
+      customBorderChars={SplitBorder.customBorderChars}
       onMouseUp={(evt) => {
         evt.stopPropagation()
         if (renderer.getSelection()?.getSelectedText()) return
         setExpanded((prev) => !prev)
       }}
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+      flexShrink={0}
     >
-      <Show when={props.icon}>
-        {(icon) => <text fg={theme.error}>{icon()}</text>}
-      </Show>
-      <text fg={theme.error} wrapMode={expanded() ? "word" : "none"} overflow={expanded() ? undefined : "hidden"}>
-        {expanded() ? error() : summary()}
+      <text fg={theme.error} wrapMode="none" overflow="hidden">
+        {props.icon ?? "!"} {title()} <span style={{ fg: theme.textMuted }}>· {summary()}</span>
       </text>
+      <Show when={expanded()}>
+        <text fg={theme.textMuted} wrapMode="word">
+          {error() || summary()}
+        </text>
+      </Show>
     </box>
   )
 }
@@ -532,8 +547,8 @@ function InvalidToolCall(props: ToolProps) {
   const tool = stringValue(props.input.tool) ?? "tool"
   const error = createMemo(() => stringValue(props.input.error) ?? props.output ?? "")
   return (
-    <box paddingLeft={3} marginTop={1} flexShrink={0}>
-      <ToolErrorText icon="!" title={`Invalid ${tool} call`} error={error() || invalidToolError(error())} />
+    <box paddingLeft={3} flexShrink={0}>
+      <CompactErrorBlock title={`Invalid ${tool} call`} error={error() || invalidToolError(error())} />
     </box>
   )
 }
@@ -588,6 +603,14 @@ function shellOutput(raw: string) {
   }
 }
 
+function shellNoteIsError(note: string) {
+  return /aborted|abort|timed?\s*out|timeout|error/i.test(note)
+}
+
+function shellNoteTitle(note: string) {
+  return toolErrorTitle(note, "Shell error")
+}
+
 function InlineTool(props: {
   icon: string
   complete: unknown
@@ -620,10 +643,8 @@ function InlineTool(props: {
   return (
     <box
       marginTop={margin()}
-      paddingLeft={3}
       flexShrink={0}
-      flexDirection="row"
-      gap={1}
+      flexDirection="column"
       backgroundColor={hover() && error() ? theme.backgroundMenu : undefined}
       onMouseOver={() => error() && setHover(true)}
       onMouseOut={() => setHover(false)}
@@ -640,25 +661,25 @@ function InlineTool(props: {
         else setMargin(0)
       }}
     >
-      <box flexShrink={0}>
-        <Switch>
-          <Match when={props.spinner}>
-            <Spinner color={theme.text} />
-          </Match>
-          <Match when={complete()}>
-            <text fg={fg()} attributes={attributes()}>
-              {props.icon}
-            </text>
-          </Match>
-          <Match when={true}>
-            <text fg={fg()} attributes={attributes()}>
-              ~
-            </text>
-          </Match>
-        </Switch>
-      </box>
-      <box flexGrow={1}>
-        <box>
+      <box paddingLeft={3} flexDirection="row" gap={1}>
+        <box flexShrink={0}>
+          <Switch>
+            <Match when={props.spinner}>
+              <Spinner color={theme.text} />
+            </Match>
+            <Match when={complete()}>
+              <text fg={fg()} attributes={attributes()}>
+                {props.icon}
+              </text>
+            </Match>
+            <Match when={true}>
+              <text fg={fg()} attributes={attributes()}>
+                ~
+              </text>
+            </Match>
+          </Switch>
+        </box>
+        <box flexGrow={1}>
           <Switch>
             <Match when={complete()}>
               <text fg={fg()} attributes={attributes()}>
@@ -672,10 +693,10 @@ function InlineTool(props: {
             </Match>
           </Switch>
         </box>
-        <Show when={error()}>
-          {(message) => <ToolErrorText error={message()} />}
-        </Show>
       </box>
+      <Show when={error()}>
+        {(message) => <CompactErrorBlock error={message()} />}
+      </Show>
     </box>
   )
 }
@@ -693,6 +714,7 @@ function BlockTool(props: {
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error.message : undefined))
+  const hasError = createMemo(() => !!error())
   return (
     <box
       id={`tool-block-${props.part?.id ?? blockToolTitle(props.title)}`}
@@ -704,7 +726,7 @@ function BlockTool(props: {
       gap={1}
       backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
       customBorderChars={SplitBorder.customBorderChars}
-      borderColor={theme.background}
+      borderColor={hasError() ? theme.error : theme.background}
       onMouseOver={() => props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -720,7 +742,7 @@ function BlockTool(props: {
             <Show when={props.marker}>
               <text fg={props.markerColor ?? theme.textMuted}>#</text>
             </Show>
-            <text fg={theme.textMuted}>{blockToolTitle(props.title)}</text>
+            <text fg={hasError() ? theme.error : theme.textMuted}>{blockToolTitle(props.title)}</text>
           </box>
         }
       >
@@ -728,7 +750,7 @@ function BlockTool(props: {
       </Show>
       {props.children}
       <Show when={error()}>
-        {(message) => <ToolErrorText error={message()} />}
+        {(message) => <CompactErrorBlock error={message()} />}
       </Show>
     </box>
   )
@@ -766,7 +788,13 @@ function Bash(props: ToolProps) {
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
             </Show>
-            <For each={notes()}>{(note) => <text fg={theme.warning}>{note}</text>}</For>
+            <For each={notes()}>
+              {(note) => (
+                <Show when={shellNoteIsError(note)} fallback={<text fg={theme.warning}>{note}</text>}>
+                  <CompactErrorBlock title={shellNoteTitle(note)} error={note} marginTop={0} />
+                </Show>
+              )}
+            </For>
             <Show when={overflow()}>
               <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
             </Show>
@@ -1091,7 +1119,6 @@ function Task(props: ToolProps) {
 }
 
 function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
-  const { theme } = useTheme()
   const errors = createMemo(() => {
     if (!isRecord(props.diagnostics)) return []
     const value = props.diagnostics[normalizePath(props.filePath)] ?? props.diagnostics[props.filePath]
@@ -1100,13 +1127,10 @@ function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
       .filter((diagnostic) => diagnostic.severity === 1)
       .slice(0, 3)
   })
+  const message = createMemo(() => errors().map((diagnostic) => `Error ${stringValue(diagnostic.message)}`).join("\n"))
   return (
     <Show when={errors().length}>
-      <box>
-        <For each={errors()}>
-          {(diagnostic) => <text fg={theme.error}>Error {stringValue(diagnostic.message)}</text>}
-        </For>
-      </box>
+      <CompactErrorBlock title="Diagnostics" error={message()} />
     </Show>
   )
 }
