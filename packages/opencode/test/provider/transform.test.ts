@@ -1303,6 +1303,82 @@ describe("ProviderTransform.providerOptions - llama.cpp gpt-oss off normalizatio
   })
 })
 
+describe("ProviderTransform.message - llama.cpp Ministral", () => {
+  const model = {
+    id: ModelID.make("llama.cpp/Ministral-3-14B-Reasoning-2512"),
+    providerID: ProviderID.make("llama.cpp"),
+    api: {
+      id: "Ministral-3-14B-Reasoning-2512",
+      url: "http://127.0.0.1:8080/v1",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Ministral-3-14B-Reasoning-2512",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0.001,
+      output: 0.002,
+      cache: { read: 0.0001, write: 0.0002 },
+    },
+    limit: {
+      context: 128000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2025-12-01",
+  } as any
+
+  test("uses Mistral role-order workaround for Ministral GGUF models", () => {
+    const result = ProviderTransform.message(
+      [
+        { role: "user", content: "Read the file" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool-call",
+              toolCallId: "call_read-123456789",
+              toolName: "read",
+              input: { filePath: "README.md" },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "call_read-123456789",
+              toolName: "read",
+              output: { type: "text", value: "contents" },
+            },
+          ],
+        },
+        { role: "user", content: "What did it say?" },
+      ] as any[],
+      model,
+      {},
+    ) as any[]
+
+    expect(result.map((msg) => msg.role)).toEqual(["user", "assistant", "tool", "assistant", "user"])
+    expect(result[1].content[0].toolCallId).toBe("callread1")
+    expect(result[2].content[0].toolCallId).toBe("callread1")
+    expect(result[3]).toEqual({
+      role: "assistant",
+      content: [{ type: "text", text: "Done." }],
+    })
+  })
+})
+
 describe("ProviderTransform.message - surrogate sanitization", () => {
   const model = {
     id: "test/test-model",

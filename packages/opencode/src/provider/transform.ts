@@ -210,10 +210,12 @@ function normalizeMessages(
       ]
     })
   }
+  const mistralFamilyModel = `${model.id} ${model.api.id} ${model.name}`.toLowerCase()
   if (
     model.providerID === "mistral" ||
-    model.api.id.toLowerCase().includes("mistral") ||
-    model.api.id.toLocaleLowerCase().includes("devstral")
+    mistralFamilyModel.includes("mistral") ||
+    mistralFamilyModel.includes("ministral") ||
+    mistralFamilyModel.includes("devstral")
   ) {
     const scrub = (id: string) => {
       return id
