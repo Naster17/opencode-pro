@@ -75,6 +75,7 @@ import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import * as Editor from "../../util/editor"
 import stripAnsi from "strip-ansi"
+import { parsePatch } from "diff"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
@@ -2924,7 +2925,7 @@ function toolErrorTitle(value: string, fallback = "Tool error") {
   return fallback
 }
 
-function CompactErrorBlock(props: { error: string; title?: string; icon?: string; marginTop?: number }) {
+function CompactErrorBlock(props: { error: string; title?: string; icon?: string; marginTop?: number; marginBottom?: number }) {
   const { theme } = useTheme()
   const renderer = useRenderer()
   const [expanded, setExpanded] = createSignal(false)
@@ -2940,6 +2941,7 @@ function CompactErrorBlock(props: { error: string; title?: string; icon?: string
       paddingTop={1}
       paddingBottom={1}
       marginTop={props.marginTop ?? 1}
+      marginBottom={props.marginBottom ?? 0}
       gap={1}
       backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
       borderColor={theme.error}
@@ -3086,7 +3088,7 @@ function InlineTool(props: {
           setMargin(0)
           return
         }
-        if (previous.id.startsWith("text-") || previous.id.startsWith("tool-block-")) {
+        if (previous.id.startsWith("msg_") || previous.id.startsWith("text-") || previous.id.startsWith("tool-block-")) {
           setMargin(1)
           return
         }
@@ -3113,7 +3115,7 @@ function InlineTool(props: {
         </Switch>
       </box>
       <Show when={error()}>
-        {(message) => <CompactErrorBlock error={message()} />}
+        {(message) => <CompactErrorBlock error={message()} marginBottom={1} />}
       </Show>
     </box>
   )
@@ -3199,7 +3201,7 @@ function BlockTool(props: {
       </Show>
       {props.children}
       <Show when={error()}>
-        {(message) => <CompactErrorBlock error={message()} />}
+        {(message) => <CompactErrorBlock error={message()} marginBottom={1} />}
       </Show>
     </box>
   )
@@ -3326,7 +3328,7 @@ function PendingToolPreview(props: { content: string; filePath?: string; title: 
         <code
           conceal={false}
           fg={normalized() ? theme.text : theme.textMuted}
-          filetype={props.filetype ?? filetype(props.filePath)}
+          filetype={props.filetype === "diff" ? "none" : (props.filetype ?? filetype(props.filePath))}
           syntaxStyle={syntax()}
           streaming={true}
           wrapMode="none"
@@ -3390,6 +3392,7 @@ function CollapsibleDiffBlock(props: { diff: string; filePath?: string; view: "s
   const limit = createMemo(() => Math.max(1, ctx.tui.code_block?.collapse_lines ?? 10))
   const overflow = createMemo(() => lines().length > limit())
   const preview = createMemo(() => diffPreview(props.diff, limit()))
+  const visibleDiff = createMemo(() => toRenderableDiff(expanded() || !overflow() ? props.diff : preview()))
   const hidden = createMemo(() => Math.max(0, lines().length - limit()))
 
   createEffect(on(ctx.codeBlockExpansion, (mode) => setExpanded(mode === "extend")))
@@ -3403,12 +3406,12 @@ function CollapsibleDiffBlock(props: { diff: string; filePath?: string; view: "s
         setExpanded((prev) => !prev)
       }}
     >
-      <Show
-        when={expanded() || !overflow()}
-        fallback={<DiffView diff={preview()} filePath={props.filePath} view={props.view} wrapMode="none" />}
-      >
-        <DiffView diff={props.diff} filePath={props.filePath} view={props.view} />
-      </Show>
+      <DiffView
+        diff={visibleDiff()}
+        filePath={props.filePath}
+        view={props.view}
+        wrapMode={expanded() || !overflow() ? undefined : "none"}
+      />
       <Show when={overflow()}>
         <text paddingLeft={4} fg={theme.textMuted}>
           {expanded() ? "Click to collapse" : `${hidden()} more lines · Click to extend`}
@@ -3444,18 +3447,34 @@ function CollapsibleDiffBlock(props: { diff: string; filePath?: string; view: "s
   }
 }
 
+function toRenderableDiff(diff: string) {
+  const normalized = diff.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+  if (isRenderableDiff(normalized)) return normalized
+  const preview = diffPreview(normalized, Number.MAX_SAFE_INTEGER)
+  if (isRenderableDiff(preview)) return preview
+  return diffHeaders(normalized).join("\n")
+}
+
+function isRenderableDiff(diff: string) {
+  if (!diff.trim()) return false
+  try {
+    return parsePatch(diff).length > 0
+  } catch {
+    return false
+  }
+}
+
 function diffPreview(diff: string, limit: number) {
   const lines = diff.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")
-  const oldHeader = lines.find((line) => line.startsWith("--- ")) ?? "--- a/file"
-  const newHeader = lines.find((line) => line.startsWith("+++ ")) ?? "+++ b/file"
+  const [oldHeader, newHeader] = diffHeaders(diff)
   const hunkIndex = lines.findIndex((line) => line.startsWith("@@ "))
-  if (hunkIndex === -1) return [oldHeader, newHeader, ...lines.slice(0, limit)].join("\n")
+  if (hunkIndex === -1) return [oldHeader, newHeader].join("\n")
 
   const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/.exec(lines[hunkIndex])
   if (!match) return [oldHeader, newHeader, ...lines.slice(hunkIndex, hunkIndex + limit + 1)].join("\n")
 
   const nextHunkIndex = lines.findIndex((line, index) => index > hunkIndex && line.startsWith("@@ "))
-  const content = lines.slice(hunkIndex + 1, nextHunkIndex === -1 ? undefined : nextHunkIndex)
+  const content = lines.slice(hunkIndex + 1, nextHunkIndex === -1 ? undefined : nextHunkIndex).filter(isDiffBodyLine)
   const firstChange = content.findIndex((line) => isDiffChangeLine(line))
   const start = Math.max(0, (firstChange === -1 ? 0 : firstChange) - 4)
   const selected = content.slice(start, start + limit)
@@ -3468,8 +3487,20 @@ function diffPreview(diff: string, limit: number) {
   )
 }
 
+function diffHeaders(diff: string) {
+  const lines = diff.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")
+  return [
+    lines.find((line) => line.startsWith("--- ")) ?? "--- a/file",
+    lines.find((line) => line.startsWith("+++ ")) ?? "+++ b/file",
+  ]
+}
+
 function isDiffChangeLine(line: string) {
   return (line.startsWith("+") && !line.startsWith("+++")) || (line.startsWith("-") && !line.startsWith("---"))
+}
+
+function isDiffBodyLine(line: string) {
+  return line.startsWith(" ") || line.startsWith("\\") || isDiffChangeLine(line)
 }
 
 function countDiffLines(lines: string[], side: "old" | "new") {
@@ -3477,13 +3508,20 @@ function countDiffLines(lines: string[], side: "old" | "new") {
     if (line.startsWith("\\")) return count
     if (line.startsWith("+") && !line.startsWith("+++")) return side === "new" ? count + 1 : count
     if (line.startsWith("-") && !line.startsWith("---")) return side === "old" ? count + 1 : count
-    return count + 1
+    if (line.startsWith(" ")) return count + 1
+    return count
   }, 0)
 }
 
 function pendingToolRaw(part: ToolPart) {
   if (part.state.status !== "pending") return ""
   return part.state.raw
+}
+
+function toolInputString(part: ToolPart, metadata: unknown, value: string | undefined, key: string) {
+  if (value) return value
+  const interruptedRaw = isRecord(metadata) && typeof metadata.interruptedRaw === "string" ? metadata.interruptedRaw : ""
+  return jsonStringPrefix(pendingToolRaw(part) || interruptedRaw, key) ?? ""
 }
 
 function jsonStringPrefix(raw: string, key: string) {
@@ -3571,16 +3609,24 @@ function Write(props: ToolProps<typeof WriteTool>) {
 
 function Glob(props: ToolProps<typeof GlobTool>) {
   const active = createMemo(() => longRunningToolActive(props.part))
+  const pattern = createMemo(() => toolInputString(props.part, props.metadata, props.input.pattern, "pattern"))
+  const path = createMemo(() => toolInputString(props.part, props.metadata, props.input.path, "path"))
   return (
     <InlineTool
       icon="✱"
       pending="Finding files..."
-      complete={props.part.state.status === "completed" && props.input.pattern}
+      complete={props.part.state.status === "completed" && pattern()}
       spinner={active()}
       subtleSpinner={true}
       part={props.part}
     >
-      Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+      <Show when={pattern()} fallback={<>Glob input unavailable</>}>
+        {(value) => (
+          <>
+            Glob "{value()}" <Show when={path()}>in {normalizePath(path())} </Show>
+          </>
+        )}
+      </Show>
       <Show when={props.metadata.count}>
         ({props.metadata.count} {props.metadata.count === 1 ? "match" : "matches"})
       </Show>
@@ -3624,16 +3670,24 @@ function Read(props: ToolProps<typeof ReadTool>) {
 
 function Grep(props: ToolProps<typeof GrepTool>) {
   const active = createMemo(() => longRunningToolActive(props.part))
+  const pattern = createMemo(() => toolInputString(props.part, props.metadata, props.input.pattern, "pattern"))
+  const path = createMemo(() => toolInputString(props.part, props.metadata, props.input.path, "path"))
   return (
     <InlineTool
       icon="✱"
       pending="Searching content..."
-      complete={props.part.state.status === "completed" && props.input.pattern}
+      complete={props.part.state.status === "completed" && pattern()}
       spinner={active()}
       subtleSpinner={true}
       part={props.part}
     >
-      Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+      <Show when={pattern()} fallback={<>Grep input unavailable</>}>
+        {(value) => (
+          <>
+            Grep "{value()}" <Show when={path()}>in {normalizePath(path())} </Show>
+          </>
+        )}
+      </Show>
       <Show when={props.metadata.matches}>
         ({props.metadata.matches} {props.metadata.matches === 1 ? "match" : "matches"})
       </Show>
