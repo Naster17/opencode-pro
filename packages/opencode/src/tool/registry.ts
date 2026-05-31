@@ -287,8 +287,7 @@ export const layer: Layer.Layer<
           return input.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
         }
 
-        const usePatch =
-          input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4")
+        const usePatch = input.modelID.toLowerCase().includes("gpt-")
         if (tool.id === ApplyPatchTool.id) return usePatch
         if (tool.id === EditTool.id || tool.id === WriteTool.id) return !usePatch
 

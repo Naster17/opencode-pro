@@ -23,6 +23,8 @@ import { Format } from "@/format"
 import { Ripgrep } from "@/file/ripgrep"
 import * as Truncate from "@/tool/truncate"
 import { InstanceState } from "@/effect/instance-state"
+import { ModelID, ProviderID } from "@/provider/schema"
+import { Permission } from "@/permission"
 
 const node = CrossSpawnSpawner.defaultLayer
 const configLayer = TestConfig.layer({
@@ -183,6 +185,35 @@ describe("tool.registry", () => {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
       expect(ids).toContain("cowsay")
+    }),
+  )
+
+  it.instance("uses apply_patch instead of edit/write for gpt-family models", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agent = {
+        name: "build",
+        mode: "primary" as const,
+        options: {},
+        permission: Permission.fromConfig({ "*": "allow" }),
+      }
+      const gptOss = (yield* registry.tools({
+        providerID: ProviderID.make("test"),
+        modelID: ModelID.make("gpt-oss-20b"),
+        agent,
+      })).map((tool) => tool.id)
+      const gpt4 = (yield* registry.tools({
+        providerID: ProviderID.make("test"),
+        modelID: ModelID.make("gpt-4o"),
+        agent,
+      })).map((tool) => tool.id)
+
+      expect(gptOss).toContain("apply_patch")
+      expect(gptOss).not.toContain("edit")
+      expect(gptOss).not.toContain("write")
+      expect(gpt4).toContain("apply_patch")
+      expect(gpt4).not.toContain("edit")
+      expect(gpt4).not.toContain("write")
     }),
   )
 })
