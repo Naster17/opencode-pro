@@ -209,8 +209,14 @@ export const layer = Layer.effect(
       yield* bus.publish(Event.Asked, info)
       return yield* Effect.ensuring(
         Deferred.await(deferred),
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          if (!pending.has(id)) return
           pending.delete(id)
+          yield* bus.publish(Event.Replied, {
+            sessionID: info.sessionID,
+            requestID: info.id,
+            reply: "reject",
+          })
         }),
       )
     })

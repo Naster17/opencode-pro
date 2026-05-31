@@ -692,6 +692,52 @@ it.live("ask - publishes asked event", () =>
   ),
 )
 
+it.live("ask - publishes reject reply event when interrupted", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      let resolve!: (value: { sessionID: SessionID; requestID: PermissionID; reply: Permission.Reply }) => void
+      const seen = Effect.promise<{
+        sessionID: SessionID
+        requestID: PermissionID
+        reply: Permission.Reply
+      }>(
+        () =>
+          new Promise((res) => {
+            resolve = res
+          }),
+      )
+
+      const unsub = yield* bus.subscribeCallback(Permission.Event.Replied, (event) => {
+        resolve(event.properties)
+      })
+
+      try {
+        const fiber = yield* ask({
+          id: PermissionID.make("per_interrupted"),
+          sessionID: SessionID.make("session_test"),
+          permission: "bash",
+          patterns: ["ls"],
+          metadata: {},
+          always: [],
+          ruleset: [],
+        }).pipe(Effect.forkScoped)
+
+        yield* waitForPending(1)
+        yield* Fiber.interrupt(fiber)
+        expect(yield* list()).toHaveLength(0)
+        expect(yield* seen).toEqual({
+          sessionID: SessionID.make("session_test"),
+          requestID: PermissionID.make("per_interrupted"),
+          reply: "reject",
+        })
+      } finally {
+        unsub()
+      }
+    }),
+  ),
+)
+
 // reply tests
 
 it.live("reply - once resolves the pending ask", () =>

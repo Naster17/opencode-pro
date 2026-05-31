@@ -44,6 +44,26 @@ function shouldPreservePart(current: Part | undefined, next: Part) {
   return toolStateRank(current.state.status) > toolStateRank(next.state.status)
 }
 
+type QueuedPartDelta = {
+  messageID: string
+  partID: string
+  field: string
+  delta: string
+}
+
+function partDeltaKey(input: QueuedPartDelta) {
+  return `${input.messageID}:${input.partID}:${input.field}`
+}
+
+function partIncludesDelta(part: Part, event: QueuedPartDelta) {
+  if (event.field === "raw" && part.type === "tool" && part.state.status === "pending") {
+    return part.state.raw.includes(event.delta)
+  }
+  if (event.field !== "text") return false
+  if (part.type !== "text" && part.type !== "reasoning") return false
+  return part.text.includes(event.delta)
+}
+
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
@@ -126,19 +146,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const fullSyncedSessions = new Set<string>()
     const fullHistorySyncedSessions = new Set<string>()
     let syncedWorkspace = project.workspace.current()
-    const queuedPartEvents: Array<
-      | {
-          type: "update"
-          part: Part
-        }
-      | {
-          type: "delta"
-          messageID: string
-          partID: string
-          field: string
-          delta: string
-        }
-    > = []
+    const queuedPartEvents: Array<{ type: "update"; part: Part } | ({ type: "delta" } & QueuedPartDelta)> = []
+    const pendingPartDeltas = new Map<string, QueuedPartDelta>()
     let queuedPartFlush: ReturnType<typeof setTimeout> | undefined
 
     function flushQueuedPartEvents() {
@@ -148,35 +157,56 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       setStore(
         "part",
         produce((draft) => {
+          const applyDelta = (event: QueuedPartDelta) => {
+            const parts = draft[event.messageID]
+            if (!parts) return false
+            const result = Binary.search(parts, event.partID, (part) => part.id)
+            if (!result.found) return false
+            const part = parts[result.index]
+            if (event.field === "raw" && part.type === "tool" && part.state.status === "pending") {
+              part.state.raw += event.delta
+              return true
+            }
+            if (event.field !== "text") return false
+            if (part.type !== "text" && part.type !== "reasoning") return false
+            part.text += event.delta
+            return true
+          }
+
+          const applyPendingDeltas = (part: Part) => {
+            for (const pending of [...pendingPartDeltas.values()]) {
+              if (pending.messageID !== part.messageID || pending.partID !== part.id) continue
+              pendingPartDeltas.delete(partDeltaKey(pending))
+              if (partIncludesDelta(part, pending)) continue
+              if (!applyDelta(pending)) pendingPartDeltas.set(partDeltaKey(pending), pending)
+            }
+          }
+
           for (const event of events) {
             if (event.type === "update") {
               const parts = draft[event.part.messageID]
               if (!parts) {
                 draft[event.part.messageID] = [event.part]
+                applyPendingDeltas(event.part)
                 continue
               }
               const result = Binary.search(parts, event.part.id, (item) => item.id)
               if (result.found) {
                 if (shouldPreservePart(parts[result.index], event.part)) continue
                 parts[result.index] = event.part
+                applyPendingDeltas(event.part)
                 continue
               }
               parts.splice(result.index, 0, event.part)
+              applyPendingDeltas(event.part)
               continue
             }
 
-            const parts = draft[event.messageID]
-            if (!parts) continue
-            const result = Binary.search(parts, event.partID, (part) => part.id)
-            if (!result.found) continue
-            const part = parts[result.index]
-            if (event.field === "raw" && part.type === "tool" && part.state.status === "pending") {
-              part.state.raw += event.delta
-              continue
-            }
-            const field = event.field as keyof typeof part
-            const existing = part[field] as string | undefined
-            ;(part[field] as string) = (existing ?? "") + event.delta
+            if (applyDelta(event)) continue
+            if (event.field !== "text" && event.field !== "raw") continue
+            const key = partDeltaKey(event)
+            const existing = pendingPartDeltas.get(key)
+            pendingPartDeltas.set(key, { ...event, delta: (existing?.delta ?? "") + event.delta })
           }
         }),
       )

@@ -31,6 +31,26 @@ const TOOL_ERROR_STALL_TIMEOUT = 5_000
 const TOOL_RESULT_STALL_TIMEOUT = 60_000
 const log = Log.create({ service: "session.processor" })
 
+function interruptedToolInput(part: MessageV2.ToolPart, raw?: string) {
+  const interruptedRaw = raw ?? (part.state.status === "pending" ? part.state.raw : "")
+  if (part.state.status !== "pending" || !interruptedRaw.trim()) return part.state.input
+
+  try {
+    const parsed = JSON.parse(interruptedRaw) as unknown
+    if (isRecord(parsed)) return parsed
+  } catch {
+    return part.state.input
+  }
+
+  return part.state.input
+}
+
+function interruptedToolMetadata(part: MessageV2.ToolPart, metadata: Record<string, unknown>, raw?: string) {
+  const interruptedRaw = raw ?? (part.state.status === "pending" ? part.state.raw : "")
+  if (part.state.status !== "pending" || !interruptedRaw.trim()) return { ...metadata, interrupted: true }
+  return { ...metadata, interrupted: true, interruptedRaw }
+}
+
 export type Result = "compact" | "stop" | "continue"
 
 export type Event = LLM.Event
@@ -83,6 +103,7 @@ type ToolCall = {
   messageID: MessageV2.ToolPart["messageID"]
   sessionID: MessageV2.ToolPart["sessionID"]
   done: Deferred.Deferred<void>
+  raw: string
 }
 
 interface ProcessorContext extends Input {
@@ -391,6 +412,7 @@ export const layer: Layer.Layer<
               partID: part.id,
               messageID: part.messageID,
               sessionID: part.sessionID,
+              raw: "",
             }
             return
 
@@ -406,6 +428,7 @@ export const layer: Layer.Layer<
               })
             }
             if (toolCall?.part.state.status !== "pending") return
+            toolCall.call.raw += value.delta
             toolCall.part.state.raw += value.delta
             yield* updatePartDelta({
               sessionID: toolCall.part.sessionID,
@@ -749,13 +772,14 @@ export const layer: Layer.Layer<
           const part = match.part
           const end = Date.now()
           const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
+          const pending = part.state.status === "pending"
           yield* updatePart({
             ...part,
             state: {
-              ...part.state,
               status: "error",
-              error: "Tool execution aborted",
-              metadata: { ...metadata, interrupted: true },
+              input: interruptedToolInput(part, match.call.raw),
+              error: pending ? "Tool call interrupted before input completed" : "Tool execution aborted",
+              metadata: interruptedToolMetadata(part, metadata, match.call.raw),
               time: { start: "time" in part.state ? part.state.time.start : end, end },
             },
           })

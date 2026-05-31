@@ -502,7 +502,7 @@ function toolErrorTitle(value: string, fallback = "Tool error") {
   return fallback
 }
 
-function CompactErrorBlock(props: { error: string; title?: string; icon?: string; marginTop?: number }) {
+function CompactErrorBlock(props: { error: string; title?: string; icon?: string; marginTop?: number; marginBottom?: number }) {
   const { theme } = useTheme()
   const renderer = useRenderer()
   const [expanded, setExpanded] = createSignal(false)
@@ -518,6 +518,7 @@ function CompactErrorBlock(props: { error: string; title?: string; icon?: string
       paddingTop={1}
       paddingBottom={1}
       marginTop={props.marginTop ?? 1}
+      marginBottom={props.marginBottom ?? 0}
       gap={1}
       backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
       borderColor={theme.error}
@@ -657,7 +658,7 @@ function InlineTool(props: {
           setMargin(0)
           return
         }
-        if (previous.id.startsWith("text") || previous.id.startsWith("tool-block-")) setMargin(1)
+        if (previous.id.startsWith("msg_") || previous.id.startsWith("text") || previous.id.startsWith("tool-block-")) setMargin(1)
         else setMargin(0)
       }}
     >
@@ -695,7 +696,7 @@ function InlineTool(props: {
         </box>
       </box>
       <Show when={error()}>
-        {(message) => <CompactErrorBlock error={message()} />}
+        {(message) => <CompactErrorBlock error={message()} marginBottom={1} />}
       </Show>
     </box>
   )
@@ -750,7 +751,7 @@ function BlockTool(props: {
       </Show>
       {props.children}
       <Show when={error()}>
-        {(message) => <CompactErrorBlock error={message()} />}
+        {(message) => <CompactErrorBlock error={message()} marginBottom={1} />}
       </Show>
     </box>
   )
@@ -811,10 +812,17 @@ function Bash(props: ToolProps) {
 }
 
 function Glob(props: ToolProps) {
+  const pattern = createMemo(() => toolInputString(props.part, props.metadata, stringValue(props.input.pattern), "pattern"))
+  const dir = createMemo(() => toolInputString(props.part, props.metadata, stringValue(props.input.path), "path"))
   return (
     <InlineTool icon="✱" pending="Finding files..." complete={toolComplete(props.part)} part={props.part}>
-      Glob "{stringValue(props.input.pattern) ?? pendingInput(props.part)}"{" "}
-      <Show when={stringValue(props.input.path)}>in {normalizePath(stringValue(props.input.path))} </Show>
+      <Show when={pattern()} fallback={<>Glob input unavailable</>}>
+        {(value) => (
+          <>
+            Glob "{value()}" <Show when={dir()}>in {normalizePath(dir())} </Show>
+          </>
+        )}
+      </Show>
       <Show when={numberValue(props.metadata.count)}>
         {(count) => (
           <>
@@ -857,10 +865,17 @@ function Read(props: ToolProps) {
 }
 
 function Grep(props: ToolProps) {
+  const pattern = createMemo(() => toolInputString(props.part, props.metadata, stringValue(props.input.pattern), "pattern"))
+  const dir = createMemo(() => toolInputString(props.part, props.metadata, stringValue(props.input.path), "path"))
   return (
     <InlineTool icon="✱" pending="Searching content..." complete={toolComplete(props.part)} part={props.part}>
-      Grep "{stringValue(props.input.pattern) ?? pendingInput(props.part)}"{" "}
-      <Show when={stringValue(props.input.path)}>in {normalizePath(stringValue(props.input.path))} </Show>
+      <Show when={pattern()} fallback={<>Grep input unavailable</>}>
+        {(value) => (
+          <>
+            Grep "{value()}" <Show when={dir()}>in {normalizePath(dir())} </Show>
+          </>
+        )}
+      </Show>
       <Show when={numberValue(props.metadata.matches)}>
         {(matches) => (
           <>
@@ -1153,6 +1168,43 @@ function toolInputRecord(input: string | Record<string, unknown>) {
 function pendingInput(part: SessionMessageAssistantTool) {
   if (part.state.status !== "pending") return ""
   return part.state.input.trim()
+}
+
+function jsonStringPrefix(raw: string, key: string) {
+  const keyIndex = raw.indexOf(`"${key}"`)
+  if (keyIndex === -1) return undefined
+  const colonIndex = raw.indexOf(":", keyIndex + key.length + 2)
+  if (colonIndex === -1) return undefined
+  const quoteIndex = raw.indexOf('"', colonIndex + 1)
+  if (quoteIndex === -1) return undefined
+
+  let result = ""
+  for (let index = quoteIndex + 1; index < raw.length; index++) {
+    const char = raw[index]
+    if (!char) return result
+    if (char === '"') return result
+    if (char !== "\\") {
+      result += char
+      continue
+    }
+
+    index++
+    const escaped = raw[index]
+    if (!escaped) return result
+    if (escaped === "n") result += "\n"
+    else if (escaped === "r") result += "\r"
+    else if (escaped === "t") result += "\t"
+    else if (escaped === "b") result += "\b"
+    else if (escaped === "f") result += "\f"
+    else result += escaped
+  }
+  return result
+}
+
+function toolInputString(part: SessionMessageAssistantTool, metadata: Record<string, unknown>, value: string | undefined, key: string) {
+  if (value) return value
+  const interruptedRaw = typeof metadata.interruptedRaw === "string" ? metadata.interruptedRaw : ""
+  return jsonStringPrefix(pendingInput(part) || interruptedRaw, key) ?? ""
 }
 
 function toolComplete(part: SessionMessageAssistantTool) {
