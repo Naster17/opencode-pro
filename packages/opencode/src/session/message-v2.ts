@@ -914,13 +914,20 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         role: "assistant",
         parts: [],
       }
+      const pushAssistantText = (text: string, metadata?: Record<string, any>) => {
+        const last = assistantMessage.parts.at(-1)
+        if (options?.inlineReasoning && last?.type === "text") {
+          last.text += text
+          return
+        }
+        assistantMessage.parts.push({
+          type: "text",
+          text,
+          ...(differentModel || options?.stripProviderMetadata || !metadata ? {} : { providerMetadata: metadata }),
+        })
+      }
       for (const part of msg.parts) {
-        if (part.type === "text")
-          assistantMessage.parts.push({
-            type: "text",
-            text: part.text,
-            ...(differentModel || options?.stripProviderMetadata ? {} : { providerMetadata: part.metadata }),
-          })
+        if (part.type === "text") pushAssistantText(part.text, part.metadata)
         if (part.type === "step-start")
           assistantMessage.parts.push({
             type: "step-start",
@@ -1000,12 +1007,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         }
         if (part.type === "reasoning") {
           if (options?.inlineReasoning) {
-            const text = part.text.trim()
-            if (text.length > 0)
-              assistantMessage.parts.push({
-                type: "text",
-                text: `<think>\n${text}\n</think>`,
-              })
+            pushAssistantText(`<think>${part.text}</think>`)
             continue
           }
           if (differentModel) {

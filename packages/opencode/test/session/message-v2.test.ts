@@ -1208,7 +1208,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("can inline reasoning as deepseek think text for local prompt cache continuity", async () => {
+  test("can inline reasoning as exact deepseek think text for local prompt cache continuity", async () => {
     const assistantID = "m-assistant-inline-reasoning"
     const input: MessageV2.WithParts[] = [
       {
@@ -1217,7 +1217,7 @@ describe("session.message-v2.toModelMessage", () => {
           {
             ...basePart(assistantID, "a1-inline-reasoning"),
             type: "reasoning",
-            text: "thinking",
+            text: "\nthinking\n",
             time: { start: 0 },
           },
           {
@@ -1233,8 +1233,7 @@ describe("session.message-v2.toModelMessage", () => {
       {
         role: "assistant",
         content: [
-          { type: "text", text: "<think>\nthinking\n</think>" },
-          { type: "text", text: "answer" },
+          { type: "text", text: "<think>\nthinking\n</think>answer" },
         ],
       },
     ])
