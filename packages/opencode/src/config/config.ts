@@ -294,6 +294,14 @@ export const Info = Schema.Struct({
       log_metrics: Schema.optional(Schema.Boolean).annotate({
         description: "Log cache performance metrics and potential token savings (default: false)",
       }),
+      strip_provider_metadata: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Strip non-semantic provider metadata from model history to keep local prompt-cache prefixes stable (default: true for llama.cpp).",
+      }),
+      inline_reasoning: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Inline stored reasoning back into assistant text for local prompt-cache continuity (default: true for llama.cpp reasoning models).",
+      }),
       stable_history: Schema.optional(Schema.Boolean).annotate({
         description: "Prevent modifying old messages with summary diffs to maintain cache stability (default: true). Set to false to restore legacy behavior where diffs are added to user messages.",
       }),

@@ -21,6 +21,7 @@ import { makeRuntime } from "@/effect/run-service"
 import { fn } from "@/util/fn"
 import { EventV2 } from "@/v2/event"
 import { SessionEvent } from "@/v2/session-event"
+import { CacheOptimizer } from "./cache-optimizer"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -529,6 +530,7 @@ export const layer: Layer.Layer<
         stripMedia: true,
         toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
         compactToolOutput: true,
+        stripProviderMetadata: CacheOptimizer.shouldStripProviderMetadata(model, cfg),
       })
       const ctx = yield* InstanceState.context
       const msg: MessageV2.Assistant = {

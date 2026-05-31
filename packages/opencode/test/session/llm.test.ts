@@ -263,6 +263,41 @@ function createChatStream(text: string) {
   })
 }
 
+function createReasoningChatStream(reasoning: string, text: string) {
+  const payload =
+    [
+      `data: ${JSON.stringify({
+        id: "chatcmpl-reasoning",
+        object: "chat.completion.chunk",
+        choices: [{ delta: { role: "assistant" } }],
+      })}`,
+      `data: ${JSON.stringify({
+        id: "chatcmpl-reasoning",
+        object: "chat.completion.chunk",
+        choices: [{ delta: { reasoning_content: reasoning } }],
+      })}`,
+      `data: ${JSON.stringify({
+        id: "chatcmpl-reasoning",
+        object: "chat.completion.chunk",
+        choices: [{ delta: { content: text } }],
+      })}`,
+      `data: ${JSON.stringify({
+        id: "chatcmpl-reasoning",
+        object: "chat.completion.chunk",
+        choices: [{ delta: {}, finish_reason: "stop" }],
+      })}`,
+      "data: [DONE]",
+    ].join("\n\n") + "\n\n"
+
+  const encoder = new TextEncoder()
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(payload))
+      controller.close()
+    },
+  })
+}
+
 async function loadFixture(providerID: string, modelID: string) {
   const fixturePath = path.join(import.meta.dir, "../tool/fixtures/models-api.json")
   const data = await Filesystem.readJson<Record<string, ModelsDev.Provider>>(fixturePath)
@@ -481,6 +516,184 @@ describe("session.llm.stream", () => {
         expect(body.chat_template_kwargs).toEqual({
           enable_thinking: false,
         })
+      },
+    })
+  })
+
+  test("requests extracted reasoning for llama.cpp reasoning models", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const request = waitRequest(
+      "/chat/completions",
+      new Response(createReasoningChatStream("thinking aloud", "final answer"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["llama.cpp"],
+            provider: {
+              "llama.cpp": {
+                name: "llama.cpp",
+                npm: "@ai-sdk/openai-compatible",
+                api: `${server.url.origin}/v1`,
+                models: {
+                  "Ministral-3-14B-Reasoning-2512": {
+                    name: "Ministral-3-14B-Reasoning-2512",
+                    reasoning: true,
+                    tool_call: true,
+                    limit: {
+                      context: 128000,
+                      output: 65536,
+                    },
+                  },
+                },
+                options: {
+                  apiKey: "test-key",
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(
+          ProviderID.make("llama.cpp"),
+          ModelID.make("Ministral-3-14B-Reasoning-2512"),
+        )
+        const sessionID = SessionID.make("session-test-llama-reasoning-options")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("user-llama-reasoning-options"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make("llama.cpp"), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        await drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        const capture = await request
+        expect(capture.body.enable_thinking).toBe(true)
+        expect(capture.body.chat_template_kwargs).toEqual({ enable_thinking: true })
+        expect(capture.body.reasoning_format).toBe("deepseek")
+      },
+    })
+  })
+
+  test("emits reasoning events from llama.cpp reasoning_content chunks", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    waitRequest(
+      "/chat/completions",
+      new Response(createReasoningChatStream("thinking aloud", "final answer"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["llama.cpp"],
+            provider: {
+              "llama.cpp": {
+                name: "llama.cpp",
+                npm: "@ai-sdk/openai-compatible",
+                api: `${server.url.origin}/v1`,
+                models: {
+                  ministral: {
+                    name: "Ministral Reasoning",
+                    reasoning: true,
+                    tool_call: true,
+                    limit: {
+                      context: 128000,
+                      output: 65536,
+                    },
+                  },
+                },
+                options: {
+                  apiKey: "test-key",
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.make("llama.cpp"), ModelID.make("ministral"))
+        const sessionID = SessionID.make("session-test-llama-reasoning")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("user-llama-reasoning"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make("llama.cpp"), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const events: LLM.Event[] = []
+        await llm.runPromise((svc) =>
+          svc
+            .stream({
+              user,
+              sessionID,
+              model: resolved,
+              agent,
+              system: ["You are a helpful assistant."],
+              messages: [{ role: "user", content: "Hello" }],
+              tools: {},
+            })
+            .pipe(Stream.runForEach((event) => Effect.sync(() => events.push(event)))),
+        )
+
+        expect(events.some((event) => event.type === "reasoning-delta" && event.text === "thinking aloud")).toBe(true)
+        expect(events.some((event) => event.type === "text-delta" && event.text === "final answer")).toBe(true)
       },
     })
   })

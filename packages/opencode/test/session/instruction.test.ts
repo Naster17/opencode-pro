@@ -49,6 +49,31 @@ const storageLayer = (partIDs: string[]) =>
     }),
   )
 
+const memoryStorageLayer = () => {
+  const store = new Map<string, unknown>()
+  const key = (value: string[]) => value.join("/")
+  return Layer.succeed(
+    Storage.Service,
+    Storage.Service.of({
+      remove: (input) => Effect.sync(() => store.delete(key(input))).pipe(Effect.asVoid),
+      update: <T,>(input: string[], fn: (draft: T) => void) =>
+        Effect.sync(() => {
+          const value = structuredClone(store.get(key(input))) as T
+          fn(value)
+          store.set(key(input), structuredClone(value))
+          return value
+        }),
+      write: (input, content) => Effect.sync(() => store.set(key(input), structuredClone(content))).pipe(Effect.asVoid),
+      list: () => Effect.succeed([]),
+      read: <T,>(input: string[]) => {
+        if (!store.has(key(input)))
+          return Effect.fail(new Storage.NotFoundError({ message: `missing storage key: ${key(input)}` }))
+        return Effect.succeed(structuredClone(store.get(key(input))) as T)
+      },
+    }),
+  )
+}
+
 const write = (filepath: string, content: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -282,6 +307,37 @@ describe("Instruction.system", () => {
         expect(rules[0]).toBe(`Instructions from: ${path.join(globalTmp, "AGENTS.md")}\n# Global Instructions`)
         expect(rules[1]).toBe(`Instructions from: ${path.join(projectTmp, "AGENTS.md")}\n# Project Instructions`)
       }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
+  )
+
+  it.live("keeps AGENTS.md fixed for a session after first read", () =>
+    Effect.gen(function* () {
+      const projectTmp = yield* tmpWithFiles({ "AGENTS.md": "# Initial Instructions" })
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const sessionID = SessionID.make("ses-instruction-freeze")
+
+        expect(yield* svc.systemForSession(sessionID)).toStrictEqual([
+          `Instructions from: ${path.join(projectTmp, "AGENTS.md")}\n# Initial Instructions`,
+        ])
+
+        yield* write(path.join(projectTmp, "AGENTS.md"), "# Changed Instructions")
+
+        expect(yield* svc.system()).toStrictEqual([
+          `Instructions from: ${path.join(projectTmp, "AGENTS.md")}\n# Changed Instructions`,
+        ])
+        expect(yield* svc.systemForSession(sessionID)).toStrictEqual([
+          `Instructions from: ${path.join(projectTmp, "AGENTS.md")}\n# Initial Instructions`,
+        ])
+        expect(yield* svc.systemForSession(SessionID.make("ses-instruction-new"))).toStrictEqual([
+          `Instructions from: ${path.join(projectTmp, "AGENTS.md")}\n# Changed Instructions`,
+        ])
+      }).pipe(
+        provideInstance(projectTmp),
+        provideInstruction({ home: projectTmp, config: projectTmp }),
+        Effect.provide(memoryStorageLayer()),
+      )
     }),
   )
 })

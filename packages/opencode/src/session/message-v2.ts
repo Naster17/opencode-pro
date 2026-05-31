@@ -732,7 +732,13 @@ function providerMeta(metadata: Record<string, any> | undefined) {
 export const toModelMessagesEffect = Effect.fnUntraced(function* (
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean; toolOutputMaxChars?: number; compactToolOutput?: boolean },
+  options?: {
+    stripMedia?: boolean
+    toolOutputMaxChars?: number
+    compactToolOutput?: boolean
+    stripProviderMetadata?: boolean
+    inlineReasoning?: boolean
+  },
 ) {
   // Try to get Storage and Config services if available
   const storage = yield* Effect.serviceOption(Storage.Service)
@@ -913,7 +919,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           assistantMessage.parts.push({
             type: "text",
             text: part.text,
-            ...(differentModel ? {} : { providerMetadata: part.metadata }),
+            ...(differentModel || options?.stripProviderMetadata ? {} : { providerMetadata: part.metadata }),
           })
         if (part.type === "step-start")
           assistantMessage.parts.push({
@@ -952,7 +958,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               input: part.state.input,
               output,
               ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-              ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+              ...(differentModel || options?.stripProviderMetadata ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
             })
           }
           if (part.state.status === "error") {
@@ -965,7 +971,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
                 input: part.state.input,
                 output,
                 ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-                ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+                ...(differentModel || options?.stripProviderMetadata ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
               })
             } else {
               assistantMessage.parts.push({
@@ -975,7 +981,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
                 input: part.state.input,
                 errorText: part.state.error,
                 ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-                ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+                ...(differentModel || options?.stripProviderMetadata ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
               })
             }
           }
@@ -989,10 +995,19 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               input: part.state.input,
               errorText: "[Tool execution was interrupted]",
               ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-              ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+              ...(differentModel || options?.stripProviderMetadata ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
             })
         }
         if (part.type === "reasoning") {
+          if (options?.inlineReasoning) {
+            const text = part.text.trim()
+            if (text.length > 0)
+              assistantMessage.parts.push({
+                type: "text",
+                text: `<think>\n${text}\n</think>`,
+              })
+            continue
+          }
           if (differentModel) {
             if (part.text.trim().length > 0)
               assistantMessage.parts.push({
@@ -1004,7 +1019,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           assistantMessage.parts.push({
             type: "reasoning",
             text: part.text,
-            providerMetadata: part.metadata,
+            ...(options?.stripProviderMetadata ? {} : { providerMetadata: part.metadata }),
           })
         }
       }
@@ -1014,7 +1029,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         // media (images, PDFs) in tool results
         if (media.length > 0) {
           result.push({
-            id: MessageID.ascending(),
+            id: `${msg.info.id}-tool-media`,
             role: "user",
             parts: [
               {
@@ -1049,7 +1064,13 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 export function toModelMessages(
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean; toolOutputMaxChars?: number; compactToolOutput?: boolean },
+  options?: {
+    stripMedia?: boolean
+    toolOutputMaxChars?: number
+    compactToolOutput?: boolean
+    stripProviderMetadata?: boolean
+    inlineReasoning?: boolean
+  },
 ): Promise<ModelMessage[]> {
   return Effect.runPromise(toModelMessagesEffect(input, model, options).pipe(Effect.provide(EffectLogger.layer)))
 }

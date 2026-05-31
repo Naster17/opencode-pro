@@ -119,6 +119,24 @@ describe("ProviderTransform.options - setCacheKey", () => {
     })
     expect(result.store).toBe(false)
   })
+
+  test("should enable llama.cpp prompt cache by default", () => {
+    const llamaModel = {
+      ...mockModel,
+      providerID: "llama.cpp",
+      api: {
+        id: "qwen3.5-9b",
+        url: "http://127.0.0.1:8080/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: llamaModel,
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.cache_prompt).toBe(true)
+  })
 })
 
 describe("ProviderTransform.options - zai/zhipuai thinking", () => {

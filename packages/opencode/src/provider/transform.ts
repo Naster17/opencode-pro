@@ -700,6 +700,8 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       "k2p",
       "qwen",
       "big-pickle",
+      "mistral",
+      "ministral",
     ].some((value) => id.includes(value))
   if (
     id.includes("deepseek-chat") ||
@@ -711,7 +713,8 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     id.includes("kimi") ||
     id.includes("k2p") ||
     id.includes("qwen") ||
-    id.includes("big-pickle")
+    id.includes("big-pickle") ||
+    (usesThinkingToggle && (id.includes("mistral") || id.includes("ministral")))
   )
     return usesThinkingToggle
       ? {
@@ -1189,6 +1192,10 @@ export function options(input: {
     result["promptCacheKey"] = input.sessionID
   }
 
+  if (input.model.providerID === "llama.cpp" && input.model.api.npm === "@ai-sdk/openai-compatible") {
+    result["cache_prompt"] ??= true
+  }
+
   if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
     if (input.model.capabilities.reasoning) {
       result["thinkingConfig"] = {
@@ -1224,6 +1231,19 @@ export function options(input: {
     !modelId.includes("kimi-k2-thinking")
   ) {
     result["enable_thinking"] = true
+  }
+
+  if (
+    input.model.providerID === "llama.cpp" &&
+    input.model.api.npm === "@ai-sdk/openai-compatible" &&
+    input.model.capabilities.reasoning &&
+    result["enable_thinking"] !== false &&
+    result["thinking_budget_tokens"] !== 0 &&
+    result["chat_template_kwargs"]?.enable_thinking !== false &&
+    result["chat_template_args"]?.enable_thinking !== false
+  ) {
+    result["enable_thinking"] = true
+    result["reasoning_format"] ??= "deepseek"
   }
 
   if (

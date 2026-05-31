@@ -62,6 +62,7 @@ import * as DateTime from "effect/DateTime"
 import { eq } from "@/storage/db"
 import * as Database from "@/storage/db"
 import { SessionTable } from "./session.sql"
+import { CacheOptimizer } from "./cache-optimizer"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -236,8 +237,9 @@ export const layer = Layer.effect(
       agent: Agent.Info
       session: Session.Info
     }) {
-      const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
-      if (!userMessage) return input.messages
+      const messages = structuredClone(input.messages)
+      const userMessage = messages.findLast((msg) => msg.info.role === "user")
+      if (!userMessage) return messages
 
       if (!Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE) {
         if (input.agent.name === "plan") {
@@ -250,7 +252,7 @@ export const layer = Layer.effect(
             synthetic: true,
           })
         }
-        const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
+        const wasPlan = messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
         if (wasPlan && input.agent.name === "build") {
           userMessage.parts.push({
             id: PartID.ascending(),
@@ -285,14 +287,14 @@ export const layer = Layer.effect(
             synthetic: true,
           })
         }
-        return input.messages
+        return messages
       }
 
-      const assistantMessage = input.messages.findLast((msg) => msg.info.role === "assistant")
+      const assistantMessage = messages.findLast((msg) => msg.info.role === "assistant")
       if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
         const ctx = yield* InstanceState.context
         const plan = Session.plan(input.session, ctx)
-        if (!(yield* fsys.existsSafe(plan))) return input.messages
+        if (!(yield* fsys.existsSafe(plan))) return messages
         const part = yield* sessions.updatePart({
           id: PartID.ascending(),
           messageID: userMessage.info.id,
@@ -302,10 +304,10 @@ export const layer = Layer.effect(
           synthetic: true,
         })
         userMessage.parts.push(part)
-        return input.messages
+        return messages
       }
 
-      if (input.agent.name !== "plan" || assistantMessage?.info.agent === "plan") return input.messages
+      if (input.agent.name !== "plan" || assistantMessage?.info.agent === "plan") return messages
 
       const ctx = yield* InstanceState.context
       const plan = Session.plan(input.session, ctx)
@@ -389,7 +391,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         synthetic: true,
       })
       userMessage.parts.push(part)
-      return input.messages
+      return messages
+    })
+
+    const modelMessageOptions = Effect.fnUntraced(function* (model: Provider.Model) {
+      const cfg = yield* config.get()
+      return {
+        stripProviderMetadata: CacheOptimizer.shouldStripProviderMetadata(model, cfg),
+        inlineReasoning: CacheOptimizer.shouldInlineReasoning(model, cfg),
+      }
     })
 
     const resolveTools = Effect.fn("SessionPrompt.resolveTools")(function* (input: {
@@ -1572,8 +1582,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             const [skills, env, instructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
               sys.environment(model),
-              instruction.system().pipe(Effect.orDie),
-              MessageV2.toModelMessagesEffect(msgs, model),
+              instruction.systemForSession(input.sessionID).pipe(Effect.orDie),
+              MessageV2.toModelMessagesEffect(msgs, model, yield* modelMessageOptions(model)),
             ])
             const system = [...env, ...instructions, ...(skills ? [skills] : [])]
             const outcome = yield* handle
@@ -1783,8 +1793,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             const [skills, env, instructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
               sys.environment(model),
-              instruction.system().pipe(Effect.orDie),
-              MessageV2.toModelMessagesEffect(msgs, model),
+              instruction.systemForSession(sessionID).pipe(Effect.orDie),
+              MessageV2.toModelMessagesEffect(msgs, model, yield* modelMessageOptions(model)),
             ])
             const system = [...env, ...instructions, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }

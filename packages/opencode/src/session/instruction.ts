@@ -9,7 +9,7 @@ import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "@opencode-ai/core/global"
 import { Storage } from "@/storage/storage"
 import type { MessageV2 } from "./message-v2"
-import type { MessageID } from "./schema"
+import type { MessageID, SessionID } from "./schema"
 
 const FILES = [
   "AGENTS.md",
@@ -39,6 +39,7 @@ export interface Interface {
   readonly clear: (messageID: MessageID) => Effect.Effect<void>
   readonly systemPaths: () => Effect.Effect<Set<string>, AppFileSystem.Error>
   readonly system: () => Effect.Effect<string[], AppFileSystem.Error>
+  readonly systemForSession: (sessionID: SessionID) => Effect.Effect<string[], AppFileSystem.Error>
   readonly find: (dir: string) => Effect.Effect<string | undefined, AppFileSystem.Error>
   readonly resolve: (
     messages: MessageV2.WithParts[],
@@ -70,6 +71,7 @@ export const layer: Layer.Layer<
         Effect.succeed({
           // Track which instruction files have already been attached for a given assistant message.
           claims: new Map<MessageID, Set<string>>(),
+          system: new Map<SessionID, string[]>(),
         }),
       ),
     )
@@ -164,6 +166,29 @@ export const layer: Layer.Layer<
       ]
     })
 
+    const systemForSession = Effect.fn("Instruction.systemForSession")(function* (sessionID: SessionID) {
+      const s = yield* InstanceState.get(state)
+      const cached = s.system.get(sessionID)
+      if (cached) return [...cached]
+
+      const storage = yield* Effect.serviceOption(Storage.Service)
+      const key = ["session_instruction", sessionID]
+      if (storage._tag === "Some") {
+        const stored = yield* storage.value
+          .read<string[]>(key)
+          .pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (stored) {
+          s.system.set(sessionID, stored)
+          return [...stored]
+        }
+      }
+
+      const loaded = yield* system()
+      s.system.set(sessionID, loaded)
+      if (storage._tag === "Some") yield* storage.value.write(key, loaded).pipe(Effect.ignore)
+      return [...loaded]
+    })
+
     const find = Effect.fn("Instruction.find")(function* (dir: string) {
       for (const file of FILES) {
         const filepath = path.resolve(path.join(dir, file))
@@ -231,7 +256,7 @@ export const layer: Layer.Layer<
       return results
     })
 
-    return Service.of({ clear, systemPaths, system, find, resolve })
+    return Service.of({ clear, systemPaths, system, systemForSession, find, resolve })
   }),
 )
 

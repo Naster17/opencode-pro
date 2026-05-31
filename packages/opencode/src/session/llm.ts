@@ -377,6 +377,8 @@ const live: Layer.Layer<
         })
       }
 
+      const requestTools = sortTools(tools)
+
       return streamText({
         onError(error) {
           l.error("stream error", {
@@ -408,8 +410,8 @@ const live: Layer.Layer<
         topP: params.topP,
         topK: params.topK,
         providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-        activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-        tools,
+        activeTools: Object.keys(requestTools).filter((x) => x !== "invalid"),
+        tools: requestTools,
         toolChoice: input.toolChoice,
         maxOutputTokens: params.maxOutputTokens,
         abortSignal: input.abort,
@@ -499,6 +501,10 @@ function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" 
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
   return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+}
+
+function sortTools(tools: Record<string, Tool>) {
+  return Object.fromEntries(Object.entries(tools).sort(([a], [b]) => a.localeCompare(b)))
 }
 
 // Check if messages contain any tool-call content

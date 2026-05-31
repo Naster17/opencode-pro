@@ -1208,6 +1208,38 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("can inline reasoning as deepseek think text for local prompt cache continuity", async () => {
+    const assistantID = "m-assistant-inline-reasoning"
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          {
+            ...basePart(assistantID, "a1-inline-reasoning"),
+            type: "reasoning",
+            text: "thinking",
+            time: { start: 0 },
+          },
+          {
+            ...basePart(assistantID, "a2-inline-reasoning"),
+            type: "text",
+            text: "answer",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model, { inlineReasoning: true })).toStrictEqual([
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "<think>\nthinking\n</think>" },
+          { type: "text", text: "answer" },
+        ],
+      },
+    ])
+  })
+
   test("splits assistant messages on step-start boundaries", async () => {
     const assistantID = "m-assistant"
 

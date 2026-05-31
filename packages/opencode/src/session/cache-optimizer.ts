@@ -293,6 +293,22 @@ export function supportsCaching(model: Provider.Model): boolean {
   return false
 }
 
+export function shouldStripProviderMetadata(model: Provider.Model, config?: Config.Info): boolean {
+  return (
+    config?.caching?.strip_provider_metadata ??
+    (model.providerID === "llama.cpp" && model.api.npm === "@ai-sdk/openai-compatible")
+  )
+}
+
+export function shouldInlineReasoning(model: Provider.Model, config?: Config.Info): boolean {
+  return (
+    config?.caching?.inline_reasoning ??
+    (model.providerID === "llama.cpp" &&
+      model.api.npm === "@ai-sdk/openai-compatible" &&
+      model.capabilities.reasoning)
+  )
+}
+
 /**
  * Log cache performance metrics
  */
