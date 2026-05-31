@@ -1,10 +1,11 @@
 import type { Agent } from "@opencode-ai/sdk/v2"
-import { TextAttributes, TextareaRenderable } from "@opentui/core"
+import { TextAttributes, TextareaRenderable, type MouseEvent } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
 import { createMemo, createSignal, onMount, Show } from "solid-js"
 import matter from "gray-matter"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { useLocal } from "@tui/context/local"
 import { useProject } from "@tui/context/project"
 import { useSDK } from "@tui/context/sdk"
@@ -19,6 +20,7 @@ import { Filesystem } from "@/util/filesystem"
 import { Keybind } from "@/util/keybind"
 import { errorMessage } from "@/util/error"
 import { useTextareaKeybindings } from "./textarea-keybindings"
+import * as Clipboard from "../util/clipboard"
 
 const createKey = Keybind.parse("ctrl+a").at(0)
 const editKey = Keybind.parse("ctrl+e").at(0)
@@ -314,6 +316,18 @@ function agentPrompt(input: {
   const model = provider.models[modelID]
   if (!model) return ""
   return SystemPrompt.provider(model as Parameters<typeof SystemPrompt.provider>[0]).join("\n")
+}
+
+function copyTextareaSelection(input: TextareaRenderable | undefined, toast: ReturnType<typeof useToast>) {
+  const text = input?.getSelectedText()
+  if (!text) return false
+
+  Clipboard.copy(text)
+    .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+    .catch(toast.error)
+
+  input?.clearSelection()
+  return true
 }
 
 function DialogAgentScope(props: {
@@ -620,6 +634,7 @@ function DialogAgentEditor(props: {
           onMouseUp={() => {
             setActive("name")
             nameInput?.focus()
+            if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) copyTextareaSelection(nameInput, toast)
           }}
         >
           <textarea
@@ -636,6 +651,7 @@ function DialogAgentEditor(props: {
             focusedTextColor={theme.text}
             cursorColor={theme.primary}
             keyBindings={nameBindings()}
+            onMouseDown={(evt: MouseEvent) => evt.target?.focus()}
           />
         </box>
         <text fg={theme.textMuted}>Prompt</text>
@@ -645,6 +661,7 @@ function DialogAgentEditor(props: {
           onMouseUp={() => {
             setActive("prompt")
             promptInput?.focus()
+            if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) copyTextareaSelection(promptInput, toast)
           }}
         >
           <textarea
@@ -661,6 +678,7 @@ function DialogAgentEditor(props: {
             focusedTextColor={theme.text}
             cursorColor={theme.primary}
             keyBindings={promptBindings()}
+            onMouseDown={(evt: MouseEvent) => evt.target?.focus()}
           />
         </box>
         <Show when={error()}>
