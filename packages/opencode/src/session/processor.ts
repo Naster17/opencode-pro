@@ -25,6 +25,7 @@ import { SessionEvent } from "@/v2/session-event"
 import { Modelv2 } from "@/v2/model"
 import * as DateTime from "effect/DateTime"
 import { ProviderError } from "@/provider/error"
+import { ThinkTags } from "./think-tags"
 
 const DOOM_LOOP_THRESHOLD = 3
 const TOOL_ERROR_STALL_TIMEOUT = 5_000
@@ -113,7 +114,11 @@ interface ProcessorContext extends Input {
   blocked: boolean
   needsCompaction: boolean
   currentText: MessageV2.TextPart | undefined
+  currentTextStartedAt: number | undefined
+  currentTextMetadata: MessageV2.TextPart["metadata"] | undefined
   reasoningMap: Record<string, MessageV2.ReasoningPart>
+  reasoningTagStripper: Record<string, ReturnType<typeof ThinkTags.createStripper>>
+  inlineThink: ThinkTags.SplitState & { reasoningID?: string }
 }
 
 type StreamEvent = Event
@@ -163,7 +168,11 @@ export const layer: Layer.Layer<
         blocked: false,
         needsCompaction: false,
         currentText: undefined,
+        currentTextStartedAt: undefined,
+        currentTextMetadata: undefined,
         reasoningMap: {},
+        reasoningTagStripper: {},
+        inlineThink: { active: false, pending: "" },
       }
       let aborted = false
       const localParts: MessageV2.Part[] = []
@@ -236,6 +245,171 @@ export const layer: Layer.Layer<
         if (input.ephemeral) return localParts.filter((part) => part.messageID === messageID)
         return MessageV2.parts(messageID)
       }
+
+      const startReasoning = Effect.fnUntraced(function* (
+        reasoningID: string,
+        metadata?: MessageV2.ReasoningPart["metadata"],
+      ) {
+        if (reasoningID in ctx.reasoningMap) return
+        if (!input.ephemeral) {
+          // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+          EventV2.run(SessionEvent.Reasoning.Started.Sync, {
+            sessionID: ctx.sessionID,
+            reasoningID,
+            timestamp: DateTime.makeUnsafe(Date.now()),
+          })
+        }
+        ctx.reasoningMap[reasoningID] = {
+          id: PartID.ascending(),
+          messageID: ctx.assistantMessage.id,
+          sessionID: ctx.assistantMessage.sessionID,
+          type: "reasoning",
+          text: "",
+          time: { start: Date.now() },
+          metadata,
+        }
+        ctx.reasoningTagStripper[reasoningID] = ThinkTags.createStripper()
+        yield* updatePart(ctx.reasoningMap[reasoningID])
+      })
+
+      const appendReasoning = Effect.fnUntraced(function* (
+        reasoningID: string,
+        text: string,
+        metadata?: MessageV2.ReasoningPart["metadata"],
+      ) {
+        yield* startReasoning(reasoningID, metadata)
+        const match = ctx.reasoningMap[reasoningID]
+        if (!match) return
+        const delta = (ctx.reasoningTagStripper[reasoningID] ??= ThinkTags.createStripper()).push(text)
+        if (metadata) match.metadata = metadata
+        if (!delta) return
+        match.text += delta
+        yield* updatePartDelta({
+          sessionID: match.sessionID,
+          messageID: match.messageID,
+          partID: match.id,
+          field: "text",
+          delta,
+        })
+      })
+
+      const endReasoning = Effect.fnUntraced(function* (
+        reasoningID: string,
+        metadata?: MessageV2.ReasoningPart["metadata"],
+      ) {
+        const match = ctx.reasoningMap[reasoningID]
+        if (!match) return
+        const pending = ctx.reasoningTagStripper[reasoningID]?.flush() ?? ""
+        if (pending) match.text += pending
+        delete ctx.reasoningTagStripper[reasoningID]
+        if (!input.ephemeral) {
+          // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+          EventV2.run(SessionEvent.Reasoning.Ended.Sync, {
+            sessionID: ctx.sessionID,
+            reasoningID,
+            text: match.text,
+            timestamp: DateTime.makeUnsafe(Date.now()),
+          })
+        }
+        match.time = { ...match.time, end: Date.now() }
+        if (metadata) match.metadata = metadata
+        yield* updatePart(match)
+        delete ctx.reasoningMap[reasoningID]
+      })
+
+      const startText = Effect.fnUntraced(function* (metadata?: MessageV2.TextPart["metadata"]) {
+        if (ctx.currentText || ctx.currentTextStartedAt) return
+        if (!input.ephemeral && !ctx.assistantMessage.summary) {
+          // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+          EventV2.run(SessionEvent.Text.Started.Sync, {
+            sessionID: ctx.sessionID,
+            timestamp: DateTime.makeUnsafe(Date.now()),
+          })
+        }
+        ctx.currentTextStartedAt = Date.now()
+        ctx.currentTextMetadata = metadata
+      })
+
+      const ensureText = Effect.fnUntraced(function* (metadata?: MessageV2.TextPart["metadata"]) {
+        if (ctx.currentText) return ctx.currentText
+        const start = ctx.currentTextStartedAt ?? Date.now()
+        ctx.currentText = {
+          id: PartID.ascending(),
+          messageID: ctx.assistantMessage.id,
+          sessionID: ctx.assistantMessage.sessionID,
+          type: "text",
+          text: "",
+          time: { start },
+          metadata: metadata ?? ctx.currentTextMetadata,
+        }
+        yield* updatePart(ctx.currentText)
+        return ctx.currentText
+      })
+
+      const appendText = Effect.fnUntraced(function* (text: string, metadata?: MessageV2.TextPart["metadata"]) {
+        if (!text) return
+        yield* startText(metadata)
+        const part = yield* ensureText(metadata)
+        part.text += text
+        if (metadata) part.metadata = metadata
+        yield* updatePartDelta({
+          sessionID: part.sessionID,
+          messageID: part.messageID,
+          partID: part.id,
+          field: "text",
+          delta: text,
+        })
+      })
+
+      const appendTextStream = Effect.fnUntraced(function* (value: Extract<StreamEvent, { type: "text-delta" }>) {
+        for (const part of ThinkTags.split(ctx.inlineThink, value.text)) {
+          if (part.type === "reasoning") {
+            ctx.inlineThink.reasoningID ??= `inline:${value.id}`
+            yield* appendReasoning(ctx.inlineThink.reasoningID, part.text, value.providerMetadata)
+            continue
+          }
+          yield* appendText(part.text, value.providerMetadata)
+        }
+        if (!ctx.inlineThink.active && ctx.inlineThink.reasoningID) {
+          yield* endReasoning(ctx.inlineThink.reasoningID, value.providerMetadata)
+          ctx.inlineThink.reasoningID = undefined
+        }
+      })
+
+      const flushInlineThink = Effect.fnUntraced(function* () {
+        for (const part of ThinkTags.flushSplit(ctx.inlineThink)) {
+          if (part.type === "reasoning") {
+            ctx.inlineThink.reasoningID ??= `inline:${ctx.assistantMessage.id}`
+            yield* appendReasoning(ctx.inlineThink.reasoningID, part.text)
+            continue
+          }
+          yield* appendText(part.text)
+        }
+        if (ctx.inlineThink.reasoningID) {
+          yield* endReasoning(ctx.inlineThink.reasoningID)
+          ctx.inlineThink.reasoningID = undefined
+        }
+        ctx.inlineThink.active = false
+      })
+
+      const convertCurrentTextToReasoning = Effect.fnUntraced(function* () {
+        yield* flushInlineThink()
+        if (!ctx.currentText) return
+        if (!ctx.currentText.text.trim()) return
+        const end = Date.now()
+        yield* updatePart({
+          id: ctx.currentText.id,
+          messageID: ctx.currentText.messageID,
+          sessionID: ctx.currentText.sessionID,
+          type: "reasoning",
+          text: ThinkTags.strip(ctx.currentText.text),
+          time: { start: ctx.currentText.time?.start ?? end, end },
+          metadata: ctx.currentText.metadata,
+        } satisfies MessageV2.ReasoningPart)
+        ctx.currentText = undefined
+        ctx.currentTextStartedAt = undefined
+        ctx.currentTextMetadata = undefined
+      })
 
       const readToolCall = Effect.fn("SessionProcessor.readToolCall")(function* (toolCallID: string) {
         const call = ctx.toolcalls[toolCallID]
@@ -331,60 +505,19 @@ export const layer: Layer.Layer<
             return
 
           case "reasoning-start":
-            if (value.id in ctx.reasoningMap) return
-            if (!input.ephemeral) {
-              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              EventV2.run(SessionEvent.Reasoning.Started.Sync, {
-                sessionID: ctx.sessionID,
-                reasoningID: value.id,
-                timestamp: DateTime.makeUnsafe(Date.now()),
-              })
-            }
-            ctx.reasoningMap[value.id] = {
-              id: PartID.ascending(),
-              messageID: ctx.assistantMessage.id,
-              sessionID: ctx.assistantMessage.sessionID,
-              type: "reasoning",
-              text: "",
-              time: { start: Date.now() },
-              metadata: value.providerMetadata,
-            }
-            yield* updatePart(ctx.reasoningMap[value.id])
+            yield* startReasoning(value.id, value.providerMetadata)
             return
 
           case "reasoning-delta":
-            if (!(value.id in ctx.reasoningMap)) return
-            ctx.reasoningMap[value.id].text += value.text
-            if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
-            yield* updatePartDelta({
-              sessionID: ctx.reasoningMap[value.id].sessionID,
-              messageID: ctx.reasoningMap[value.id].messageID,
-              partID: ctx.reasoningMap[value.id].id,
-              field: "text",
-              delta: value.text,
-            })
+            yield* appendReasoning(value.id, value.text, value.providerMetadata)
             return
 
           case "reasoning-end":
-            if (!(value.id in ctx.reasoningMap)) return
-            if (!input.ephemeral) {
-              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              EventV2.run(SessionEvent.Reasoning.Ended.Sync, {
-                sessionID: ctx.sessionID,
-                reasoningID: value.id,
-                text: ctx.reasoningMap[value.id].text,
-                timestamp: DateTime.makeUnsafe(Date.now()),
-              })
-            }
-            // oxlint-disable-next-line no-self-assign -- reactivity trigger
-            ctx.reasoningMap[value.id].text = ctx.reasoningMap[value.id].text
-            ctx.reasoningMap[value.id].time = { ...ctx.reasoningMap[value.id].time, end: Date.now() }
-            if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
-            yield* updatePart(ctx.reasoningMap[value.id])
-            delete ctx.reasoningMap[value.id]
+            yield* endReasoning(value.id, value.providerMetadata)
             return
 
           case "tool-input-start":
+            yield* convertCurrentTextToReasoning()
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
@@ -454,6 +587,7 @@ export const layer: Layer.Layer<
           }
 
           case "tool-call": {
+            yield* convertCurrentTextToReasoning()
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
@@ -657,40 +791,20 @@ export const layer: Layer.Layer<
           }
 
           case "text-start":
-            if (!input.ephemeral && !ctx.assistantMessage.summary) {
-              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              EventV2.run(SessionEvent.Text.Started.Sync, {
-                sessionID: ctx.sessionID,
-                timestamp: DateTime.makeUnsafe(Date.now()),
-              })
-            }
-            ctx.currentText = {
-              id: PartID.ascending(),
-              messageID: ctx.assistantMessage.id,
-              sessionID: ctx.assistantMessage.sessionID,
-              type: "text",
-              text: "",
-              time: { start: Date.now() },
-              metadata: value.providerMetadata,
-            }
-            yield* updatePart(ctx.currentText)
+            yield* startText(value.providerMetadata)
             return
 
           case "text-delta":
-            if (!ctx.currentText) return
-            ctx.currentText.text += value.text
-            if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
-            yield* updatePartDelta({
-              sessionID: ctx.currentText.sessionID,
-              messageID: ctx.currentText.messageID,
-              partID: ctx.currentText.id,
-              field: "text",
-              delta: value.text,
-            })
+            yield* appendTextStream(value)
             return
 
           case "text-end":
-            if (!ctx.currentText) return
+            yield* flushInlineThink()
+            if (!ctx.currentText) {
+              ctx.currentTextStartedAt = undefined
+              ctx.currentTextMetadata = undefined
+              return
+            }
             // oxlint-disable-next-line no-self-assign -- reactivity trigger
             ctx.currentText.text = ctx.currentText.text
             ctx.currentText.text = (yield* plugin.trigger(
@@ -717,6 +831,8 @@ export const layer: Layer.Layer<
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
             yield* updatePart(ctx.currentText)
             ctx.currentText = undefined
+            ctx.currentTextStartedAt = undefined
+            ctx.currentTextMetadata = undefined
             return
 
           case "finish":
@@ -744,21 +860,28 @@ export const layer: Layer.Layer<
           ctx.snapshot = undefined
         }
 
+        yield* flushInlineThink()
+
         if (ctx.currentText) {
           const end = Date.now()
           ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
           yield* updatePart(ctx.currentText)
           ctx.currentText = undefined
+          ctx.currentTextStartedAt = undefined
+          ctx.currentTextMetadata = undefined
         }
 
-        for (const part of Object.values(ctx.reasoningMap)) {
+        for (const [reasoningID, part] of Object.entries(ctx.reasoningMap)) {
           const end = Date.now()
+          const pending = ctx.reasoningTagStripper[reasoningID]?.flush() ?? ""
           yield* updatePart({
             ...part,
+            text: part.text + pending,
             time: { start: part.time.start ?? end, end },
           })
         }
         ctx.reasoningMap = {}
+        ctx.reasoningTagStripper = {}
 
         yield* Effect.forEach(
           Object.values(ctx.toolcalls),
@@ -857,7 +980,11 @@ export const layer: Layer.Layer<
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
+            ctx.currentTextStartedAt = undefined
+            ctx.currentTextMetadata = undefined
             ctx.reasoningMap = {}
+            ctx.reasoningTagStripper = {}
+            ctx.inlineThink = { active: false, pending: "" }
             const stream = llm.stream({ ...streamInput, ephemeral: input.ephemeral })
 
             yield* Effect.raceFirst(

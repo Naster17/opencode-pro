@@ -28,6 +28,7 @@ import { zod, ZodOverride } from "@/util/effect-zod"
 import { NonNegativeInt, withStatics } from "@/util/schema"
 import { namedSchemaError } from "@/util/named-schema-error"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
+import { ThinkTags } from "./think-tags"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -1007,7 +1008,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         }
         if (part.type === "reasoning") {
           if (options?.inlineReasoning) {
-            pushAssistantText(`<think>${part.text}</think>`)
+            pushAssistantText(ThinkTags.wrap(part.text))
             continue
           }
           if (differentModel) {

@@ -27,6 +27,7 @@ import type {
 } from "@opencode-ai/sdk/v2"
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { formatCompactTokens } from "../../util/usage"
+import { ThinkTags } from "@/session/think-tags"
 
 const id = "internal:session-v2-debug"
 const route = "session.v2.messages"
@@ -374,7 +375,7 @@ function AssistantText(props: { part: SessionMessageAssistantText; syntax: Synta
 
 function AssistantReasoning(props: { part: SessionMessageAssistantReasoning; subtleSyntax: SyntaxStyle }) {
   const { theme } = useTheme()
-  const content = createMemo(() => props.part.text.replace("[REDACTED]", "").trim())
+  const content = createMemo(() => ThinkTags.strip(props.part.text).replace("[REDACTED]", "").trim())
   return (
     <Show when={content()}>
       <box

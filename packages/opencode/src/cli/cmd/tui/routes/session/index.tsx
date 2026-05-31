@@ -95,6 +95,7 @@ import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { Token } from "@/util/token"
 import * as SystemPrompt from "@/session/system"
+import { ThinkTags } from "@/session/think-tags"
 import { useBtwUsage } from "../../context/btw"
 
 addDefaultParsers(parsers.parsers)
@@ -2738,7 +2739,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   const content = createMemo(() => {
     // Filter out redacted reasoning chunks from OpenRouter
     // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
-    return props.part.text.replace("[REDACTED]", "").trim()
+    return ThinkTags.strip(props.part.text).replace("[REDACTED]", "").trim()
   })
   return (
     <Show when={content() && ctx.showThinking()}>

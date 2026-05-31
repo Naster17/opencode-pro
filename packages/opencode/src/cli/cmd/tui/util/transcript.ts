@@ -1,6 +1,7 @@
 import type { AssistantMessage, Part, Provider, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "@/util/locale"
 import * as Model from "./model"
+import { ThinkTags } from "@/session/think-tags"
 
 export type TranscriptOptions = {
   thinking: boolean
@@ -88,7 +89,7 @@ export function formatPart(part: Part, options: TranscriptOptions): string {
 
   if (part.type === "reasoning") {
     if (options.thinking) {
-      return `_Thinking:_\n\n${part.text}\n\n`
+      return `_Thinking:_\n\n${ThinkTags.strip(part.text)}\n\n`
     }
     return ""
   }

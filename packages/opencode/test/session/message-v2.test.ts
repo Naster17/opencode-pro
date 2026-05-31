@@ -1239,6 +1239,35 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("does not nest provider supplied think tags when inlining reasoning", async () => {
+    const assistantID = "m-assistant-inline-reasoning-tags"
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          {
+            ...basePart(assistantID, "a1-inline-reasoning-tags"),
+            type: "reasoning",
+            text: "<think>thinking</think>",
+            time: { start: 0 },
+          },
+          {
+            ...basePart(assistantID, "a2-inline-reasoning-tags"),
+            type: "text",
+            text: "answer",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model, { inlineReasoning: true })).toStrictEqual([
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "<think>thinking</think>answer" }],
+      },
+    ])
+  })
+
   test("splits assistant messages on step-start boundaries", async () => {
     const assistantID = "m-assistant"
 

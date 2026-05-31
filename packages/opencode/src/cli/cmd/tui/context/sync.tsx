@@ -44,6 +44,26 @@ function shouldPreservePart(current: Part | undefined, next: Part) {
   return toolStateRank(current.state.status) > toolStateRank(next.state.status)
 }
 
+function isTextPart(part: Part): part is Extract<Part, { type: "text" | "reasoning" }> {
+  return part.type === "text" || part.type === "reasoning"
+}
+
+function isLivePart(part: Part) {
+  if (isTextPart(part)) return !part.time?.end
+  if (part.type === "tool") return part.state.status === "pending" || part.state.status === "running"
+  return false
+}
+
+function mergePart(current: Part | undefined, next: Part): Part {
+  if (!current) return next
+  if (shouldPreservePart(current, next)) return current
+  if (!isTextPart(current) || !isTextPart(next)) return next
+  if (next.time?.end) return next
+  if (current.text.length <= next.text.length) return next
+  if (!current.text.includes(next.text)) return next
+  return { ...next, text: current.text } as Part
+}
+
 type QueuedPartDelta = {
   messageID: string
   partID: string
@@ -192,9 +212,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               }
               const result = Binary.search(parts, event.part.id, (item) => item.id)
               if (result.found) {
-                if (shouldPreservePart(parts[result.index], event.part)) continue
-                parts[result.index] = event.part
-                applyPendingDeltas(event.part)
+                parts[result.index] = mergePart(parts[result.index], event.part)
+                applyPendingDeltas(parts[result.index])
                 continue
               }
               parts.splice(result.index, 0, event.part)
@@ -651,7 +670,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               draft.todo[sessionID] = todo.data ?? []
               draft.message[sessionID] = messages.map((x) => x.info)
               for (const message of messages) {
-                draft.part[message.info.id] = message.parts
+                const existing = draft.part[message.info.id] ?? []
+                const merged = message.parts.map((part) => {
+                  const current = existing.find((item) => item.id === part.id)
+                  return mergePart(current, part)
+                })
+                draft.part[message.info.id] = [
+                  ...merged,
+                  ...existing.filter((part) => isLivePart(part) && !merged.some((item) => item.id === part.id)),
+                ].toSorted((a, b) => a.id.localeCompare(b.id))
               }
               draft.session_diff[sessionID] = diff.data ?? []
             }),
