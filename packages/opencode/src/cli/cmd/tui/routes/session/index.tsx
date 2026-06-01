@@ -3262,7 +3262,9 @@ function Shell(props: ToolProps<typeof ShellTool>) {
       <Match when={isRunning()}>
         <BlockTool title={title()} part={props.part} spinner={true} spinnerInterval={180}>
           <box gap={0}>
-            <text fg={theme.text}>$ {clip(props.input.command ?? "")}</text>
+            <text fg={theme.text} wrapMode="char" width="100%">
+              $ {props.input.command ?? ""}
+            </text>
             <code
               conceal={false}
               fg={output() ? theme.text : theme.textMuted}
@@ -3284,7 +3286,9 @@ function Shell(props: ToolProps<typeof ShellTool>) {
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={0}>
-            <text fg={theme.text}>$ {props.input.command}</text>
+            <text fg={theme.text} wrapMode="char" width="100%">
+              $ {props.input.command}
+            </text>
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
             </Show>

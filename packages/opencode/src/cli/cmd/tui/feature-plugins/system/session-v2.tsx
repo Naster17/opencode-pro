@@ -786,7 +786,9 @@ function Bash(props: ToolProps) {
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={0}>
-            <text fg={theme.text}>$ {command()}</text>
+            <text fg={theme.text} wrapMode="char" width="100%">
+              $ {command()}
+            </text>
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
             </Show>
