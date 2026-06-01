@@ -458,7 +458,7 @@ export function Prompt(props: PromptProps) {
     const messages = sync.data.message[props.sessionID] ?? []
     if (messages.length === 0) return
 
-    const summary = summarizeUsage(
+    const context = summarizeUsage(
       [
         {
           session: sync.session.get(props.sessionID),
@@ -468,13 +468,24 @@ export function Prompt(props: PromptProps) {
       ],
       sync.data.provider,
     )
+    const billed = summarizeUsage(
+      [
+        {
+          session: sync.session.get(props.sessionID),
+          messages,
+          getParts: (messageID) => sync.data.part[messageID] ?? [],
+        },
+      ],
+      sync.data.provider,
+      { respectRevert: false },
+    )
 
-    if (summary.context_tokens <= 0) return
+    if (context.context_tokens <= 0) return
 
-    const pct = summary.average_context_percent !== null ? `${summary.average_context_percent}%` : undefined
+    const pct = context.average_context_percent !== null ? `${context.average_context_percent}%` : undefined
     return {
-      context: pct ? `${Locale.number(summary.context_tokens)} (${pct})` : Locale.number(summary.context_tokens),
-      cost: summary.cost > 0 ? money.format(summary.cost) : undefined,
+      context: pct ? `${Locale.number(context.context_tokens)} (${pct})` : Locale.number(context.context_tokens),
+      cost: billed.cost > 0 ? money.format(billed.cost) : undefined,
     }
   })
 

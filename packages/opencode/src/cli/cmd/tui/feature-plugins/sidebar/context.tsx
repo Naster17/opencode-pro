@@ -181,8 +181,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       ...descendantSessionsList,
     ]
 
-    const aggregated = summarizeUsage(sessions, props.api.state.provider, { respectRevert: false })
-    const rootOnly = summarizeUsage(
+    const billed = summarizeUsage(sessions, props.api.state.provider, { respectRevert: false })
+    const context = summarizeUsage(
       [
         {
           session: rootSession,
@@ -195,18 +195,18 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     const btw = btwUsage.sum(trackedSessionIDs())
 
     return {
-      ...aggregated,
-      input: aggregated.input + btw.input,
-      output: aggregated.output + btw.output,
-      reasoning: aggregated.reasoning + btw.reasoning,
-      cache_read: aggregated.cache_read + btw.cache_read,
-      cache_write: aggregated.cache_write + btw.cache_write,
-      cached: aggregated.cached + btw.cache_read + btw.cache_write,
-      tokens: aggregated.tokens + btw.input + btw.output + btw.reasoning + btw.cache_read + btw.cache_write,
-      cost: aggregated.cost + btw.cost,
-      tools: aggregated.tools + btw.tools,
-      context_tokens_formatted: Locale.number(rootOnly.context_tokens),
-      average_context_percent: rootOnly.average_context_percent,
+      ...billed,
+      input: billed.input + btw.input,
+      output: billed.output + btw.output,
+      reasoning: billed.reasoning + btw.reasoning,
+      cache_read: billed.cache_read + btw.cache_read,
+      cache_write: billed.cache_write + btw.cache_write,
+      cached: billed.cached + btw.cache_read + btw.cache_write,
+      tokens: billed.tokens + btw.input + btw.output + btw.reasoning + btw.cache_read + btw.cache_write,
+      cost: billed.cost + btw.cost,
+      tools: billed.tools + btw.tools,
+      context_tokens_formatted: Locale.number(context.context_tokens),
+      average_context_percent: context.average_context_percent,
     }
   })
 
