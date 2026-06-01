@@ -283,6 +283,7 @@ export const StepFinishPart = Schema.Struct({
       write: NonNegativeInt,
     }),
   }),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
 })
   .annotate({ identifier: "StepFinishPart" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
@@ -617,6 +618,24 @@ const PartRemovedEventSchema = Schema.Struct({
   partID: PartID,
 })
 
+const StreamMetricsEventSchema = Schema.Struct({
+  sessionID: SessionID,
+  messageID: MessageID,
+  time: NonNegativeInt,
+  promptTokens: Schema.optional(NonNegativeInt),
+  outputTokens: Schema.optional(NonNegativeInt),
+  promptTokensPerSecond: Schema.optional(Schema.Finite),
+  outputTokensPerSecond: Schema.optional(Schema.Finite),
+  promptProgress: Schema.optional(
+    Schema.Struct({
+      total: NonNegativeInt,
+      cache: NonNegativeInt,
+      processed: NonNegativeInt,
+      time_ms: NonNegativeInt,
+    }),
+  ),
+})
+
 export const Event = {
   Updated: SyncEvent.define({
     type: "message.updated",
@@ -646,6 +665,7 @@ export const Event = {
       delta: Schema.String,
     }),
   ),
+  StreamMetrics: BusEvent.define("message.stream.metrics", StreamMetricsEventSchema),
   PartRemoved: SyncEvent.define({
     type: "message.part.removed",
     version: 1,

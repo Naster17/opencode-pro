@@ -1194,6 +1194,8 @@ export function options(input: {
 
   if (input.model.providerID === "llama.cpp" && input.model.api.npm === "@ai-sdk/openai-compatible") {
     result["cache_prompt"] ??= true
+    result["return_progress"] ??= true
+    result["timings_per_token"] ??= true
   }
 
   if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {

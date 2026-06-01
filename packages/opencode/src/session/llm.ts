@@ -414,6 +414,7 @@ const live: Layer.Layer<
         tools: requestTools,
         toolChoice: input.toolChoice,
         maxOutputTokens: params.maxOutputTokens,
+        includeRawChunks: true,
         abortSignal: input.abort,
         headers: {
           ...(input.model.providerID.startsWith("opencode")

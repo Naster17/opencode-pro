@@ -7,7 +7,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Plugin } from "../plugin"
-import { type LanguageModelV3 } from "@ai-sdk/provider"
+import { type LanguageModelV3, type SharedV3ProviderMetadata } from "@ai-sdk/provider"
 import * as ModelsDev from "./models"
 import { Auth } from "../auth"
 import { Env } from "../env"
@@ -83,6 +83,57 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
     status: res.status,
     statusText: res.statusText,
   })
+}
+
+function llamaCppMetadataExtractor() {
+  return {
+    async extractMetadata(input: { parsedBody: unknown }) {
+      return llamaCppMetadata(input.parsedBody)
+    },
+    createStreamExtractor() {
+      let metadata: SharedV3ProviderMetadata | undefined
+      return {
+        processChunk(chunk: unknown) {
+          metadata = mergeDeep(metadata ?? {}, llamaCppMetadata(chunk) ?? {}) as SharedV3ProviderMetadata
+        },
+        buildMetadata() {
+          return metadata
+        },
+      }
+    },
+  }
+}
+
+function llamaCppMetadata(value: unknown): SharedV3ProviderMetadata | undefined {
+  if (!isRecord(value)) return
+
+  const timings = pickNumberFields(value.timings, [
+    "cache_n",
+    "prompt_n",
+    "prompt_ms",
+    "prompt_per_token_ms",
+    "prompt_per_second",
+    "predicted_n",
+    "predicted_ms",
+    "predicted_per_token_ms",
+    "predicted_per_second",
+  ])
+  const progress = pickNumberFields(value.prompt_progress, ["total", "cache", "processed", "time_ms"])
+  const llama: Record<string, unknown> = {}
+  if (Object.keys(timings).length > 0) llama.timings = timings
+  if (Object.keys(progress).length > 0) llama.promptProgress = progress
+  if (Object.keys(llama).length === 0) return
+  return { llama } as SharedV3ProviderMetadata
+}
+
+function pickNumberFields(value: unknown, fields: string[]) {
+  if (!isRecord(value)) return {}
+  return Object.fromEntries(
+    fields.flatMap((field) => {
+      const item = value[field]
+      return typeof item === "number" && Number.isFinite(item) ? [[field, item]] : []
+    }),
+  )
 }
 
 type BundledSDK = {
@@ -1583,6 +1634,10 @@ const layer: Layer.Layer<
 
         if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
           options["includeUsage"] = true
+        }
+
+        if (model.providerID === "llama.cpp" && model.api.npm === "@ai-sdk/openai-compatible") {
+          options["metadataExtractor"] ??= llamaCppMetadataExtractor()
         }
 
         const baseURL = iife(() => {

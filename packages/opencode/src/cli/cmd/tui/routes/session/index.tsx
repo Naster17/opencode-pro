@@ -109,12 +109,13 @@ const STREAM_RATE_UPDATE_INTERVAL = 250
 const STREAM_RATE_MIN_WINDOW = 1200
 const STREAM_RATE_SMOOTHING = 0.18
 const PROMPT_RATE_MIN_WINDOW = 1500
-const PROMPT_RATE_SMOOTHING = 0.12
 
 type AssistantDerivedMetrics = {
   estimatedOutputTokens: number
   responseStartedAt?: number
   generationStartedAt?: number
+  promptTokensPerSecond?: number
+  outputTokensPerSecond?: number
 }
 
 type CodeStats = {
@@ -133,7 +134,11 @@ type LiveAssistantMetrics = {
   responseStartedAt?: number
   textStartedAt?: number
   firstTokenAt?: number
-  streamSamples: { time: number; chars: number }[]
+  promptTokens?: number
+  outputTokens?: number
+  promptTokensPerSecond?: number
+  outputTokensPerSecond?: number
+  streamSamples: { time: number; tokens: number }[]
 }
 
 type BtwTurn = {
@@ -630,6 +635,7 @@ export function Session() {
     if (assistant.id !== evt.properties.messageID) return
     if (evt.properties.field !== "text") return
     const now = Date.now()
+    const tokens = estimateStreamTokens(evt.properties.delta)
     setLiveAssistant((current) =>
       current.messageID !== assistant.id
         ? {
@@ -638,7 +644,8 @@ export function Session() {
             responseStartedAt: now,
             textStartedAt: now,
             firstTokenAt: now,
-            streamSamples: [{ time: now, chars: evt.properties.delta.length }],
+            outputTokens: tokens,
+            streamSamples: [{ time: now, tokens }],
           }
         : {
             ...current,
@@ -646,10 +653,45 @@ export function Session() {
             responseStartedAt: current.responseStartedAt ?? now,
             textStartedAt: current.textStartedAt ?? now,
             firstTokenAt: current.firstTokenAt ?? now,
+            outputTokens: (current.outputTokens ?? 0) + tokens,
             streamSamples: [
               ...current.streamSamples.filter((sample) => now - sample.time <= STREAM_RATE_WINDOW),
-              { time: now, chars: evt.properties.delta.length },
+              { time: now, tokens },
             ].slice(-STREAM_RATE_MAX_SAMPLES),
+          },
+    )
+  })
+
+  event.on("message.stream.metrics", (evt) => {
+    const assistant = lastAssistant()
+    if (!assistant) return
+    if (assistant.id !== evt.properties.messageID) return
+    if (assistant.time.completed) return
+    if (evt.properties.sessionID !== route.sessionID) return
+    const outputStarted = (evt.properties.outputTokens ?? 0) > 0
+    setLiveAssistant((current) =>
+      current.messageID !== assistant.id
+        ? {
+            messageID: assistant.id,
+            now: evt.properties.time,
+            firstTokenAt: outputStarted ? evt.properties.time : undefined,
+            promptTokens: evt.properties.promptTokens,
+            outputTokens: outputStarted ? evt.properties.outputTokens : undefined,
+            promptTokensPerSecond: evt.properties.promptTokensPerSecond,
+            outputTokensPerSecond: outputStarted ? evt.properties.outputTokensPerSecond : undefined,
+            streamSamples: [],
+          }
+        : {
+            ...current,
+            now: evt.properties.time,
+            responseStartedAt: current.responseStartedAt ?? (outputStarted ? evt.properties.time : undefined),
+            firstTokenAt: current.firstTokenAt ?? (outputStarted ? evt.properties.time : undefined),
+            promptTokens: evt.properties.promptTokens ?? current.promptTokens,
+            outputTokens: outputStarted ? (evt.properties.outputTokens ?? current.outputTokens) : current.outputTokens,
+            promptTokensPerSecond: evt.properties.promptTokensPerSecond ?? current.promptTokensPerSecond,
+            outputTokensPerSecond: outputStarted
+              ? (evt.properties.outputTokensPerSecond ?? current.outputTokensPerSecond)
+              : current.outputTokensPerSecond,
           },
     )
   })
@@ -720,15 +762,17 @@ export function Session() {
     if (evt.properties.sessionID !== route.sessionID) return
     const now = Date.now()
     if (evt.properties.field === "text") {
+      const tokens = estimateStreamTokens(evt.properties.delta)
       updateLiveBtwResponse(evt.properties.messageID, (current) => ({
         messageID: evt.properties.messageID,
         now,
         responseStartedAt: current?.responseStartedAt ?? now,
         textStartedAt: current?.textStartedAt ?? now,
         firstTokenAt: current?.firstTokenAt ?? now,
+        outputTokens: (current?.outputTokens ?? 0) + tokens,
         streamSamples: [
           ...(current?.streamSamples ?? []).filter((sample) => now - sample.time <= STREAM_RATE_WINDOW),
-          { time: now, chars: evt.properties.delta.length },
+          { time: now, tokens },
         ].slice(-STREAM_RATE_MAX_SAMPLES),
       }))
     }
@@ -2129,7 +2173,6 @@ function BtwResponseFooter(props: {
   const { theme } = useTheme()
   const [smoothedLiveTokensPerSecond, setSmoothedLiveTokensPerSecond] = createSignal(0)
   const [latestLiveTokensPerSecond, setLatestLiveTokensPerSecond] = createSignal(0)
-  const [smoothedPromptTokensPerSecond, setSmoothedPromptTokensPerSecond] = createSignal(0)
   const [now, setNow] = createSignal(Date.now())
   const model = createMemo(() =>
     Model.name(ctx.providers(), props.response().info.providerID, props.response().info.modelID),
@@ -2157,19 +2200,22 @@ function BtwResponseFooter(props: {
     return Math.max(0, end - props.startedAt())
   })
   const promptTokensPerSecond = createMemo(() => {
-    if (props.estimatedPromptTokens() <= 0) return 0
+    const serverRate = live()?.promptTokensPerSecond
+    if (serverRate !== undefined) return serverRate
+    const inputTokens = live()?.promptTokens ?? props.estimatedPromptTokens()
+    if (inputTokens <= 0) return 0
     const seconds = Math.max(promptProcessingDuration(), PROMPT_RATE_MIN_WINDOW) / 1000
-    return props.estimatedPromptTokens() / seconds
+    return inputTokens / seconds
   })
   const liveWindowTokensPerSecond = createMemo(() => {
     const current = live()?.now ?? now()
     const recent = (live()?.streamSamples ?? []).filter((sample) => current - sample.time <= STREAM_RATE_WINDOW)
     if (recent.length === 0) return 0
-    const chars = recent.reduce((total, sample) => total + sample.chars, 0)
+    const tokens = recent.reduce((total, sample) => total + sample.tokens, 0)
     const started = live()?.firstTokenAt ?? live()?.textStartedAt ?? recent[0]?.time
     if (!started) return 0
     const seconds = Math.max(current - Math.min(started, recent[0]?.time ?? started), STREAM_RATE_MIN_WINDOW) / 1000
-    return chars / 4 / seconds
+    return tokens / seconds
   })
   const averageLiveTokensPerSecond = createMemo(() => {
     if (final()) return 0
@@ -2179,11 +2225,17 @@ function BtwResponseFooter(props: {
   })
   const liveTokensPerSecond = createMemo(() => {
     if (final()) return 0
+    const serverRate = live()?.outputTokensPerSecond
+    if (serverRate !== undefined) return serverRate
+    const outputTokens = live()?.outputTokens ?? 0
+    if (outputTokens > 0 && generationDuration() > 0) return outputTokens / (generationDuration() / 1000)
     const windowed = liveWindowTokensPerSecond()
     if (windowed > 0) return windowed
     return averageLiveTokensPerSecond()
   })
   const finalTokensPerSecond = createMemo(() => {
+    const serverRate = derived().outputTokensPerSecond
+    if (serverRate !== undefined) return serverRate
     if (!final()) return 0
     if (generationDuration() <= 0) return 0
     const outputTokens =
@@ -2191,22 +2243,36 @@ function BtwResponseFooter(props: {
     if (outputTokens <= 0) return 0
     return outputTokens / (generationDuration() / 1000)
   })
+  const finalPromptTokensPerSecond = createMemo(() => {
+    const serverRate = derived().promptTokensPerSecond
+    if (serverRate !== undefined) return serverRate
+    if (!final()) return 0
+    if (promptProcessingDuration() <= 0) return 0
+    const inputTokens = props.response().info.tokens.input || props.estimatedPromptTokens()
+    if (inputTokens <= 0) return 0
+    return inputTokens / (promptProcessingDuration() / 1000)
+  })
   const displayLiveTokensPerSecond = createMemo(() => {
+    const serverRate = live()?.outputTokensPerSecond
+    if (serverRate !== undefined) return serverRate
     const smoothed = smoothedLiveTokensPerSecond()
     if (smoothed > 0) return smoothed
     return liveTokensPerSecond()
   })
   const metrics = createMemo(() => {
     if (final()) {
+      const inputRate = finalPromptTokensPerSecond()
+      const outputRate = finalTokensPerSecond()
       return [
-        finalTokensPerSecond() > 0 ? formatTokensPerSecond(finalTokensPerSecond()) : "",
+        inputRate > 0 ? `↓ ${formatTokensPerSecond(inputRate)}` : "",
+        outputRate > 0 ? `↑ ${formatTokensPerSecond(outputRate)}` : "",
         duration() > 0 ? Locale.duration(duration()) : "",
       ].filter(Boolean)
     }
 
     if (!live()?.textStartedAt && !live()?.firstTokenAt) {
       return [
-        `↓ ${formatTokensPerSecond(smoothedPromptTokensPerSecond())}`,
+        `↓ ${formatTokensPerSecond(promptTokensPerSecond())}`,
         duration() > 0 ? Locale.duration(duration()) : "",
       ].filter(Boolean)
     }
@@ -2220,24 +2286,6 @@ function BtwResponseFooter(props: {
 
   createEffect(() => {
     setLatestLiveTokensPerSecond(liveTokensPerSecond())
-  })
-
-  createEffect(() => {
-    if (live()?.textStartedAt || live()?.firstTokenAt) {
-      setSmoothedPromptTokensPerSecond(0)
-      return
-    }
-    const next = promptTokensPerSecond()
-    const prev = smoothedPromptTokensPerSecond()
-    if (next <= 0) {
-      setSmoothedPromptTokensPerSecond(0)
-      return
-    }
-    if (prev <= 0) {
-      setSmoothedPromptTokensPerSecond(next)
-      return
-    }
-    setSmoothedPromptTokensPerSecond(prev + (next - prev) * PROMPT_RATE_SMOOTHING)
   })
 
   createEffect(() => {
@@ -2304,7 +2352,6 @@ function AssistantMessage(props: {
   const { theme } = useTheme()
   const [smoothedLiveTokensPerSecond, setSmoothedLiveTokensPerSecond] = createSignal(0)
   const [latestLiveTokensPerSecond, setLatestLiveTokensPerSecond] = createSignal(0)
-  const [smoothedPromptTokensPerSecond, setSmoothedPromptTokensPerSecond] = createSignal(0)
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
 
   const final = createMemo(() => {
@@ -2346,22 +2393,23 @@ function AssistantMessage(props: {
   })
 
   const promptTokensPerSecond = createMemo(() => {
-    if (estimatedPromptTokens() <= 0) return 0
+    const serverRate = live()?.promptTokensPerSecond
+    if (serverRate !== undefined) return serverRate
+    const inputTokens = live()?.promptTokens ?? estimatedPromptTokens()
+    if (inputTokens <= 0) return 0
     const seconds = Math.max(promptProcessingDuration(), PROMPT_RATE_MIN_WINDOW) / 1000
-    return estimatedPromptTokens() / seconds
+    return inputTokens / seconds
   })
 
   const liveWindowTokensPerSecond = createMemo(() => {
     const current = live()?.now ?? 0
-    const recent = (live()?.streamSamples ?? []).filter(
-      (sample: { time: number; chars: number }) => current - sample.time <= STREAM_RATE_WINDOW,
-    )
+    const recent = (live()?.streamSamples ?? []).filter((sample) => current - sample.time <= STREAM_RATE_WINDOW)
     if (recent.length === 0) return 0
-    const chars = recent.reduce((total: number, sample: { time: number; chars: number }) => total + sample.chars, 0)
+    const tokens = recent.reduce((total, sample) => total + sample.tokens, 0)
     const started = live()?.firstTokenAt ?? live()?.textStartedAt ?? recent[0]?.time
     if (!started) return 0
     const seconds = Math.max(current - Math.min(started, recent[0]?.time ?? started), STREAM_RATE_MIN_WINDOW) / 1000
-    return chars / 4 / seconds
+    return tokens / seconds
   })
 
   const averageLiveTokensPerSecond = createMemo(() => {
@@ -2373,6 +2421,10 @@ function AssistantMessage(props: {
 
   const liveTokensPerSecond = createMemo(() => {
     if (final()) return 0
+    const serverRate = live()?.outputTokensPerSecond
+    if (serverRate !== undefined) return serverRate
+    const outputTokens = live()?.outputTokens ?? 0
+    if (outputTokens > 0 && generationDuration() > 0) return outputTokens / (generationDuration() / 1000)
     const windowed = liveWindowTokensPerSecond()
     if (windowed > 0) return windowed
     return averageLiveTokensPerSecond()
@@ -2380,24 +2432,6 @@ function AssistantMessage(props: {
 
   createEffect(() => {
     setLatestLiveTokensPerSecond(liveTokensPerSecond())
-  })
-
-  createEffect(() => {
-    if (live()?.textStartedAt || live()?.firstTokenAt) {
-      setSmoothedPromptTokensPerSecond(0)
-      return
-    }
-    const next = promptTokensPerSecond()
-    const prev = smoothedPromptTokensPerSecond()
-    if (next <= 0) {
-      setSmoothedPromptTokensPerSecond(0)
-      return
-    }
-    if (prev <= 0) {
-      setSmoothedPromptTokensPerSecond(next)
-      return
-    }
-    setSmoothedPromptTokensPerSecond(prev + (next - prev) * PROMPT_RATE_SMOOTHING)
   })
 
   createEffect(() => {
@@ -2421,6 +2455,8 @@ function AssistantMessage(props: {
   })
 
   const finalTokensPerSecond = createMemo(() => {
+    const serverRate = derived().outputTokensPerSecond
+    if (serverRate !== undefined) return serverRate
     if (!final()) return 0
     if (generationDuration() <= 0) return 0
     const outputTokens = props.message.tokens.output > 0 ? props.message.tokens.output : estimatedOutputTokens()
@@ -2428,7 +2464,19 @@ function AssistantMessage(props: {
     return outputTokens / (generationDuration() / 1000)
   })
 
+  const finalPromptTokensPerSecond = createMemo(() => {
+    const serverRate = derived().promptTokensPerSecond
+    if (serverRate !== undefined) return serverRate
+    if (!final()) return 0
+    if (promptProcessingDuration() <= 0) return 0
+    const inputTokens = props.message.tokens.input || estimatedPromptTokens()
+    if (inputTokens <= 0) return 0
+    return inputTokens / (promptProcessingDuration() / 1000)
+  })
+
   const displayLiveTokensPerSecond = createMemo(() => {
+    const serverRate = live()?.outputTokensPerSecond
+    if (serverRate !== undefined) return serverRate
     const smoothed = smoothedLiveTokensPerSecond()
     if (smoothed > 0) return smoothed
     return liveTokensPerSecond()
@@ -2436,15 +2484,18 @@ function AssistantMessage(props: {
 
   const metrics = createMemo(() => {
     if (final()) {
+      const inputRate = finalPromptTokensPerSecond()
+      const outputRate = finalTokensPerSecond()
       return [
-        finalTokensPerSecond() > 0 ? formatTokensPerSecond(finalTokensPerSecond()) : "",
+        inputRate > 0 ? `↓ ${formatTokensPerSecond(inputRate)}` : "",
+        outputRate > 0 ? `↑ ${formatTokensPerSecond(outputRate)}` : "",
         duration() > 0 ? Locale.duration(duration()) : "",
       ].filter(Boolean)
     }
 
     if (!live()?.textStartedAt && !live()?.firstTokenAt) {
       return [
-        `↓ ${formatTokensPerSecond(smoothedPromptTokensPerSecond())}`,
+        `↓ ${formatTokensPerSecond(promptTokensPerSecond())}`,
         duration() > 0 ? Locale.duration(duration()) : "",
       ].filter(Boolean)
     }
@@ -2530,9 +2581,16 @@ function formatTokensPerSecond(value: number) {
   return `${value.toFixed(2)} t/s`
 }
 
+function estimateStreamTokens(delta: string) {
+  if (!delta) return 0
+  return Math.max(1, Token.estimate(delta))
+}
+
 function assistantDerivedMetrics(parts: Part[]): AssistantDerivedMetrics {
   let responseStartedAt: number | undefined
   let generationStartedAt: number | undefined
+  let promptTokensPerSecond: number | undefined
+  let outputTokensPerSecond: number | undefined
   let estimatedOutputTokens = 0
 
   for (const part of parts) {
@@ -2544,6 +2602,12 @@ function assistantDerivedMetrics(parts: Part[]): AssistantDerivedMetrics {
     }
     if (part.type === "reasoning") {
       responseStartedAt = responseStartedAt ?? part.time.start
+      continue
+    }
+    if (part.type === "step-finish") {
+      const timings = llamaCppTimings("metadata" in part ? part.metadata : undefined)
+      promptTokensPerSecond = timings.promptTokensPerSecond ?? promptTokensPerSecond
+      outputTokensPerSecond = timings.outputTokensPerSecond ?? outputTokensPerSecond
     }
   }
 
@@ -2551,7 +2615,35 @@ function assistantDerivedMetrics(parts: Part[]): AssistantDerivedMetrics {
     estimatedOutputTokens,
     responseStartedAt,
     generationStartedAt,
+    promptTokensPerSecond,
+    outputTokensPerSecond,
   }
+}
+
+function llamaCppTimings(metadata: unknown) {
+  const root = recordValue(metadata)
+  if (!root) return {}
+  for (const value of Object.values(root)) {
+    const provider = recordValue(value)
+    const timings = recordValue(provider?.timings)
+    if (!timings) continue
+    return {
+      promptTokensPerSecond: positiveNumber(timings.prompt_per_second),
+      outputTokensPerSecond: positiveNumber(timings.predicted_per_second),
+    }
+  }
+  return {}
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return
+  return value as Record<string, unknown>
+}
+
+function positiveNumber(value: unknown) {
+  if (typeof value !== "number") return
+  if (!Number.isFinite(value) || value <= 0) return
+  return value
 }
 
 function shortBtwActionLabel(name: string) {

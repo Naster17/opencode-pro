@@ -32,6 +32,95 @@ const TOOL_ERROR_STALL_TIMEOUT = 5_000
 const TOOL_RESULT_STALL_TIMEOUT = 60_000
 const log = Log.create({ service: "session.processor" })
 
+function positiveNumber(value: unknown) {
+  if (typeof value !== "number") return
+  if (!Number.isFinite(value) || value <= 0) return
+  return value
+}
+
+function nonNegativeInteger(value: unknown) {
+  if (typeof value !== "number") return
+  if (!Number.isInteger(value) || value < 0) return
+  return value
+}
+
+function usageTokens(value: unknown) {
+  if (!isRecord(value)) return {}
+  return {
+    promptTokens:
+      nonNegativeInteger(value.prompt_tokens) ??
+      nonNegativeInteger(value.input_tokens) ??
+      nonNegativeInteger(value.promptTokenCount) ??
+      nonNegativeInteger(value.inputTokens) ??
+      nonNegativeInteger(value.input_tokens_total),
+    outputTokens:
+      nonNegativeInteger(value.completion_tokens) ??
+      nonNegativeInteger(value.output_tokens) ??
+      nonNegativeInteger(value.candidatesTokenCount) ??
+      nonNegativeInteger(value.outputTokens) ??
+      nonNegativeInteger(value.generated_tokens),
+  }
+}
+
+function rawStreamMetrics(raw: unknown) {
+  if (!isRecord(raw)) return
+  const timings = isRecord(raw.timings) ? raw.timings : undefined
+  const progress = isRecord(raw.prompt_progress) ? raw.prompt_progress : undefined
+  const usage = usageTokens(raw.usage)
+  const messageUsage = usageTokens(isRecord(raw.message) ? raw.message.usage : undefined)
+  const metadataUsage = usageTokens(raw.usageMetadata)
+  const metaTokens = usageTokens(isRecord(raw.meta) ? raw.meta.tokens : undefined)
+  if (!timings && !progress && !usage.promptTokens && !usage.outputTokens && !messageUsage.promptTokens && !messageUsage.outputTokens && !metadataUsage.promptTokens && !metadataUsage.outputTokens && !metaTokens.promptTokens && !metaTokens.outputTokens) return
+
+  const progressProcessed = nonNegativeInteger(progress?.processed)
+  const progressMs = positiveNumber(progress?.time_ms)
+  const promptTokens =
+    progress
+      ? (progressProcessed ?? 0)
+      : (nonNegativeInteger(timings?.prompt_n) ??
+        usage.promptTokens ??
+        messageUsage.promptTokens ??
+        metadataUsage.promptTokens ??
+        metaTokens.promptTokens)
+  const promptMs = positiveNumber(timings?.prompt_ms)
+  const outputTokens =
+    nonNegativeInteger(timings?.predicted_n) ??
+    usage.outputTokens ??
+    messageUsage.outputTokens ??
+    metadataUsage.outputTokens ??
+    metaTokens.outputTokens
+  const outputMs = positiveNumber(timings?.predicted_ms)
+  const promptTokensPerSecond = progress
+    ? progressProcessed && progressMs
+      ? (progressProcessed / progressMs) * 1000
+      : undefined
+    : promptTokens && promptMs
+      ? (promptTokens / promptMs) * 1000
+      : positiveNumber(timings?.prompt_per_second)
+  const outputTokensPerSecond = outputTokens
+    ? outputMs
+      ? (outputTokens / outputMs) * 1000
+      : positiveNumber(timings?.predicted_per_second)
+    : undefined
+  const promptProgress = progress
+    ? {
+        total: nonNegativeInteger(progress.total) ?? 0,
+        cache: nonNegativeInteger(progress.cache) ?? 0,
+        processed: nonNegativeInteger(progress.processed) ?? 0,
+        time_ms: nonNegativeInteger(progress.time_ms) ?? 0,
+      }
+    : undefined
+
+  if (!promptTokens && !outputTokens && !promptTokensPerSecond && !outputTokensPerSecond && !promptProgress) return
+  return {
+    promptTokens,
+    outputTokens,
+    promptTokensPerSecond,
+    outputTokensPerSecond,
+    promptProgress,
+  }
+}
+
 function interruptedToolInput(part: MessageV2.ToolPart, raw?: string) {
   const interruptedRaw = raw ?? (part.state.status === "pending" ? part.state.raw : "")
   if (part.state.status !== "pending" || !interruptedRaw.trim()) return part.state.input
@@ -756,6 +845,7 @@ export const layer: Layer.Layer<
               type: "step-finish",
               tokens: usage.tokens,
               cost: usage.cost,
+              metadata: value.providerMetadata,
             })
             yield* updateMessage(ctx.assistantMessage)
             if (ctx.snapshot) {
@@ -837,6 +927,18 @@ export const layer: Layer.Layer<
 
           case "finish":
             return
+
+          case "raw": {
+            const metrics = rawStreamMetrics(value.rawValue)
+            if (!metrics) return
+            yield* bus.publish(MessageV2.Event.StreamMetrics, {
+              sessionID: ctx.sessionID,
+              messageID: ctx.assistantMessage.id,
+              time: Date.now(),
+              ...metrics,
+            })
+            return
+          }
 
           default:
             slog.info("unhandled", { event: value.type, value })

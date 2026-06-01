@@ -11,6 +11,7 @@ export type Event =
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessagePartDelta
+  | EventMessageStreamMetrics
   | EventPermissionAsked
   | EventPermissionReplied
   | EventSessionDiff
@@ -568,6 +569,9 @@ export type StepFinishPart = {
       write: number
     }
   }
+  metadata?: {
+    [key: string]: unknown
+  }
 }
 
 export type SnapshotPart = {
@@ -780,6 +784,7 @@ export type GlobalEvent = {
     | EventLspClientDiagnostics
     | EventLspUpdated
     | EventMessagePartDelta
+    | EventMessageStreamMetrics
     | EventPermissionAsked
     | EventPermissionReplied
     | EventSessionDiff
@@ -1242,6 +1247,8 @@ export type Config = {
     min_messages?: number
     normalize_dates?: boolean
     log_metrics?: boolean
+    strip_provider_metadata?: boolean
+    inline_reasoning?: boolean
     stable_history?: boolean
   }
   experimental?: {
@@ -2331,6 +2338,26 @@ export type EventMessagePartDelta = {
     partID: string
     field: string
     delta: string
+  }
+}
+
+export type EventMessageStreamMetrics = {
+  id: string
+  type: "message.stream.metrics"
+  properties: {
+    sessionID: string
+    messageID: string
+    time: number
+    promptTokens?: number
+    outputTokens?: number
+    promptTokensPerSecond?: number
+    outputTokensPerSecond?: number
+    promptProgress?: {
+      total: number
+      cache: number
+      processed: number
+      time_ms: number
+    }
   }
 }
 
