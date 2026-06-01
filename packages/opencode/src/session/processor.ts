@@ -84,11 +84,13 @@ function rawStreamMetrics(raw: unknown) {
         metaTokens.promptTokens)
   const promptMs = positiveNumber(timings?.prompt_ms)
   const outputTokens =
-    nonNegativeInteger(timings?.predicted_n) ??
-    usage.outputTokens ??
-    messageUsage.outputTokens ??
-    metadataUsage.outputTokens ??
-    metaTokens.outputTokens
+    progress
+      ? undefined
+      : (nonNegativeInteger(timings?.predicted_n) ??
+        usage.outputTokens ??
+        messageUsage.outputTokens ??
+        metadataUsage.outputTokens ??
+        metaTokens.outputTokens)
   const outputMs = positiveNumber(timings?.predicted_ms)
   const promptTokensPerSecond = progress
     ? progressProcessed && progressMs
@@ -97,7 +99,7 @@ function rawStreamMetrics(raw: unknown) {
     : promptTokens && promptMs
       ? (promptTokens / promptMs) * 1000
       : positiveNumber(timings?.prompt_per_second)
-  const outputTokensPerSecond = outputTokens
+  const outputTokensPerSecond = !progress && outputTokens
     ? outputMs
       ? (outputTokens / outputMs) * 1000
       : positiveNumber(timings?.predicted_per_second)

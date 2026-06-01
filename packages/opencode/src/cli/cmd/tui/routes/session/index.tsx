@@ -668,7 +668,7 @@ export function Session() {
     if (assistant.id !== evt.properties.messageID) return
     if (assistant.time.completed) return
     if (evt.properties.sessionID !== route.sessionID) return
-    const outputStarted = (evt.properties.outputTokens ?? 0) > 0
+    const outputStarted = !evt.properties.promptProgress && (evt.properties.outputTokens ?? 0) > 0
     setLiveAssistant((current) =>
       current.messageID !== assistant.id
         ? {
