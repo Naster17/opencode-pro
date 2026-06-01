@@ -1242,6 +1242,8 @@ export type Config = {
     min_messages?: number
     normalize_dates?: boolean
     log_metrics?: boolean
+    strip_provider_metadata?: boolean
+    inline_reasoning?: boolean
     stable_history?: boolean
   }
   experimental?: {
