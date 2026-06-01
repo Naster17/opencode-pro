@@ -2189,14 +2189,14 @@ function BtwResponseFooter(props: {
     return Math.max(0, end - props.startedAt())
   })
   const generationDuration = createMemo(() => {
-    const generationStartedAt = live()?.textStartedAt ?? live()?.firstTokenAt ?? derived().generationStartedAt
+    const generationStartedAt = live()?.firstTokenAt ?? live()?.textStartedAt ?? derived().generationStartedAt
     if (!generationStartedAt) return 0
     const end = final() ? props.response().info.time.completed : (live()?.now ?? now())
     if (!end) return 0
     return Math.max(0, end - generationStartedAt)
   })
   const promptProcessingDuration = createMemo(() => {
-    const end = live()?.responseStartedAt ?? live()?.firstTokenAt ?? derived().responseStartedAt ?? live()?.now ?? now()
+    const end = live()?.firstTokenAt ?? derived().responseStartedAt ?? live()?.now ?? now()
     return Math.max(0, end - props.startedAt())
   })
   const promptTokensPerSecond = createMemo(() => {
@@ -2270,7 +2270,7 @@ function BtwResponseFooter(props: {
       ].filter(Boolean)
     }
 
-    if (!live()?.textStartedAt && !live()?.firstTokenAt) {
+    if (!live()?.firstTokenAt && (live()?.outputTokens ?? 0) <= 0) {
       return [
         `↓ ${formatTokensPerSecond(promptTokensPerSecond())}`,
         duration() > 0 ? Locale.duration(duration()) : "",
@@ -2378,7 +2378,7 @@ function AssistantMessage(props: {
   const estimatedPromptTokens = createMemo(() => props.estimatedPromptTokens ?? 0)
 
   const generationDuration = createMemo(() => {
-    const generationStartedAt = live()?.textStartedAt ?? live()?.firstTokenAt ?? derived().generationStartedAt
+    const generationStartedAt = live()?.firstTokenAt ?? live()?.textStartedAt ?? derived().generationStartedAt
     if (!generationStartedAt) return 0
     const end = final() ? props.message.time.completed : live()?.now
     if (!end) return 0
@@ -2387,7 +2387,7 @@ function AssistantMessage(props: {
 
   const promptProcessingDuration = createMemo(() => {
     if (!startedAt()) return 0
-    const end = live()?.responseStartedAt ?? live()?.firstTokenAt ?? derived().responseStartedAt ?? live()?.now
+    const end = live()?.firstTokenAt ?? derived().responseStartedAt ?? live()?.now
     if (!end) return 0
     return Math.max(0, end - startedAt()!)
   })
@@ -2493,7 +2493,7 @@ function AssistantMessage(props: {
       ].filter(Boolean)
     }
 
-    if (!live()?.textStartedAt && !live()?.firstTokenAt) {
+    if (!live()?.firstTokenAt && (live()?.outputTokens ?? 0) <= 0) {
       return [
         `↓ ${formatTokensPerSecond(promptTokensPerSecond())}`,
         duration() > 0 ? Locale.duration(duration()) : "",
