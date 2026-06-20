@@ -16,12 +16,17 @@ import * as Model from "../util/model"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 
-export function DialogModel(props: { providerID?: string; initial?: { providerID: string; modelID: string } }) {
+export function DialogModel(props: {
+  providerID?: string
+  initial?: { providerID: string; modelID: string }
+  initialID?: string
+  initialQuery?: string
+}) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
   const keybind = useKeybind()
-  const [query, setQuery] = createSignal("")
+  const [query, setQuery] = createSignal(props.initialQuery ?? "")
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
@@ -44,6 +49,7 @@ export function DialogModel(props: { providerID?: string; initial?: { providerID
         if (!Model.selectable(model)) return []
         return [
           {
+            id: `${category}:${provider.id}:${model.id}`,
             key: item,
             value: { providerID: provider.id, modelID: model.id },
             title: model.name ?? item.modelID,
@@ -80,6 +86,7 @@ export function DialogModel(props: { providerID?: string; initial?: { providerID
           filter(([_, info]) => Model.selectable(info)),
           filter(([_, info]) => (props.providerID ? info.providerID === props.providerID : true)),
           map(([model, info]) => ({
+            id: `provider:${provider.id}:${model}`,
             value: { providerID: provider.id, modelID: model },
             title: info.name ?? model,
             description: favorites.some((item) => item.providerID === provider.id && item.modelID === model)
@@ -132,9 +139,15 @@ export function DialogModel(props: { providerID?: string; initial?: { providerID
     return value.name
   })
 
-  function openDetails(input: { providerID: string; modelID: string }) {
+  function openDetails(input: { providerID: string; modelID: string }, initialID?: string) {
     dialog.replace(() => (
-      <DialogModelDetails providerID={input.providerID} modelID={input.modelID} parentProviderID={props.providerID} />
+      <DialogModelDetails
+        providerID={input.providerID}
+        modelID={input.modelID}
+        parentProviderID={props.providerID}
+        initialID={initialID}
+        initialQuery={query()}
+      />
     ))
   }
 
@@ -161,7 +174,7 @@ export function DialogModel(props: { providerID?: string; initial?: { providerID
           keybind: tab,
           title: "Details",
           onTrigger: (option) => {
-            openDetails(option.value as { providerID: string; modelID: string })
+            openDetails(option.value as { providerID: string; modelID: string }, option.id)
           },
         },
         {
@@ -177,13 +190,21 @@ export function DialogModel(props: { providerID?: string; initial?: { providerID
       flat={true}
       skipFilter={true}
       title={title()}
+      initialFilter={props.initialQuery}
       initial={props.initial}
+      initialID={props.initialID}
       current={local.model.current()}
     />
   )
 }
 
-function DialogModelDetails(props: { providerID: string; modelID: string; parentProviderID?: string }) {
+function DialogModelDetails(props: {
+  providerID: string
+  modelID: string
+  parentProviderID?: string
+  initialID?: string
+  initialQuery?: string
+}) {
   const dialog = useDialog()
   const sync = useSync()
   const { theme } = useTheme()
@@ -202,7 +223,14 @@ function DialogModelDetails(props: { providerID: string; modelID: string; parent
   })
 
   function back() {
-    dialog.replace(() => <DialogModel providerID={props.parentProviderID} initial={props} />)
+    dialog.replace(() => (
+      <DialogModel
+        providerID={props.parentProviderID}
+        initial={{ providerID: props.providerID, modelID: props.modelID }}
+        initialID={props.initialID}
+        initialQuery={props.initialQuery}
+      />
+    ))
   }
 
   useKeyboard((evt) => {

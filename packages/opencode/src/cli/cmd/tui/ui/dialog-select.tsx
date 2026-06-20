@@ -32,11 +32,14 @@ export interface DialogSelectProps<T> {
     disabled?: boolean
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
+  initialFilter?: string
   initial?: T
+  initialID?: string
   current?: T
 }
 
 export interface DialogSelectOption<T = any> {
+  id?: string
   title: string
   value: T
   description?: string
@@ -64,20 +67,26 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const [store, setStore] = createStore({
     selected: 0,
-    filter: "",
+    filter: props.initialFilter ?? "",
     input: "keyboard" as "keyboard" | "mouse",
   })
 
+  function initialIndex() {
+    if (props.initialID) {
+      const index = flat().findIndex((opt) => opt.id === props.initialID)
+      if (index >= 0) return index
+    }
+    const value = props.initial ?? props.current
+    if (!value) return -1
+    return flat().findIndex((opt) => isDeepEqual(opt.value, value))
+  }
+
   createEffect(
     on(
-      () => props.initial ?? props.current,
-      (value) => {
-        if (value) {
-          const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, value))
-          if (currentIndex >= 0) {
-            setStore("selected", currentIndex)
-          }
-        }
+      () => [props.initialID, props.initial ?? props.current] as const,
+      () => {
+        const index = initialIndex()
+        if (index >= 0) setStore("selected", index)
       },
     ),
   )
@@ -165,16 +174,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const selected = createMemo(() => flat()[store.selected])
 
   createEffect(
-    on([() => store.filter, () => props.initial ?? props.current], ([filter, value]) => {
+    on([() => store.filter, () => props.initialID, () => props.initial ?? props.current], ([filter]) => {
       setTimeout(() => {
         if (filter.length > 0) {
           moveTo(0, true)
-        } else if (value) {
-          const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, value))
-          if (currentIndex >= 0) {
-            moveTo(currentIndex, true)
-          }
+          return
         }
+        const index = initialIndex()
+        if (index >= 0) moveTo(index, true)
       }, 0)
     }),
   )
@@ -290,6 +297,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                 setTimeout(() => {
                   if (!input) return
                   if (input.isDestroyed) return
+                  if (store.filter) input.setText(store.filter)
                   input.focus()
                 }, 1)
               }}
