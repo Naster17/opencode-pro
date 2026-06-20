@@ -27,7 +27,7 @@ async function withFetch(fetch: (req: Request) => Response | Promise<Response>, 
   await fn(server.url)
 }
 
-function exec(args: { url: string; format: "text" | "markdown" | "html" }) {
+function exec(args: { url: string; format: "text" | "markdown" | "html"; timeout?: number }) {
   return WebFetchTool.pipe(
     Effect.flatMap((info) => info.init()),
     Effect.flatMap((tool) => tool.execute(args, ctx)),
@@ -96,6 +96,25 @@ describe("tool.webfetch", () => {
             const result = await exec({ url: new URL("/file.txt", url).toString(), format: "text" })
             expect(result.output).toBe("hello from webfetch")
             expect(result.attachments).toBeUndefined()
+          },
+        })
+      },
+    )
+  })
+
+  test("fails fast on redirect loops", async () => {
+    let calls = 0
+    await withFetch(
+      (req) => {
+        calls++
+        return Response.redirect(req.url, 302)
+      },
+      async (url) => {
+        await WithInstance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            await expect(exec({ url: url.toString(), format: "text", timeout: 5 })).rejects.toThrow("Too many redirects")
+            expect(calls).toBe(31)
           },
         })
       },

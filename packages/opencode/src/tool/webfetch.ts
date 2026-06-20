@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import * as Tool from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
@@ -8,6 +8,7 @@ import { isImageAttachment } from "@/util/media"
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
 const MAX_TIMEOUT = 120 * 1000 // 2 minutes
+const MAX_REDIRECTS = 30
 
 export const Parameters = Schema.Struct({
   url: Schema.String.annotate({ description: "The URL to fetch content from" }),
@@ -23,7 +24,7 @@ export const WebFetchTool = Tool.define(
   "webfetch",
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
-    const httpOk = HttpClient.filterStatusOk(http)
+    const httpOk = HttpClient.filterStatusOk(HttpClient.followRedirects(http, MAX_REDIRECTS))
 
     return {
       description: DESCRIPTION,
@@ -73,21 +74,37 @@ export const WebFetchTool = Tool.define(
 
           const request = HttpClientRequest.get(params.url).pipe(HttpClientRequest.setHeaders(headers))
 
+          const redirectError = () =>
+            Effect.die(new Error(`Too many redirects while fetching ${params.url} (max ${MAX_REDIRECTS})`))
+
+          const execute = (request: HttpClientRequest.HttpClientRequest) =>
+            httpOk.execute(request).pipe(
+              Effect.catchIf(
+                (err) =>
+                  err.reason._tag === "StatusCodeError" &&
+                  err.reason.response.status >= 300 &&
+                  err.reason.response.status < 400 &&
+                  err.reason.response.headers.location !== undefined,
+                redirectError,
+              ),
+            )
+
           // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
-          const response = yield* httpOk.execute(request).pipe(
+          const response = yield* execute(request).pipe(
             Effect.catchIf(
               (err) =>
                 err.reason._tag === "StatusCodeError" &&
                 err.reason.response.status === 403 &&
                 err.reason.response.headers["cf-mitigated"] === "challenge",
               () =>
-                httpOk.execute(
+                execute(
                   HttpClientRequest.get(params.url).pipe(
                     HttpClientRequest.setHeaders({ ...headers, "User-Agent": "opencode" }),
                   ),
                 ),
             ),
             Effect.timeoutOrElse({ duration: timeout, orElse: () => Effect.die(new Error("Request timed out")) }),
+            Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
           )
 
           // Check content length

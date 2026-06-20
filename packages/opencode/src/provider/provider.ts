@@ -27,6 +27,7 @@ import { isRecord } from "@/util/record"
 import { optionalOmitUndefined, withStatics } from "@/util/schema"
 
 import * as ProviderTransform from "./transform"
+import { ModelCompat } from "./model-compat"
 import { ModelID, ProviderID } from "./schema"
 
 const log = Log.create({ service: "provider" })
@@ -160,6 +161,38 @@ type GoogleModelListResponse = {
   }>
   nextPageToken?: string
 }
+
+type OpenAIModelListResponse = {
+  data?: Array<{
+    id?: string
+    name?: string
+    created?: number
+    owned_by?: string
+    context_length?: number
+    contextLength?: number
+    max_context_length?: number
+    maxContextLength?: number
+    max_model_len?: number
+    maxModelLen?: number
+    max_input_tokens?: number
+    maxInputTokens?: number
+    input_token_limit?: number
+    inputTokenLimit?: number
+    max_output_tokens?: number
+    maxOutputTokens?: number
+    output_token_limit?: number
+    outputTokenLimit?: number
+    max_completion_tokens?: number
+    maxCompletionTokens?: number
+    pricing?: Record<string, string | number | undefined>
+    architecture?: Record<string, unknown>
+    top_provider?: Record<string, unknown>
+    capabilities?: Record<string, unknown>
+    supported_parameters?: string[]
+  }>
+}
+
+type OpenAIModelListItem = NonNullable<OpenAIModelListResponse["data"]>[number]
 
 const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>> = {
   "@ai-sdk/amazon-bedrock": () => import("@ai-sdk/amazon-bedrock").then((m) => m.createAmazonBedrock),
@@ -298,12 +331,193 @@ async function googleAvailableModels(apiKey: string) {
       if (!methods.includes("generateContent")) continue
 
       const id = model.baseModelId ?? model.name?.replace(/^models\//, "")
-      if (id) result.set(id, model)
+      if (!id || !ModelCompat.isGoogleModelIDCompatible(id)) continue
+      result.set(id, model)
     }
 
     if (!body.nextPageToken) return result
     pageToken = body.nextPageToken
   }
+}
+
+async function opencodeAvailableModels(api: string, apiKey: string) {
+  const response = await fetch(`${api.replace(/\/$/, "")}/models`, {
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+    },
+  })
+  if (response.status === 401) return "unauthorized" as const
+  if (!response.ok) throw new Error(`opencode models.list failed with ${response.status}`)
+
+  const body = (await response.json()) as OpenAIModelListResponse
+  return {
+    scope: response.headers.get("x-opencode-model-scope"),
+    models: new Set(body.data?.flatMap((model) => (model.id ? [model.id] : [])) ?? []),
+  }
+}
+
+function numberFrom(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value !== "string") return
+  const parsed = Number(value)
+  if (Number.isFinite(parsed)) return parsed
+}
+
+function integerFrom(value: unknown) {
+  const parsed = numberFrom(value)
+  if (parsed === undefined) return
+  return Math.max(0, Math.trunc(parsed))
+}
+
+function firstInteger(values: unknown[]) {
+  return values.map(integerFrom).find((value) => value !== undefined)
+}
+
+function firstNumber(values: unknown[]) {
+  return values.map(numberFrom).find((value) => value !== undefined)
+}
+
+function stringArrayFrom(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === "string")
+}
+
+function discoveredCost(model: OpenAIModelListItem): Model["cost"] {
+  const pricing = isRecord(model.pricing) ? model.pricing : {}
+  const normalize = (value: unknown) => {
+    const parsed = numberFrom(value) ?? 0
+    return parsed > 0 && parsed < 0.001 ? parsed * 1_000_000 : parsed
+  }
+
+  return {
+    input: normalize(firstNumber([pricing.input, pricing.prompt])),
+    output: normalize(firstNumber([pricing.output, pricing.completion])),
+    cache: {
+      read: normalize(firstNumber([pricing.cache_read, pricing.cacheRead])),
+      write: normalize(firstNumber([pricing.cache_write, pricing.cacheWrite])),
+    },
+  }
+}
+
+function openAICompatibleDiscoveredModel(provider: Info, model: OpenAIModelListItem): Model | undefined {
+  if (!model.id) return
+
+  const topProvider = isRecord(model.top_provider) ? model.top_provider : {}
+  const architecture = isRecord(model.architecture) ? model.architecture : {}
+  const capabilities = isRecord(model.capabilities) ? model.capabilities : {}
+  const supported = new Set(model.supported_parameters ?? [])
+  const inputModalities = stringArrayFrom(architecture.input_modalities)
+  const outputModalities = stringArrayFrom(architecture.output_modalities)
+  const baseURL =
+    typeof provider.options.baseURL === "string" && provider.options.baseURL !== ""
+      ? provider.options.baseURL
+      : Object.values(provider.models)[0]?.api.url
+
+  return {
+    id: ModelID.make(model.id),
+    providerID: provider.id,
+    name: model.name ?? model.id,
+    family: model.owned_by ?? model.id.split(/[/:]/)[0] ?? "",
+    api: {
+      id: model.id,
+      url: baseURL ?? "",
+      npm: Object.values(provider.models)[0]?.api.npm ?? "@ai-sdk/openai-compatible",
+    },
+    status: "active",
+    headers: {},
+    options: {},
+    cost: discoveredCost(model),
+    limit: {
+      context:
+        firstInteger([
+          model.context_length,
+          model.contextLength,
+          model.max_context_length,
+          model.maxContextLength,
+          model.max_model_len,
+          model.maxModelLen,
+          model.max_input_tokens,
+          model.maxInputTokens,
+          model.input_token_limit,
+          model.inputTokenLimit,
+          topProvider.context_length,
+          topProvider.contextLength,
+          topProvider.max_context_length,
+          topProvider.maxContextLength,
+        ]) ?? 0,
+      output:
+        firstInteger([
+          model.max_output_tokens,
+          model.maxOutputTokens,
+          model.output_token_limit,
+          model.outputTokenLimit,
+          model.max_completion_tokens,
+          model.maxCompletionTokens,
+          topProvider.max_completion_tokens,
+          topProvider.maxCompletionTokens,
+        ]) ?? 0,
+    },
+    capabilities: {
+      temperature: supported.size === 0 || supported.has("temperature"),
+      reasoning:
+        Boolean(capabilities.reasoning) || supported.has("reasoning") || supported.has("reasoning_effort") || false,
+      attachment: inputModalities.some((item) => item !== "text"),
+      toolcall: !supported.size || supported.has("tools") || supported.has("tool_choice"),
+      input: {
+        text: inputModalities.length === 0 || inputModalities.includes("text"),
+        audio: inputModalities.includes("audio"),
+        image: inputModalities.includes("image"),
+        video: inputModalities.includes("video"),
+        pdf: inputModalities.includes("pdf"),
+      },
+      output: {
+        text: outputModalities.length === 0 || outputModalities.includes("text"),
+        audio: outputModalities.includes("audio"),
+        image: outputModalities.includes("image"),
+        video: outputModalities.includes("video"),
+        pdf: outputModalities.includes("pdf"),
+      },
+      interleaved: model.id.includes("deepseek") ? { field: "reasoning_content" } : false,
+    },
+    release_date: model.created ? new Date(model.created * 1000).toISOString().slice(0, 10) : "",
+    variants: {},
+  }
+}
+
+async function openAICompatibleDiscoveredModels(provider: Info): Promise<DiscoveredModels> {
+  const baseURL =
+    typeof provider.options.baseURL === "string" && provider.options.baseURL !== ""
+      ? provider.options.baseURL
+      : Object.values(provider.models)[0]?.api.url
+  if (!baseURL) return { mode: "merge", models: {} }
+
+  const headers = new Headers(
+    isRecord(provider.options.headers)
+      ? Object.fromEntries(
+          Object.entries(provider.options.headers).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+        )
+      : {},
+  )
+  const apiKey = typeof provider.options.apiKey === "string" ? provider.options.apiKey : provider.key
+  if (apiKey && !headers.has("authorization")) headers.set("authorization", `Bearer ${apiKey}`)
+
+  const response = await fetch(`${baseURL.replace(/\/$/, "")}/models`, { headers })
+  if (!response.ok) throw new Error(`openai-compatible models.list failed with ${response.status}`)
+
+  const body = (await response.json()) as OpenAIModelListResponse
+  return {
+    mode: "merge",
+    models: Object.fromEntries(
+      (body.data ?? []).flatMap((item) => {
+        const discovered = openAICompatibleDiscoveredModel(provider, item)
+        return discovered ? [[discovered.id, discovered]] : []
+      }),
+    ),
+  }
+}
+
+function freeModels(models: Record<string, Model>) {
+  return Object.fromEntries(Object.entries(models).filter(([_, model]) => model.cost.input === 0))
 }
 
 function custom(dep: CustomDep): Record<string, CustomLoader> {
@@ -319,14 +533,15 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       }),
     opencode: Effect.fnUntraced(function* (input: Info) {
       const env = yield* dep.env()
-      const hasKey = iife(() => {
-        if (input.env.some((item) => env[item])) return true
-        return false
+      const auth = yield* dep.auth(input.id)
+      const configProvider = (yield* dep.config()).provider?.[input.id]
+      const apiKey = iife(() => {
+        const configured = configProvider?.options?.apiKey
+        if (typeof configured === "string" && configured.trim() !== "") return configured
+        if (auth?.type === "api") return auth.key
+        return input.env.map((item) => env[item]).find((value) => typeof value === "string" && value.trim() !== "")
       })
-      const ok =
-        hasKey ||
-        Boolean(yield* dep.auth(input.id)) ||
-        Boolean((yield* dep.config()).provider?.["opencode"]?.options?.apiKey)
+      const ok = !!apiKey
 
       if (!ok) {
         for (const [key, value] of Object.entries(input.models)) {
@@ -338,6 +553,23 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: Object.keys(input.models).length > 0,
         options: ok ? {} : { apiKey: "public" },
+        async discoverModels() {
+          const api = Object.values(input.models)[0]?.api.url
+          if (!api) return { mode: "replace", models: input.models }
+
+          try {
+            const available = await opencodeAvailableModels(api, apiKey ?? "public")
+            if (available === "unauthorized") return { mode: "replace", models: freeModels(input.models) }
+            if (!available.scope) return { mode: "replace", models: freeModels(input.models) }
+            return {
+              mode: "replace",
+              models: Object.fromEntries(Object.entries(input.models).filter(([modelID]) => available.models.has(modelID))),
+            }
+          } catch (error) {
+            log.warn("opencode model discovery failed", { error })
+            return { mode: "replace", models: input.models }
+          }
+        },
       }
     }),
     openai: () =>
@@ -1537,6 +1769,23 @@ const layer: Layer.Layer<
           if (provider.name) partial.name = provider.name
           if (provider.options) partial.options = provider.options
           mergeProvider(providerID, partial)
+        }
+
+        for (const [id, provider] of configProviders) {
+          if (!provider.auto) continue
+          const providerID = ProviderID.make(id)
+          if (discoveryLoaders[providerID]) continue
+          discoveryLoaders[providerID] = async () => {
+            const configured = providers[providerID]
+            if (!configured) return { mode: "merge", models: {} }
+
+            try {
+              return await openAICompatibleDiscoveredModels(configured)
+            } catch (error) {
+              log.warn("openai-compatible model discovery failed", { id: providerID, error })
+              return { mode: "merge", models: {} }
+            }
+          }
         }
 
         for (const [id, discoverModels] of Object.entries(discoveryLoaders)) {

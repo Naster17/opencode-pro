@@ -12,10 +12,11 @@ import { Keybind } from "@/util/keybind"
 import { createDialogProviderOptions } from "./dialog-provider"
 import { DialogVariant } from "./dialog-variant"
 import { useKeybind } from "../context/keybind"
+import * as Model from "../util/model"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 
-export function DialogModel(props: { providerID?: string }) {
+export function DialogModel(props: { providerID?: string; initial?: { providerID: string; modelID: string } }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
@@ -40,7 +41,7 @@ export function DialogModel(props: { providerID?: string }) {
         const provider = sync.data.provider.find((x) => x.id === item.providerID)
         if (!provider) return []
         const model = provider.models[item.modelID]
-        if (!model) return []
+        if (!Model.selectable(model)) return []
         return [
           {
             key: item,
@@ -49,7 +50,7 @@ export function DialogModel(props: { providerID?: string }) {
             description: provider.name,
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
-            footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer: model.cost.input === 0 && provider.id === "opencode" ? "Free" : undefined,
             onSelect: () => {
               onSelect(provider.id, model.id)
             },
@@ -76,7 +77,7 @@ export function DialogModel(props: { providerID?: string }) {
         pipe(
           provider.models,
           entries(),
-          filter(([_, info]) => info.status !== "deprecated"),
+          filter(([_, info]) => Model.selectable(info)),
           filter(([_, info]) => (props.providerID ? info.providerID === props.providerID : true)),
           map(([model, info]) => ({
             value: { providerID: provider.id, modelID: model },
@@ -86,19 +87,12 @@ export function DialogModel(props: { providerID?: string }) {
               : undefined,
             category: connected() ? provider.name : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
-            footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer: info.cost.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            keywords: [info.api.id, info.family ?? ""].filter((item) => item.length > 0),
             onSelect() {
               onSelect(provider.id, model)
             },
           })),
-          filter((x) => {
-            if (!showSections) return true
-            if (favorites.some((item) => item.providerID === x.value.providerID && item.modelID === x.value.modelID))
-              return false
-            if (recents.some((item) => item.providerID === x.value.providerID && item.modelID === x.value.modelID))
-              return false
-            return true
-          }),
           sortBy(
             (x) => x.footer !== "Free",
             (x) => x.title,
@@ -183,6 +177,7 @@ export function DialogModel(props: { providerID?: string }) {
       flat={true}
       skipFilter={true}
       title={title()}
+      initial={props.initial}
       current={local.model.current()}
     />
   )
@@ -207,7 +202,7 @@ function DialogModelDetails(props: { providerID: string; modelID: string; parent
   })
 
   function back() {
-    dialog.replace(() => <DialogModel providerID={props.parentProviderID} />)
+    dialog.replace(() => <DialogModel providerID={props.parentProviderID} initial={props} />)
   }
 
   useKeyboard((evt) => {

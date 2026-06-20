@@ -3011,10 +3011,12 @@ function toolErrorSummary(value: string) {
   return Locale.truncate(compact || "Tool error", 180)
 }
 
-function toolErrorTitle(value: string, fallback = "Tool error") {
+function toolErrorTitle(value: string, fallback = "Tool error", tool?: string) {
   const compact = value.replace(/\\n/g, " ").replace(/\s+/g, " ").trim()
   if (/QuestionRejectedError|rejected permission|specified a rule|user dismissed/i.test(compact)) return "Permission rejected"
   if (/apply_patch verification failed|patch rejected/i.test(compact)) return "Patch failed"
+  if (/too many redirects/i.test(compact)) return "Too many redirects"
+  if (/timed?\s*out|timeout/i.test(compact) && ["webfetch", "fetch"].includes(tool ?? "")) return "Request timed out"
   if (/timed?\s*out|timeout/i.test(compact)) return "Command timed out"
   if (/aborted|abort/i.test(compact)) return "Command aborted"
   if (/JSON Parse error|Invalid arguments/i.test(compact)) return "Invalid tool call"
@@ -3024,6 +3026,7 @@ function toolErrorTitle(value: string, fallback = "Tool error") {
 function CompactErrorBlock(props: {
   error: string
   title?: string
+  tool?: string
   icon?: string
   marginTop?: number
   marginBottom?: number
@@ -3034,7 +3037,7 @@ function CompactErrorBlock(props: {
   const [expanded, setExpanded] = createSignal(false)
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => props.error.trim())
-  const title = createMemo(() => props.title ?? toolErrorTitle(error()))
+  const title = createMemo(() => props.title ?? toolErrorTitle(error(), "Tool error", props.tool))
   const summary = createMemo(() => toolErrorSummary(error()))
   const color = createMemo(() => (props.variant === "warning" ? theme.warning : theme.error))
   return (
@@ -3219,7 +3222,7 @@ function InlineTool(props: {
         </Switch>
       </box>
       <Show when={error()}>
-        {(message) => <CompactErrorBlock error={message()} marginBottom={1} />}
+        {(message) => <CompactErrorBlock error={message()} tool={props.part.tool} marginBottom={1} />}
       </Show>
     </box>
   )
@@ -3305,7 +3308,7 @@ function BlockTool(props: {
       </Show>
       {props.children}
       <Show when={error()}>
-        {(message) => <CompactErrorBlock error={message()} marginBottom={1} />}
+        {(message) => <CompactErrorBlock error={message()} tool={props.part?.tool} marginBottom={1} />}
       </Show>
     </box>
   )

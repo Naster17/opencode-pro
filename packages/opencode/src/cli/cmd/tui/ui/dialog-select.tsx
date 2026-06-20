@@ -32,6 +32,7 @@ export interface DialogSelectProps<T> {
     disabled?: boolean
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
+  initial?: T
   current?: T
 }
 
@@ -69,10 +70,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   createEffect(
     on(
-      () => props.current,
-      (current) => {
-        if (current) {
-          const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
+      () => props.initial ?? props.current,
+      (value) => {
+        if (value) {
+          const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, value))
           if (currentIndex >= 0) {
             setStore("selected", currentIndex)
           }
@@ -146,6 +147,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     )
   })
 
+  function optionID(index: number) {
+    return `dialog-select-option-${index}`
+  }
+
   const rows = createMemo(() => {
     const headers = grouped().reduce((acc, [category], i) => {
       if (!category) return acc
@@ -160,12 +165,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const selected = createMemo(() => flat()[store.selected])
 
   createEffect(
-    on([() => store.filter, () => props.current], ([filter, current]) => {
+    on([() => store.filter, () => props.initial ?? props.current], ([filter, value]) => {
       setTimeout(() => {
         if (filter.length > 0) {
           moveTo(0, true)
-        } else if (current) {
-          const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
+        } else if (value) {
+          const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, value))
           if (currentIndex >= 0) {
             moveTo(currentIndex, true)
           }
@@ -188,7 +193,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     if (option) props.onMove?.(option)
     if (!scroll) return
     const target = scroll.getChildren().find((child) => {
-      return child.id === JSON.stringify(selected()?.value)
+      return child.id === optionID(next)
     })
     if (!target) return
     const y = target.y - scroll.y
@@ -329,11 +334,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                 </Show>
                 <For each={options}>
                   {(option) => {
-                    const active = createMemo(() => isDeepEqual(option.value, selected()?.value))
+                    const optionIndex = createMemo(() => flat().findIndex((item) => item === option))
+                    const active = createMemo(() => optionIndex() === store.selected)
                     const current = createMemo(() => isDeepEqual(option.value, props.current))
                     return (
                       <box
-                        id={JSON.stringify(option.value)}
+                        id={optionID(optionIndex())}
                         flexDirection="row"
                         position="relative"
                         onMouseMove={() => {

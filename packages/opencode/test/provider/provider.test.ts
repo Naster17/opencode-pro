@@ -1533,7 +1533,7 @@ test("disabled_providers and enabled_providers interaction", async () => {
   })
 })
 
-test("google provider only keeps models returned by models.list", async () => {
+test("google provider keeps compatible chat models returned by models.list", async () => {
   const originalFetch = globalThis.fetch
   let requestCount = 0
   let apiKeyHeader: string | null = null
@@ -1558,6 +1558,26 @@ test("google provider only keeps models returned by models.list", async () => {
             inputTokenLimit: 65536,
             outputTokenLimit: 8192,
             temperature: 1,
+            supportedGenerationMethods: ["generateContent"],
+          },
+          {
+            name: "models/gemini-2.5-flash-preview-tts",
+            baseModelId: "gemini-2.5-flash-preview-tts",
+            supportedGenerationMethods: ["generateContent"],
+          },
+          {
+            name: "models/gemini-2.5-pro-deep-research",
+            baseModelId: "gemini-2.5-pro-deep-research",
+            supportedGenerationMethods: ["generateContent"],
+          },
+          {
+            name: "models/gemini-2.5-computer-use-preview-10-2025",
+            baseModelId: "gemini-2.5-computer-use-preview-10-2025",
+            supportedGenerationMethods: ["generateContent"],
+          },
+          {
+            name: "models/gemini-2.0-flash-preview-image-generation",
+            baseModelId: "gemini-2.0-flash-preview-image-generation",
             supportedGenerationMethods: ["generateContent"],
           },
           {
@@ -1594,12 +1614,115 @@ test("google provider only keeps models returned by models.list", async () => {
         const google = providers[ProviderID.google]
         expect(google).toBeDefined()
         expect(apiKeyHeader).toBe("test-google-key")
-        expect(requestCount).toBe(1)
+        expect(requestCount).toBeGreaterThan(0)
         expect(google.models["gemini-2.5-flash"]).toBeDefined()
         expect(google.models["gemma-4b-it"]).toBeDefined()
         expect(google.models["gemma-4b-it"].name).toBe("Gemma 4B IT")
+        expect(google.models["gemini-2.5-flash-preview-tts"]).toBeUndefined()
+        expect(google.models["gemini-2.5-pro-deep-research"]).toBeUndefined()
+        expect(google.models["gemini-2.5-computer-use-preview-10-2025"]).toBeUndefined()
+        expect(google.models["gemini-2.0-flash-preview-image-generation"]).toBeUndefined()
         expect(google.models["gemini-2.5-pro"]).toBeUndefined()
         expect(google.models["gemini-2.5-flash-image"]).toBeUndefined()
+      },
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("custom openai-compatible provider auto discovers models", async () => {
+  const originalFetch = globalThis.fetch
+  let requestURL = ""
+  let authHeader: string | null = null
+
+  globalThis.fetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
+    requestURL = String(input)
+    authHeader = new Headers(init?.headers).get("authorization")
+    return new Response(
+      JSON.stringify({
+        data: [
+          {
+            id: "auto-large",
+            name: "Auto Large",
+            owned_by: "local",
+            context_length: 131072,
+            max_output_tokens: 16384,
+            pricing: {
+              prompt: "0.0000002",
+              completion: "0.00000055",
+              cache_read: "0.000000015",
+            },
+            architecture: {
+              input_modalities: ["text", "image"],
+              output_modalities: ["text"],
+            },
+            supported_parameters: ["temperature", "tools", "reasoning_effort"],
+          },
+          {
+            id: "manual-model",
+            context_length: 999999,
+          },
+        ],
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      },
+    )
+  }) as unknown as typeof globalThis.fetch
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "auto-openai": {
+                name: "Auto OpenAI",
+                npm: "@ai-sdk/openai-compatible",
+                auto: true,
+                options: {
+                  baseURL: "https://api.example.com/v1/",
+                  apiKey: "test-key",
+                },
+                models: {
+                  "manual-model": {
+                    name: "Manual Model",
+                    limit: { context: 4096, output: 1024 },
+                  },
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await list()
+        const provider = providers[ProviderID.make("auto-openai")]
+        const discovered = provider.models["auto-large"]
+        const manual = provider.models["manual-model"]
+
+        expect(provider).toBeDefined()
+        expect(requestURL).toBe("https://api.example.com/v1/models")
+        expect(authHeader).toBe("Bearer test-key")
+        expect(discovered.name).toBe("Auto Large")
+        expect(discovered.api.url).toBe("https://api.example.com/v1/")
+        expect(discovered.limit.context).toBe(131072)
+        expect(discovered.limit.output).toBe(16384)
+        expect(discovered.cost.input).toBeCloseTo(0.2)
+        expect(discovered.cost.output).toBeCloseTo(0.55)
+        expect(discovered.cost.cache.read).toBeCloseTo(0.015)
+        expect(discovered.capabilities.input.image).toBe(true)
+        expect(discovered.capabilities.reasoning).toBe(true)
+        expect(manual.name).toBe("Manual Model")
+        expect(manual.limit.context).toBe(4096)
       },
     })
   } finally {

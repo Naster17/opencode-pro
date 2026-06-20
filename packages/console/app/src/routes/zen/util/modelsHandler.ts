@@ -9,7 +9,7 @@ export async function buildOptionsResponse() {
   })
 }
 
-export async function buildModelsResponse(models: string[]) {
+export async function buildModelsResponse(models: string[], headers?: Record<string, string>) {
   return new Response(
     JSON.stringify({
       object: "list",
@@ -25,6 +25,7 @@ export async function buildModelsResponse(models: string[]) {
     {
       headers: {
         "Content-Type": "application/json",
+        ...headers,
       },
     },
   )
