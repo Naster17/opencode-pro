@@ -262,6 +262,7 @@ export function Session() {
     if (!response) return turn ? "processing" : undefined
     return btwActionLabel(response.parts)
   })
+  const activeActionLabel = createMemo(() => activeBtwActionLabel() ?? liveAssistantActionLabel())
   const queuedBtwPartUpdates = new Map<string, { turnID: string; part: Part }>()
   const queuedBtwPartDeltas = new Map<
     string,
@@ -397,6 +398,19 @@ export function Session() {
   onCleanup(() => {
     if (queuedBtwPartFlush) clearTimeout(queuedBtwPartFlush)
   })
+
+  function liveAssistantActionLabel() {
+    const assistant = lastAssistant()
+    if (!assistant) return
+    if (assistant.time.completed) return
+    const parts = sync.data.part[assistant.id] ?? []
+    if (parts.some((part) => assistantPartVisible(part, showThinking(), showDetails()))) return
+    if (parts.some((part) => part.type === "reasoning" && reasoningContent(part.text) && !showThinking())) {
+      return "thinking hidden"
+    }
+    if (liveAssistant().firstTokenAt || (liveAssistant().outputTokens ?? 0) > 0) return "receiving output"
+    return "processing prompt"
+  }
 
   function appendBtwPartDelta(input: {
     turnID: string
@@ -1927,7 +1941,7 @@ export function Session() {
                     ref={bind}
                     disabled={disabled()}
                     onBtwSubmit={submitBtw}
-                    activeActionLabel={activeBtwActionLabel}
+                    activeActionLabel={activeActionLabel}
                     onSubmit={() => {
                       toBottom()
                     }}
@@ -2243,15 +2257,6 @@ function BtwResponseFooter(props: {
     if (outputTokens <= 0) return 0
     return outputTokens / (generationDuration() / 1000)
   })
-  const finalPromptTokensPerSecond = createMemo(() => {
-    const serverRate = derived().promptTokensPerSecond
-    if (serverRate !== undefined) return serverRate
-    if (!final()) return 0
-    if (promptProcessingDuration() <= 0) return 0
-    const inputTokens = props.response().info.tokens.input || props.estimatedPromptTokens()
-    if (inputTokens <= 0) return 0
-    return inputTokens / (promptProcessingDuration() / 1000)
-  })
   const displayLiveTokensPerSecond = createMemo(() => {
     const serverRate = live()?.outputTokensPerSecond
     if (serverRate !== undefined) return serverRate
@@ -2261,10 +2266,8 @@ function BtwResponseFooter(props: {
   })
   const metrics = createMemo(() => {
     if (final()) {
-      const inputRate = finalPromptTokensPerSecond()
       const outputRate = finalTokensPerSecond()
       return [
-        inputRate > 0 ? `↓ ${formatTokensPerSecond(inputRate)}` : "",
         outputRate > 0 ? `↑ ${formatTokensPerSecond(outputRate)}` : "",
         duration() > 0 ? Locale.duration(duration()) : "",
       ].filter(Boolean)
@@ -2464,16 +2467,6 @@ function AssistantMessage(props: {
     return outputTokens / (generationDuration() / 1000)
   })
 
-  const finalPromptTokensPerSecond = createMemo(() => {
-    const serverRate = derived().promptTokensPerSecond
-    if (serverRate !== undefined) return serverRate
-    if (!final()) return 0
-    if (promptProcessingDuration() <= 0) return 0
-    const inputTokens = props.message.tokens.input || estimatedPromptTokens()
-    if (inputTokens <= 0) return 0
-    return inputTokens / (promptProcessingDuration() / 1000)
-  })
-
   const displayLiveTokensPerSecond = createMemo(() => {
     const serverRate = live()?.outputTokensPerSecond
     if (serverRate !== undefined) return serverRate
@@ -2484,10 +2477,8 @@ function AssistantMessage(props: {
 
   const metrics = createMemo(() => {
     if (final()) {
-      const inputRate = finalPromptTokensPerSecond()
       const outputRate = finalTokensPerSecond()
       return [
-        inputRate > 0 ? `↓ ${formatTokensPerSecond(inputRate)}` : "",
         outputRate > 0 ? `↑ ${formatTokensPerSecond(outputRate)}` : "",
         duration() > 0 ? Locale.duration(duration()) : "",
       ].filter(Boolean)
@@ -2574,6 +2565,18 @@ function AssistantMessage(props: {
       </Switch>
     </>
   )
+}
+
+function reasoningContent(text: string) {
+  return ThinkTags.strip(text).replace("[REDACTED]", "").trim()
+}
+
+function assistantPartVisible(part: Part, showThinking: boolean, showDetails: boolean) {
+  if (part.type === "text") return part.text.trim().length > 0
+  if (part.type === "reasoning") return showThinking && reasoningContent(part.text).length > 0
+  if (part.type !== "tool") return false
+  if (showDetails) return true
+  return part.state.status !== "completed"
 }
 
 function formatTokensPerSecond(value: number) {
@@ -2831,7 +2834,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   const content = createMemo(() => {
     // Filter out redacted reasoning chunks from OpenRouter
     // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
-    return ThinkTags.strip(props.part.text).replace("[REDACTED]", "").trim()
+    return reasoningContent(props.part.text)
   })
   return (
     <Show when={content() && ctx.showThinking()}>
@@ -3018,7 +3021,14 @@ function toolErrorTitle(value: string, fallback = "Tool error") {
   return fallback
 }
 
-function CompactErrorBlock(props: { error: string; title?: string; icon?: string; marginTop?: number; marginBottom?: number }) {
+function CompactErrorBlock(props: {
+  error: string
+  title?: string
+  icon?: string
+  marginTop?: number
+  marginBottom?: number
+  variant?: "error" | "warning"
+}) {
   const { theme } = useTheme()
   const renderer = useRenderer()
   const [expanded, setExpanded] = createSignal(false)
@@ -3026,6 +3036,7 @@ function CompactErrorBlock(props: { error: string; title?: string; icon?: string
   const error = createMemo(() => props.error.trim())
   const title = createMemo(() => props.title ?? toolErrorTitle(error()))
   const summary = createMemo(() => toolErrorSummary(error()))
+  const color = createMemo(() => (props.variant === "warning" ? theme.warning : theme.error))
   return (
     <box
       border={["left"]}
@@ -3037,7 +3048,7 @@ function CompactErrorBlock(props: { error: string; title?: string; icon?: string
       marginBottom={props.marginBottom ?? 0}
       gap={1}
       backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
-      borderColor={theme.error}
+      borderColor={color()}
       customBorderChars={SplitBorder.customBorderChars}
       onMouseUp={(evt) => {
         evt.stopPropagation()
@@ -3048,7 +3059,7 @@ function CompactErrorBlock(props: { error: string; title?: string; icon?: string
       onMouseOut={() => setHover(false)}
       flexShrink={0}
     >
-      <text fg={theme.error} wrapMode="none" overflow="hidden">
+      <text fg={color()} wrapMode="none" overflow="hidden">
         {props.icon ?? "!"} {title()} <span style={{ fg: theme.textMuted }}>· {summary()}</span>
       </text>
       <Show when={expanded()}>
@@ -3066,7 +3077,7 @@ function InvalidToolCall(props: ToolProps<any>) {
   const error = createMemo(() => stringValue(input.error) ?? props.output ?? "")
   return (
     <box paddingLeft={3} flexShrink={0}>
-      <CompactErrorBlock title={`Invalid ${tool} call`} error={error() || invalidToolError(error())} />
+      <CompactErrorBlock title={`Invalid ${tool} call`} error={error() || invalidToolError(error())} variant="warning" />
     </box>
   )
 }
@@ -4073,7 +4084,7 @@ function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]
 
   return (
     <Show when={errors().length}>
-      <CompactErrorBlock title="Diagnostics" error={message()} />
+      <CompactErrorBlock title="LSP" error={message()} />
     </Show>
   )
 }

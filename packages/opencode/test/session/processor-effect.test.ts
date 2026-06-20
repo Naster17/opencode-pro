@@ -231,6 +231,60 @@ it.live("session.processor effect tests capture llm input cleanly", () =>
   ),
 )
 
+it.live("converts plain-text tool call markup into recoverable invalid tool error", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const rawToolCall =
+          '<|start|>assistant<|channel|>analysis to=functions.apply_patch code<|message|>{"patchText":"*** Begin Patch\\n*** Update File: src/app.ts\\n@@\\n-old\\n+new\\n*** End Patch"}<|call|>'
+
+        yield* llm.text(rawToolCall)
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "fix it")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "fix it" }],
+          tools: {},
+        } satisfies LLM.StreamInput)
+        const parts = MessageV2.parts(msg.id)
+        const invalid = parts.find((part) => part.type === "tool" && part.tool === "invalid")
+        const text = parts.find((part) => part.type === "text")
+
+        expect(value).toBe("continue")
+        expect(text?.text).toBe("")
+        expect(invalid?.type).toBe("tool")
+        if (invalid?.type !== "tool") return
+        expect(invalid.state.status).toBe("error")
+        if (invalid.state.status !== "error") return
+        expect(invalid.state.input.tool).toBe("apply_patch")
+        expect(invalid.state.error).toContain("printed tool-call markup as plain text")
+        expect(invalid.state.metadata?.warning).toBe(true)
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
 it.live("session.processor effect tests preserve text start time", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>

@@ -68,6 +68,7 @@ import { createTuiApi } from "@/cli/cmd/tui/plugin/api"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import type { RouteMap } from "@/cli/cmd/tui/plugin/api"
 import { FormatError, FormatUnknownError } from "@/cli/error"
+import { ThinkTags } from "@/session/think-tags"
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
@@ -122,8 +123,19 @@ function titleLabel(state: string) {
   return state.charAt(0).toUpperCase() + state.slice(1)
 }
 
+function titlePhrase(value: string) {
+  return value
+    .split(" ")
+    .map(titleLabel)
+    .join(" ")
+}
+
 function animatedTitle(label: string, frame: number) {
   return `OC | ${label}${".".repeat((frame % 3) + 1)}`
+}
+
+function reasoningContent(text: string) {
+  return ThinkTags.strip(text).replace("[REDACTED]", "").trim()
 }
 
 function sessionHasActiveWork(sessionID: string, sync: ReturnType<typeof useSync>) {
@@ -364,18 +376,29 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     }
 
     const parts = sync.data.part[assistant.id] ?? []
-    const lastPart = parts.at(-1)
-    if (lastPart?.type === "reasoning" || parts.some((part) => part.type === "reasoning")) {
-      return animatedTitle(titleLabel("reasoning"), titleAnimationFrame())
-    }
-
     const hasResponse = parts.some((part) => {
       if (part.type === "text") return !!part.text.trim() && !part.synthetic && !part.ignored
+      if (part.type === "reasoning") return kv.get("thinking_visibility", true) !== false && !!reasoningContent(part.text)
       if (part.type === "tool") return ["completed", "error"].includes(part.state.status)
       return false
     })
+
     if (!hasResponse) {
-      return animatedTitle(titleLabel("processing"), titleAnimationFrame())
+      if (
+        parts.some((part) => part.type === "reasoning" && reasoningContent(part.text)) &&
+        kv.get("thinking_visibility", true) === false
+      ) {
+        return animatedTitle(titlePhrase("thinking hidden"), titleAnimationFrame())
+      }
+      if (parts.some((part) => part.type === "text")) {
+        return animatedTitle(titlePhrase("receiving output"), titleAnimationFrame())
+      }
+      return animatedTitle(titlePhrase("processing prompt"), titleAnimationFrame())
+    }
+
+    const lastPart = parts.at(-1)
+    if (lastPart?.type === "reasoning" || parts.some((part) => part.type === "reasoning")) {
+      return animatedTitle(titleLabel("reasoning"), titleAnimationFrame())
     }
 
     return animatedTitle(titleLabel("response"), titleAnimationFrame())

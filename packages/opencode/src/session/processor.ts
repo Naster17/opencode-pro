@@ -143,6 +143,30 @@ function interruptedToolMetadata(part: MessageV2.ToolPart, metadata: Record<stri
   return { ...metadata, interrupted: true, interruptedRaw }
 }
 
+function errorDetails(error: unknown) {
+  if (error instanceof Error) return `${error.name}: ${error.message}`
+  return errorMessage(error)
+}
+
+function invalidToolCallFailure(error: unknown) {
+  const detail = errorDetails(error)
+  if (/NoSuchToolError|InvalidToolInputError|ToolCallRepairError|tool call repair/i.test(detail)) return detail
+  if (!/tool[-_\s]?call|tool_calls|toolName|arguments/i.test(detail)) return
+  if (!/invalid|parse|schema|repair|unknown|no such|not found|malformed/i.test(detail)) return
+  return detail
+}
+
+function plainTextToolCallAttempt(text: string) {
+  const compact = text.replace(/\s+/g, " ").trim()
+  if (!compact) return
+  const tool =
+    compact.match(/to=functions\.([A-Za-z0-9_-]+)/)?.[1] ??
+    compact.match(/<\|channel\|>[^<]*to=([A-Za-z0-9_-]+)/)?.[1]
+  if (!tool) return
+  if (!/(<\|start\|>|<\|channel\|>|<\|message\|>|<\|call\|>)/.test(compact)) return
+  return { tool, text: compact }
+}
+
 export type Result = "compact" | "stop" | "continue"
 
 export type Event = LLM.Event
@@ -375,6 +399,15 @@ export const layer: Layer.Layer<
         if (metadata) match.metadata = metadata
         if (!delta) return
         match.text += delta
+        if (!input.ephemeral) {
+          // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+          EventV2.run(SessionEvent.Reasoning.Delta.Sync, {
+            sessionID: ctx.sessionID,
+            reasoningID,
+            delta,
+            timestamp: DateTime.makeUnsafe(Date.now()),
+          })
+        }
         yield* updatePartDelta({
           sessionID: match.sessionID,
           messageID: match.messageID,
@@ -443,6 +476,14 @@ export const layer: Layer.Layer<
         const part = yield* ensureText(metadata)
         part.text += text
         if (metadata) part.metadata = metadata
+        if (!input.ephemeral && !ctx.assistantMessage.summary) {
+          // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+          EventV2.run(SessionEvent.Text.Delta.Sync, {
+            sessionID: ctx.sessionID,
+            delta: text,
+            timestamp: DateTime.makeUnsafe(Date.now()),
+          })
+        }
         yield* updatePartDelta({
           sessionID: part.sessionID,
           messageID: part.messageID,
@@ -586,6 +627,71 @@ export const layer: Layer.Layer<
           ctx.blocked = ctx.shouldBreak
         }
         yield* settleToolCall(toolCallID)
+        return true
+      })
+
+      const appendInvalidToolCall = Effect.fn("SessionProcessor.appendInvalidToolCall")(function* (input: {
+        tool: string
+        error: string
+        location: string
+        raw?: string
+      }) {
+        const now = Date.now()
+        const id = PartID.ascending()
+        yield* updatePart({
+          id,
+          messageID: ctx.assistantMessage.id,
+          sessionID: ctx.assistantMessage.sessionID,
+          type: "tool",
+          tool: "invalid",
+          callID: `invalid-${id}`,
+          state: {
+            status: "error",
+            input: {
+              tool: input.tool,
+              error: input.error,
+            },
+            error: input.error,
+            metadata: {
+              warning: true,
+              location: input.location,
+              ...(input.raw ? { raw: input.raw } : {}),
+            },
+            time: { start: now, end: now },
+          },
+        } satisfies MessageV2.ToolPart)
+      })
+
+      const recoverInvalidToolCallFailure = Effect.fn("SessionProcessor.recoverInvalidToolCallFailure")(function* (error: unknown) {
+        const detail = invalidToolCallFailure(error)
+        if (!detail) return false
+        yield* appendInvalidToolCall({
+          tool: "tool",
+          location: "LLM stream",
+          error: `Invalid tool call from the model at LLM stream: ${detail}. Use a structured tool call with a known tool name and valid JSON arguments instead of malformed tool-call data.`,
+        })
+        return true
+      })
+
+      const recoverPlainTextToolCallAttempt = Effect.fn("SessionProcessor.recoverPlainTextToolCallAttempt")(function* () {
+        const text =
+          ctx.currentText ??
+          parts(ctx.assistantMessage.id)
+            .slice()
+            .reverse()
+            .find((part) => part.type === "text" || part.type === "reasoning")
+        if (!text) return false
+        const attempt = plainTextToolCallAttempt(text.text)
+        if (!attempt) return false
+        text.text = ""
+        text.time = { start: text.time?.start ?? Date.now(), end: Date.now() }
+        yield* updatePart(text)
+        yield* appendInvalidToolCall({
+          tool: attempt.tool,
+          location: `assistant ${text.type} part ${text.id}`,
+          raw: attempt.text,
+          error: `Invalid ${attempt.tool} call at assistant ${text.type} part ${text.id}: the model printed tool-call markup as plain text instead of making a structured tool call. Use the actual tool call channel/protocol with valid JSON arguments; do not print raw tokens like <|start|>, <|channel|>, <|message|>, or <|call|>.`,
+        })
         return true
       })
 
@@ -790,6 +896,7 @@ export const layer: Layer.Layer<
           }
 
           case "error":
+            if (yield* recoverInvalidToolCallFailure(value.error)) return
             throw value.error
 
           case "start-step":
@@ -1112,6 +1219,10 @@ export const layer: Layer.Layer<
               (cause) => !Cause.hasInterruptsOnly(cause),
               (cause) => Effect.fail(Cause.squash(cause)),
             ),
+            Effect.catchIf(
+              (error) => invalidToolCallFailure(error) !== undefined,
+              (error) => recoverInvalidToolCallFailure(error).pipe(Effect.asVoid),
+            ),
             Effect.retry(
               SessionRetry.policy({
                 parse,
@@ -1139,6 +1250,8 @@ export const layer: Layer.Layer<
             Effect.catch(halt),
             Effect.ensuring(cleanup()),
           )
+
+          yield* recoverPlainTextToolCallAttempt()
 
           if (ctx.needsCompaction) return "compact"
           if (ctx.blocked || ctx.assistantMessage.error) return "stop"

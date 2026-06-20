@@ -503,7 +503,14 @@ function toolErrorTitle(value: string, fallback = "Tool error") {
   return fallback
 }
 
-function CompactErrorBlock(props: { error: string; title?: string; icon?: string; marginTop?: number; marginBottom?: number }) {
+function CompactErrorBlock(props: {
+  error: string
+  title?: string
+  icon?: string
+  marginTop?: number
+  marginBottom?: number
+  variant?: "error" | "warning"
+}) {
   const { theme } = useTheme()
   const renderer = useRenderer()
   const [expanded, setExpanded] = createSignal(false)
@@ -511,6 +518,7 @@ function CompactErrorBlock(props: { error: string; title?: string; icon?: string
   const error = createMemo(() => props.error.trim())
   const title = createMemo(() => props.title ?? toolErrorTitle(error()))
   const summary = createMemo(() => toolErrorSummary(error()))
+  const color = createMemo(() => (props.variant === "warning" ? theme.warning : theme.error))
   return (
     <box
       border={["left"]}
@@ -522,7 +530,7 @@ function CompactErrorBlock(props: { error: string; title?: string; icon?: string
       marginBottom={props.marginBottom ?? 0}
       gap={1}
       backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
-      borderColor={theme.error}
+      borderColor={color()}
       customBorderChars={SplitBorder.customBorderChars}
       onMouseUp={(evt) => {
         evt.stopPropagation()
@@ -533,7 +541,7 @@ function CompactErrorBlock(props: { error: string; title?: string; icon?: string
       onMouseOut={() => setHover(false)}
       flexShrink={0}
     >
-      <text fg={theme.error} wrapMode="none" overflow="hidden">
+      <text fg={color()} wrapMode="none" overflow="hidden">
         {props.icon ?? "!"} {title()} <span style={{ fg: theme.textMuted }}>· {summary()}</span>
       </text>
       <Show when={expanded()}>
@@ -550,7 +558,7 @@ function InvalidToolCall(props: ToolProps) {
   const error = createMemo(() => stringValue(props.input.error) ?? props.output ?? "")
   return (
     <box paddingLeft={3} flexShrink={0}>
-      <CompactErrorBlock title={`Invalid ${tool} call`} error={error() || invalidToolError(error())} />
+      <CompactErrorBlock title={`Invalid ${tool} call`} error={error() || invalidToolError(error())} variant="warning" />
     </box>
   )
 }
@@ -1148,7 +1156,7 @@ function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
   const message = createMemo(() => errors().map((diagnostic) => `Error ${stringValue(diagnostic.message)}`).join("\n"))
   return (
     <Show when={errors().length}>
-      <CompactErrorBlock title="Diagnostics" error={message()} />
+      <CompactErrorBlock title="LSP" error={message()} />
     </Show>
   )
 }
