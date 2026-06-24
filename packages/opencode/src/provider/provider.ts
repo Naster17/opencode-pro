@@ -319,6 +319,7 @@ async function googleAvailableModels(apiKey: string) {
       headers: {
         "x-goog-api-key": apiKey,
       },
+      signal: AbortSignal.timeout(5000),
     })
 
     if (!response.ok) {
@@ -345,6 +346,7 @@ async function opencodeAvailableModels(api: string, apiKey: string) {
     headers: {
       authorization: `Bearer ${apiKey}`,
     },
+    signal: AbortSignal.timeout(5000),
   })
   if (response.status === 401) return "unauthorized" as const
   if (!response.ok) throw new Error(`opencode models.list failed with ${response.status}`)
@@ -501,7 +503,10 @@ async function openAICompatibleDiscoveredModels(provider: Info): Promise<Discove
   const apiKey = typeof provider.options.apiKey === "string" ? provider.options.apiKey : provider.key
   if (apiKey && !headers.has("authorization")) headers.set("authorization", `Bearer ${apiKey}`)
 
-  const response = await fetch(`${baseURL.replace(/\/$/, "")}/models`, { headers })
+  const response = await fetch(`${baseURL.replace(/\/$/, "")}/models`, {
+    headers,
+    signal: AbortSignal.timeout(5000),
+  })
   if (!response.ok) throw new Error(`openai-compatible models.list failed with ${response.status}`)
 
   const body = (await response.json()) as OpenAIModelListResponse
