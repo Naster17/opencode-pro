@@ -313,6 +313,7 @@ jobs:
         with:
           name: latest-yml-${{ matrix.settings.target }}
           path: packages/desktop/dist/latest*.yml
+          if-no-files-found: warn
 
   publish:
     needs:
