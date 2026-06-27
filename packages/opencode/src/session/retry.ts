@@ -51,6 +51,33 @@ export function delay(attempt: number, error?: MessageV2.APIError) {
   return cap(Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS))
 }
 
+function formatDetailedError(error: MessageV2.APIError): string {
+  const data = error.data
+  const parts: string[] = []
+
+  if (data.statusCode) {
+    parts.push(`HTTP ${data.statusCode}`)
+  }
+
+  const providerId = data.metadata?.["providerID"] || data.metadata?.["provider"]
+  if (providerId) {
+    parts.push(`Provider: ${providerId}`)
+  }
+
+  const requestId = data.responseHeaders?.["x-request-id"] || data.responseHeaders?.["request-id"]
+  if (requestId) {
+    parts.push(`Request: ${requestId}`)
+  }
+
+  const errorType = data.responseHeaders?.["x-error-type"] || data.metadata?.["errorType"]
+  if (errorType) {
+    parts.push(`Type: ${errorType}`)
+  }
+
+  const context = parts.length > 0 ? ` [${parts.join(" | ")}]` : ""
+  return `${data.message}${context}`
+}
+
 export function retryable(error: Err) {
   // context overflow errors should not be retried
   if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
@@ -60,7 +87,8 @@ export function retryable(error: Err) {
     // even when the provider SDK doesn't explicitly mark them as retryable.
     if (!error.data.isRetryable && !(status !== undefined && status >= 500)) return undefined
     if (error.data.responseBody?.includes("FreeUsageLimitError")) return GO_UPSELL_MESSAGE
-    return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
+    if (error.data.message.includes("Overloaded")) return "Provider is overloaded"
+    return formatDetailedError(error)
   }
 
   // Check for rate limit patterns in plain text error messages

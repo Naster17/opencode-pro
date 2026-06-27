@@ -261,7 +261,12 @@ export async function handler(
         logger.metric({ "error.response": JSON.stringify(json) })
       }
       if (json.error?.message) {
-        json.error.message = `Error from provider${providerInfo.displayName ? ` (${providerInfo.displayName})` : ""}: ${json.error.message}`
+        const providerName = providerInfo.displayName ? ` (${providerInfo.displayName})` : ""
+        const statusInfo = ` [HTTP ${res.status} ${res.statusText}]`
+        const requestIdInfo = requestId ? ` [request: ${requestId}]` : ""
+        const errorType = json.error.type ? ` [${json.error.type}]` : ""
+        const fullError = json.error.message
+        json.error.message = `Error from provider${providerName}${statusInfo}${errorType}${requestIdInfo}: ${fullError}`
       }
 
       const responseConverter = createResponseConverter(providerInfo.format, opts.format)

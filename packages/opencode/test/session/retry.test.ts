@@ -180,7 +180,7 @@ describe("session.retry.retryable", () => {
       }).toObject(),
     )
 
-    expect(SessionRetry.retryable(error)).toBe("Internal server error")
+    expect(SessionRetry.retryable(error)).toBe("Internal server error [HTTP 500]")
   })
 
   test("retries 502 bad gateway errors", () => {
@@ -192,7 +192,7 @@ describe("session.retry.retryable", () => {
       }).toObject(),
     )
 
-    expect(SessionRetry.retryable(error)).toBe("Bad gateway")
+    expect(SessionRetry.retryable(error)).toBe("Bad gateway [HTTP 502]")
   })
 
   test("retries 503 service unavailable errors", () => {
@@ -204,7 +204,7 @@ describe("session.retry.retryable", () => {
       }).toObject(),
     )
 
-    expect(SessionRetry.retryable(error)).toBe("Service unavailable")
+    expect(SessionRetry.retryable(error)).toBe("Service unavailable [HTTP 503]")
   })
 
   test("does not retry 4xx errors when isRetryable is false", () => {
