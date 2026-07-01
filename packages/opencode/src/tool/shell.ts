@@ -26,7 +26,7 @@ import { BashArity } from "@/permission/arity"
 export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
-const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 200 * 1000
+const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 120 * 1000
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -287,6 +287,15 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan)
   })
 })
 
+const SIGNAL_COMMANDS = new Set(["kill", "pkill", "killall", "pgrep"])
+function isSignalCommand(command: string): boolean {
+  const trimmed = command.trim()
+  const firstToken = trimmed.split(/\s+/)[0]?.toLowerCase()
+  if (!firstToken) return false
+  const base = firstToken.split("/").pop() ?? firstToken
+  return SIGNAL_COMMANDS.has(base)
+}
+
 function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
   if (process.platform === "win32" && Shell.ps(shell)) {
     return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
@@ -297,12 +306,13 @@ function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv
     })
   }
 
+  const signalCmd = isSignalCommand(command)
   return ChildProcess.make(command, [], {
     shell,
     cwd,
     env,
     stdin: "ignore",
-    detached: process.platform !== "win32",
+    detached: !signalCmd && process.platform !== "win32",
   })
 }
 const parser = lazy(async () => {
