@@ -41,7 +41,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     let timer: Timer | undefined
     let last = 0
     const retryDelay = 1000
-    const maxRetryDelay = 30000
+    const maxRetryDelay = 60000
 
     const flush = () => {
       if (queue.length === 0) return
