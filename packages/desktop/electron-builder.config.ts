@@ -34,6 +34,7 @@ const [owner = "Naster17", name = "opencode-pro"] = repo.split("/", 2)
 const nativeDir = path.join(rootDir, "packages", "desktop", "native")
 
 const getBase = (): Configuration => ({
+  npmRebuild: false,
   artifactName: `${name}-desktop-\${os}-\${arch}.\${ext}`,
   directories: {
     output: "dist",

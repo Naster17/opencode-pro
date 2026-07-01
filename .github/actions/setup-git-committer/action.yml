@@ -25,6 +25,9 @@ runs:
         app-id: ${{ inputs.opencode-app-id }}
         private-key: ${{ inputs.opencode-app-secret }}
         owner: ${{ github.repository_owner }}
+        permissions: |
+          contents: write
+          workflows: write
 
     - name: Resolve token
       id: resolve
