@@ -987,6 +987,7 @@ export type AgentConfig = {
 
 export type ProviderConfig = {
   api?: string
+  auto?: boolean
   name?: string
   env?: Array<string>
   id?: string
