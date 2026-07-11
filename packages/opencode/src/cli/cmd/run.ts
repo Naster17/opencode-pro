@@ -21,7 +21,7 @@ import { WebFetchTool } from "../../tool/webfetch"
 import { EditTool } from "../../tool/edit"
 import { WriteTool } from "../../tool/write"
 import { WebSearchTool } from "../../tool/websearch"
-import { TaskTool } from "../../tool/task"
+import { SubagentTool } from "../../tool/subagent"
 import { SkillTool } from "../../tool/skill"
 import { ShellTool } from "../../tool/shell"
 import { ShellID } from "../../tool/shell/id"
@@ -152,7 +152,7 @@ function websearch(info: ToolProps<typeof WebSearchTool>) {
   })
 }
 
-function task(info: ToolProps<typeof TaskTool>) {
+function task(info: ToolProps<typeof SubagentTool>) {
   const input = info.part.state.input
   const status = info.part.state.status
   const subagent =
@@ -421,7 +421,7 @@ export const RunCommand = effectCmd({
             if (part.tool === "webfetch") return webfetch(props<typeof WebFetchTool>(part))
             if (part.tool === "edit") return edit(props<typeof EditTool>(part))
             if (part.tool === "websearch") return websearch(props<typeof WebSearchTool>(part))
-            if (part.tool === "task") return task(props<typeof TaskTool>(part))
+            if (part.tool === "subagent") return task(props<typeof SubagentTool>(part))
             if (part.tool === "todowrite") return todo(props<typeof TodoWriteTool>(part))
             if (part.tool === "skill") return skill(props<typeof SkillTool>(part))
             return fallback(part)
@@ -476,12 +476,12 @@ export const RunCommand = effectCmd({
 
               if (
                 part.type === "tool" &&
-                part.tool === "task" &&
+                part.tool === "subagent" &&
                 part.state.status === "running" &&
                 args.format !== "json"
               ) {
                 if (toggles.get(part.id) === true) continue
-                task(props<typeof TaskTool>(part))
+                task(props<typeof SubagentTool>(part))
                 toggles.set(part.id, true)
               }
 

@@ -31,11 +31,44 @@ test("returns default native agents when no config", async () => {
       const names = agents.map((a) => a.name)
       expect(names).toContain("build")
       expect(names).toContain("plan")
+      expect(names).toContain("boss")
       expect(names).toContain("general")
       expect(names).toContain("explore")
       expect(names).toContain("compaction")
       expect(names).toContain("title")
       expect(names).toContain("summary")
+    },
+  })
+})
+
+test("boss agent is primary, native, has prompt", async () => {
+  await using tmp = await tmpdir()
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const boss = await load(tmp.path, (svc) => svc.get("boss"))
+      expect(boss).toBeDefined()
+      expect(boss?.mode).toBe("primary")
+      expect(boss?.native).toBe(true)
+      expect(boss?.prompt).toBeDefined()
+      expect(boss?.prompt?.length).toBeGreaterThan(0)
+      expect(evalPerm(boss, "edit")).toBe("allow")
+      expect(evalPerm(boss, "bash")).toBe("allow")
+    },
+  })
+})
+
+test("boss agent can be selected as default_agent", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      default_agent: "boss",
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await load(tmp.path, (svc) => svc.defaultAgent())
+      expect(agent).toBe("boss")
     },
   })
 })
@@ -711,6 +744,7 @@ test("defaultAgent returns plan when build is disabled and default_agent not set
     config: {
       agent: {
         build: { disable: true },
+        boss: { disable: true },
       },
     },
   })
@@ -718,7 +752,7 @@ test("defaultAgent returns plan when build is disabled and default_agent not set
     directory: tmp.path,
     fn: async () => {
       const agent = await load(tmp.path, (svc) => svc.defaultAgent())
-      // build is disabled, so it should return plan (next primary agent)
+      // build & boss are disabled, so it should return plan (next primary agent)
       expect(agent).toBe("plan")
     },
   })
@@ -730,13 +764,14 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
       agent: {
         build: { disable: true },
         plan: { disable: true },
+        boss: { disable: true },
       },
     },
   })
   await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
-      // build and plan are disabled, no primary-capable agents remain
+      // build, plan, boss are all disabled, no primary-capable agents remain
       await expect(load(tmp.path, (svc) => svc.defaultAgent())).rejects.toThrow("no primary visible agent found")
     },
   })

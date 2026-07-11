@@ -8,9 +8,10 @@ import { MessageV2 } from "../../src/session/message-v2"
 import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
-import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
+import { SubagentTool, type TaskPromptOps } from "../../src/tool/subagent"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
+import { Provider } from "@/provider/provider"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -31,6 +32,7 @@ const it = testEffect(
     Session.defaultLayer,
     Truncate.defaultLayer,
     ToolRegistry.defaultLayer,
+    Provider.defaultLayer,
   ),
 )
 
@@ -42,7 +44,7 @@ function defer<T>() {
   return { promise, resolve }
 }
 
-const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
+const seed = Effect.fn("SubagentToolTest.seed")(function* (title = "Pinned") {
   const session = yield* Session.Service
   const chat = yield* session.create({ title })
   const user = yield* session.updateMessage({
@@ -113,7 +115,7 @@ function reply(input: SessionPrompt.PromptInput, text: string): MessageV2.WithPa
   }
 }
 
-describe("tool.task", () => {
+describe("tool.subagent", () => {
   it.instance(
     "description sorts subagents by name and is stable across calls",
     () =>
@@ -123,7 +125,7 @@ describe("tool.task", () => {
         const registry = yield* ToolRegistry.Service
         const get = Effect.fnUntraced(function* () {
           const tools = yield* registry.tools({ ...ref, agent: build })
-          return tools.find((tool) => tool.id === TaskTool.id)?.description ?? ""
+          return tools.find((tool) => tool.id === SubagentTool.id)?.description ?? ""
         })
         const first = yield* get()
         const second = yield* get()
@@ -164,7 +166,7 @@ describe("tool.task", () => {
         const build = yield* agent.get("build")
         const registry = yield* ToolRegistry.Service
         const description =
-          (yield* registry.tools({ ...ref, agent: build })).find((tool) => tool.id === TaskTool.id)?.description ?? ""
+          (yield* registry.tools({ ...ref, agent: build })).find((tool) => tool.id === SubagentTool.id)?.description ?? ""
 
         expect(description).toContain("- alpha: Alpha agent")
         expect(description).not.toContain("- zebra: Zebra agent")
@@ -172,7 +174,7 @@ describe("tool.task", () => {
     {
       config: {
         permission: {
-          task: {
+          subagent: {
             "*": "allow",
             zebra: "deny",
           },
@@ -191,12 +193,12 @@ describe("tool.task", () => {
     },
   )
 
-  it.instance("execute resumes an existing task session from task_id", () =>
+  it.instance("execute resumes an existing task session from session_id", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
       const child = yield* sessions.create({ parentID: chat.id, title: "Existing child" })
-      const tool = yield* TaskTool
+      const tool = yield* SubagentTool
       const def = yield* tool.init()
       let seen: SessionPrompt.PromptInput | undefined
       const promptOps = stubOps({ text: "resumed", onPrompt: (input) => (seen = input) })
@@ -205,8 +207,9 @@ describe("tool.task", () => {
         {
           description: "inspect bug",
           prompt: "look into the cache key path",
-          subagent_type: "general",
-          task_id: child.id,
+          agent_type: "general",
+          model: "test/test-model",
+          session_id: child.id,
         },
         {
           sessionID: chat.id,
@@ -232,7 +235,7 @@ describe("tool.task", () => {
   it.instance("execute asks by default and skips checks when bypassed", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
-      const tool = yield* TaskTool
+      const tool = yield* SubagentTool
       const def = yield* tool.init()
       const calls: unknown[] = []
       const promptOps = stubOps()
@@ -242,7 +245,8 @@ describe("tool.task", () => {
           {
             description: "inspect bug",
             prompt: "look into the cache key path",
-            subagent_type: "general",
+            agent_type: "general",
+            model: "test/test-model",
           },
           {
             sessionID: chat.id,
@@ -264,12 +268,13 @@ describe("tool.task", () => {
 
       expect(calls).toHaveLength(1)
       expect(calls[0]).toEqual({
-        permission: "task",
+        permission: "subagent",
         patterns: ["general"],
         always: ["*"],
         metadata: {
           description: "inspect bug",
-          subagent_type: "general",
+          agent_type: "general",
+          model: "test/test-model",
         },
       })
     }),
@@ -278,7 +283,7 @@ describe("tool.task", () => {
   it.instance("execute cancels child session when abort signal fires", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
-      const tool = yield* TaskTool
+      const tool = yield* SubagentTool
       const def = yield* tool.init()
       const ready = defer<SessionPrompt.PromptInput>()
       const cancelled = defer<SessionID>()
@@ -301,7 +306,8 @@ describe("tool.task", () => {
           {
             description: "inspect bug",
             prompt: "look into the cache key path",
-            subagent_type: "general",
+            agent_type: "general",
+            model: "test/test-model",
           },
           {
             sessionID: chat.id,
@@ -325,11 +331,11 @@ describe("tool.task", () => {
     }),
   )
 
-  it.instance("execute creates a child when task_id does not exist", () =>
+  it.instance("execute creates a child when session_id does not exist", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
-      const tool = yield* TaskTool
+      const tool = yield* SubagentTool
       const def = yield* tool.init()
       let seen: SessionPrompt.PromptInput | undefined
       const promptOps = stubOps({ text: "created", onPrompt: (input) => (seen = input) })
@@ -338,8 +344,9 @@ describe("tool.task", () => {
         {
           description: "inspect bug",
           prompt: "look into the cache key path",
-          subagent_type: "general",
-          task_id: "ses_missing",
+          agent_type: "general",
+          model: "test/test-model",
+          session_id: "ses_missing",
         },
         {
           sessionID: chat.id,
@@ -363,12 +370,12 @@ describe("tool.task", () => {
   )
 
   it.instance(
-    "execute shapes child permissions for task, todowrite, and primary tools",
+    "execute shapes child permissions for subagent, todowrite, and primary tools",
     () =>
       Effect.gen(function* () {
         const sessions = yield* Session.Service
         const { chat, assistant } = yield* seed()
-        const tool = yield* TaskTool
+        const tool = yield* SubagentTool
         const def = yield* tool.init()
         let seen: SessionPrompt.PromptInput | undefined
         const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
@@ -377,7 +384,8 @@ describe("tool.task", () => {
           {
             description: "inspect bug",
             prompt: "look into the cache key path",
-            subagent_type: "reviewer",
+            agent_type: "reviewer",
+            model: "test/test-model",
           },
           {
             sessionID: chat.id,
@@ -400,6 +408,11 @@ describe("tool.task", () => {
             action: "deny",
           },
           {
+            permission: "subagent_models",
+            pattern: "*",
+            action: "deny",
+          },
+          {
             permission: "bash",
             pattern: "*",
             action: "allow",
@@ -412,6 +425,7 @@ describe("tool.task", () => {
         ])
         expect(seen?.tools).toEqual({
           todowrite: false,
+          subagent_models: false,
           bash: false,
           read: false,
         })
@@ -422,12 +436,56 @@ describe("tool.task", () => {
           reviewer: {
             mode: "subagent",
             permission: {
-              task: "allow",
+              subagent: "allow",
             },
           },
         },
         experimental: {
           primary_tools: ["bash", "read"],
+        },
+      },
+    },
+  )
+
+  it.instance("execute strips subagent_models from subagent children", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* SubagentTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      yield* def.execute(
+        {
+          description: "delegate",
+          prompt: "do the thing",
+          agent_type: "reviewer",
+          model: "test/test-model",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(seen?.tools).toEqual({
+        todowrite: false,
+        subagent: false,
+        subagent_models: false,
+      })
+    }),
+    {
+      config: {
+        agent: {
+          reviewer: {
+            mode: "subagent",
+          },
         },
       },
     },

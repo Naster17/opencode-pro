@@ -26,9 +26,9 @@ export interface Options {
   direction?: "head" | "tail"
 }
 
-function hasTaskTool(agent?: Agent.Info) {
+function hasSubagentTool(agent?: Agent.Info) {
   if (!agent?.permission) return false
-  return evaluate("task", "*", agent.permission).action !== "deny"
+  return evaluate("subagent", "*", agent.permission).action !== "deny"
 }
 
 export interface Interface {
@@ -127,8 +127,8 @@ export const layer = Layer.effect(
       const preview = out.join("\n")
       const file = yield* write(text)
 
-      const hint = hasTaskTool(agent)
-        ? `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse the Task tool to have explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`
+      const hint = hasSubagentTool(agent)
+        ? `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse the subagent tool to have the explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`
         : `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`
 
       return {

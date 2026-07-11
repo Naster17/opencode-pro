@@ -1,11 +1,13 @@
 import * as Tool from "./tool"
-import DESCRIPTION from "./task.txt"
+import DESCRIPTION from "./subagent.txt"
 import { Session } from "@/session/session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
+import { Provider } from "@/provider/provider"
+import { ModelID, ProviderID } from "../provider/schema"
 import { Effect, Exit, Schema } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 
@@ -15,27 +17,57 @@ export interface TaskPromptOps {
   prompt(input: SessionPrompt.PromptInput): Effect.Effect<MessageV2.WithParts>
 }
 
-const id = "task"
+const id = "subagent"
 
 export const Parameters = Schema.Struct({
   description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
   prompt: Schema.String.annotate({ description: "The task for the agent to perform" }),
-  subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
-  task_id: Schema.optional(Schema.String).annotate({
+  agent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
+  model: Schema.String.annotate({
     description:
-      "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
+      "The model the subagent should run on, in 'provider/model' form. " +
+      "Pick from the list returned by the subagent_models tool. " +
+      "Ignored when session_id is set (resumed sessions keep their original model).",
+  }),
+  session_id: Schema.optional(Schema.String).annotate({
+    description: "Pass an existing subagent session id to resume that session instead of creating a fresh one",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
 })
 
-export const TaskTool = Tool.define(
+export const SubagentTool = Tool.define(
   id,
   Effect.gen(function* () {
     const agent = yield* Agent.Service
     const config = yield* Config.Service
+    const providers = yield* Provider.Service
     const sessions = yield* Session.Service
 
-    const run = Effect.fn("TaskTool.execute")(function* (
+    const resolveModel = Effect.fnUntraced(function* (
+      requested: string,
+      next: Agent.Info,
+      parent: MessageV2.Assistant,
+    ) {
+      const parsed = Provider.parseModel(requested)
+      const requestedHit = yield* providers
+        .getModel(parsed.providerID, parsed.modelID)
+        .pipe(Effect.exit)
+      if (Exit.isSuccess(requestedHit)) return parsed
+
+      if (next.model) {
+        const agentHit = yield* providers
+          .getModel(next.model.providerID, next.model.modelID)
+          .pipe(Effect.exit)
+        if (Exit.isSuccess(agentHit)) return next.model
+      }
+
+      return {
+        modelID: parent.modelID as ModelID,
+        providerID: parent.providerID as ProviderID,
+      }
+    })
+
+    const run = Effect.fn("SubagentTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context,
     ) {
@@ -44,26 +76,28 @@ export const TaskTool = Tool.define(
       if (!ctx.extra?.bypassAgentCheck) {
         yield* ctx.ask({
           permission: id,
-          patterns: [params.subagent_type],
+          patterns: [params.agent_type],
           always: ["*"],
           metadata: {
             description: params.description,
-            subagent_type: params.subagent_type,
+            agent_type: params.agent_type,
+            model: params.model,
           },
         })
       }
 
-      const next = yield* agent.get(params.subagent_type)
+      const next = yield* agent.get(params.agent_type)
       if (!next) {
-        return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
+        return yield* Effect.fail(new Error(`Unknown agent type: ${params.agent_type} is not a valid agent type`))
       }
 
       const canTask = next.permission.some((rule) => rule.permission === id)
       const canTodo = next.permission.some((rule) => rule.permission === "todowrite")
+      const canSubagentModels = next.permission.some((rule) => rule.permission === "subagent_models")
 
-      const taskID = params.task_id
-      const session = taskID
-        ? yield* sessions.get(SessionID.make(taskID)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+      const sessionID = params.session_id
+      const session = sessionID
+        ? yield* sessions.get(SessionID.make(sessionID)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
       const parent = yield* sessions.get(ctx.sessionID)
       const nextSession =
@@ -93,6 +127,15 @@ export const TaskTool = Tool.define(
                     action: "deny" as const,
                   },
                 ]),
+            ...(canSubagentModels
+              ? []
+              : [
+                  {
+                    permission: "subagent_models" as const,
+                    pattern: "*" as const,
+                    action: "deny" as const,
+                  },
+                ]),
             ...(cfg.experimental?.primary_tools?.map((item) => ({
               pattern: "*",
               action: "allow" as const,
@@ -103,12 +146,10 @@ export const TaskTool = Tool.define(
 
       const msg = yield* Effect.sync(() => MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }))
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
+      const assistant = msg.info as MessageV2.Assistant
 
-      const model = next.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
-      const variant = next.variant ?? msg.info.variant
+      const model = session ? { modelID: assistant.modelID, providerID: assistant.providerID } : yield* resolveModel(params.model, next, assistant)
+      const variant = next.variant ?? assistant.variant
 
       yield* ctx.metadata({
         title: params.description,
@@ -120,7 +161,7 @@ export const TaskTool = Tool.define(
       })
 
       const ops = ctx.extra?.promptOps as TaskPromptOps
-      if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
+      if (!ops) return yield* Effect.fail(new Error("SubagentTool requires promptOps in ctx.extra"))
       const runCancel = yield* EffectBridge.make()
 
       const messageID = MessageID.ascending()
@@ -148,7 +189,8 @@ export const TaskTool = Tool.define(
               agent: next.name,
               tools: {
                 ...(canTodo ? {} : { todowrite: false }),
-                ...(canTask ? {} : { task: false }),
+                ...(canTask ? {} : { [id]: false }),
+                ...(next.mode === "subagent" ? { subagent_models: false } : {}),
                 ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
               },
               parts,

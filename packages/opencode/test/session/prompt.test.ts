@@ -601,10 +601,11 @@ it.live("failed subtask preserves metadata on error tool state", () =>
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
       const chat = yield* sessions.create({ title: "Pinned" })
-      yield* llm.tool("task", {
+      yield* llm.tool("subagent", {
         description: "inspect bug",
         prompt: "look into the cache key path",
-        subagent_type: "general",
+        agent_type: "general",
+        model: "test/missing-model",
       })
       yield* llm.text("done")
       const msg = yield* user(chat.id, "hello")
@@ -684,7 +685,7 @@ it.live(
 )
 
 it.live(
-  "running task tool preserves metadata after tool-call transition",
+  "running subagent tool preserves metadata after tool-call transition",
   () =>
     provideTmpdirServer(
       Effect.fnUntraced(function* ({ llm }) {
@@ -694,11 +695,12 @@ it.live(
           title: "Pinned",
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         })
-        yield* llm.tool("task", {
-          description: "inspect bug",
-          prompt: "look into the cache key path",
-          subagent_type: "general",
-        })
+      yield* llm.tool("subagent", {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        agent_type: "general",
+        model: "test/test-model",
+      })
         yield* llm.hang
         yield* user(chat.id, "hello")
 
@@ -710,7 +712,7 @@ it.live(
             const msgs = await Effect.runPromise(MessageV2.filterCompactedEffect(chat.id))
             const assistant = msgs.findLast((item) => item.info.role === "assistant" && item.info.agent === "build")
             const tool = assistant?.parts.find(
-              (part): part is MessageV2.ToolPart => part.type === "tool" && part.tool === "task",
+              (part): part is MessageV2.ToolPart => part.type === "tool" && part.tool === "subagent",
             )
             if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
             await new Promise((done) => setTimeout(done, 20))

@@ -6,7 +6,8 @@ import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ReadTool } from "./read"
-import { TaskTool } from "./task"
+import { SubagentTool } from "./subagent"
+import { SubagentModelsTool } from "./subagent_models"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
@@ -49,7 +50,7 @@ import { Permission } from "@/permission"
 
 const log = Log.create({ service: "tool.registry" })
 
-type TaskDef = Tool.InferDef<typeof TaskTool>
+type TaskDef = Tool.InferDef<typeof SubagentTool>
 type ReadDef = Tool.InferDef<typeof ReadTool>
 
 type State = {
@@ -98,7 +99,8 @@ export const layer: Layer.Layer<
     const truncate = yield* Truncate.Service
 
     const invalid = yield* InvalidTool
-    const task = yield* TaskTool
+    const task = yield* SubagentTool
+    const subagentModels = yield* SubagentModelsTool
     const read = yield* ReadTool
     const question = yield* QuestionTool
     const todo = yield* TodoWriteTool
@@ -202,6 +204,7 @@ export const layer: Layer.Layer<
           edit: Tool.init(edit),
           write: Tool.init(writetool),
           task: Tool.init(task),
+          subagentModels: Tool.init(subagentModels),
           fetch: Tool.init(webfetch),
           todo: Tool.init(todo),
           search: Tool.init(websearch),
@@ -224,6 +227,7 @@ export const layer: Layer.Layer<
             tool.edit,
             tool.write,
             tool.task,
+            tool.subagentModels,
             tool.fetch,
             tool.todo,
             tool.search,
@@ -269,7 +273,7 @@ export const layer: Layer.Layer<
     const describeTask = Effect.fn("ToolRegistry.describeTask")(function* (agent: Agent.Info) {
       const items = (yield* agents.list()).filter((item) => item.mode !== "primary")
       const filtered = items.filter(
-        (item) => Permission.evaluate("task", item.name, agent.permission).action !== "deny",
+        (item) => Permission.evaluate(SubagentTool.id, item.name, agent.permission).action !== "deny",
       )
       const list = filtered.toSorted((a, b) => a.name.localeCompare(b.name))
       const description = list
@@ -282,6 +286,7 @@ export const layer: Layer.Layer<
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
+      const isSubagent = input.agent.mode === "subagent"
       const filtered = (yield* all()).filter((tool) => {
         if (tool.id === WebSearchTool.id) {
           return input.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
@@ -290,6 +295,8 @@ export const layer: Layer.Layer<
         const usePatch = input.modelID.toLowerCase().includes("gpt-")
         if (tool.id === ApplyPatchTool.id) return usePatch
         if (tool.id === EditTool.id || tool.id === WriteTool.id) return !usePatch
+
+        if (isSubagent && (tool.id === SubagentTool.id || tool.id === SubagentModelsTool.id)) return false
 
         return true
       })
@@ -307,7 +314,7 @@ export const layer: Layer.Layer<
             id: tool.id,
             description: [
               output.description,
-              tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
+              tool.id === SubagentTool.id ? yield* describeTask(input.agent) : undefined,
               tool.id === SkillTool.id ? yield* describeSkill(input.agent) : undefined,
             ]
               .filter(Boolean)

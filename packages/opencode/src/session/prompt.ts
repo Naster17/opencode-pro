@@ -50,7 +50,7 @@ import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
-import { TaskTool, type TaskPromptOps } from "@/tool/task"
+import { SubagentTool, type TaskPromptOps } from "@/tool/subagent"
 import { SessionRunState } from "./run-state"
 import { EffectBridge } from "@/effect/bridge"
 import { EventV2 } from "@/v2/event"
@@ -616,13 +616,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         sessionID: assistantMessage.sessionID,
         type: "tool",
         callID: ulid(),
-        tool: TaskTool.id,
+        tool: SubagentTool.id,
         state: {
           status: "running",
           input: {
             prompt: task.prompt,
             description: task.description,
-            subagent_type: task.agent,
+            agent_type: task.agent,
             command: task.command,
           },
           time: { start: Date.now() },
@@ -631,12 +631,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const taskArgs = {
         prompt: task.prompt,
         description: task.description,
-        subagent_type: task.agent,
+        agent_type: task.agent,
+        model: `${taskModel.providerID}/${taskModel.id}`,
         command: task.command,
       }
       yield* plugin.trigger(
         "tool.execute.before",
-        { tool: TaskTool.id, sessionID, callID: part.id },
+        { tool: SubagentTool.id, sessionID, callID: part.id },
         { args: taskArgs },
       )
 
@@ -715,7 +716,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       yield* plugin.trigger(
         "tool.execute.after",
-        { tool: TaskTool.id, sessionID, callID: part.id, args: taskArgs },
+        { tool: SubagentTool.id, sessionID, callID: part.id, args: taskArgs },
         result,
       )
 

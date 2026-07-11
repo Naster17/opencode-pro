@@ -1,0 +1,16 @@
+List the models available to be passed to the subagent tool's `model` field.
+
+The main agent should call this before delegating work via the subagent tool,
+to pick a model appropriate for the task. Each entry is a {provider, model}
+pair and may carry a short human note explaining when it is a good fit.
+
+The list is curated by the `subagent_models` config block in opencode.json.
+If that block is absent, the tool returns every model reported by opencode's
+provider layer. Unknown entries in `subagent_models` are silently dropped
+(at log level) so a stale config never blocks the agent.
+
+Pick the model that best matches the unit of work:
+- Cheap/fast for mechanical, well-scoped tasks (typing, formatting, simple lookups).
+- Top-tier for judgement-heavy work (architecture, debugging, refactors that touch
+  many subsystems).
+- Reasoning-capable models for tasks that require multi-step planning.

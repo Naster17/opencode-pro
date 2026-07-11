@@ -8,6 +8,7 @@ import { Auth } from "../auth"
 import { ProviderTransform } from "@/provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
+import PROMPT_BOSS from "./prompt/boss.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
@@ -146,6 +147,23 @@ export const layer = Layer.effect(
             ),
             mode: "primary",
             native: true,
+          },
+          boss: {
+            name: "boss",
+            description:
+              "Orchestrator agent. Delegates mechanical/cyclic work to subagents via the subagent tool, handles hard, novel, or cross-cutting work itself or with a top model, and verifies subagent logs before accepting their output. Has the subagent_models tool for picking per-task runtimes.",
+            options: {},
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                question: "allow",
+                plan_enter: "allow",
+              }),
+              user,
+            ),
+            mode: "primary",
+            native: true,
+            prompt: PROMPT_BOSS,
           },
           general: {
             name: "general",

@@ -38,6 +38,7 @@ import { ConfigPermission } from "./permission"
 import { ConfigPlugin } from "./plugin"
 import { ConfigProvider } from "./provider"
 import { ConfigServer } from "./server"
+import { ConfigSubagentModels } from "./subagent-models"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
@@ -211,6 +212,12 @@ export const Info = Schema.Struct({
   ).annotate({ description: "Agent configuration, see https://opencode.ai/docs/agents" }),
   provider: Schema.optional(Schema.Record(Schema.String, ConfigProvider.Info)).annotate({
     description: "Custom provider configurations and model overrides",
+  }),
+  subagent_models: Schema.optional(ConfigSubagentModels.Info).annotate({
+    description:
+      "Allowlist of models the main agent can pick for subagent invocations. " +
+      "If unset, the subagent_models tool returns every model reported by opencode's provider layer. " +
+      "Each entry supports an optional 'note' shown to the main agent.",
   }),
   mcp: Schema.optional(
     Schema.Record(

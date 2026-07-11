@@ -47,7 +47,7 @@ import type { EditTool } from "@/tool/edit"
 import type { ApplyPatchTool } from "@/tool/apply_patch"
 import type { WebFetchTool } from "@/tool/webfetch"
 import type { WebSearchTool } from "@/tool/websearch"
-import type { TaskTool } from "@/tool/task"
+import type { SubagentTool } from "@/tool/subagent"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
@@ -2509,7 +2509,7 @@ function AssistantMessage(props: {
       <For each={props.parts}>
         {(part, index) => <MessagePart part={part} message={props.message} last={index() === props.parts.length - 1} />}
       </For>
-      <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
+      <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "subagent")}>
         <box paddingTop={1} paddingLeft={3}>
           <text fg={theme.text}>
             {keybind.print("session_child_first")}
@@ -2959,7 +2959,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "edit"}>
           <Edit {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "task"}>
+        <Match when={props.part.tool === "subagent"}>
           <Task {...toolprops} />
         </Match>
         <Match when={props.part.tool === "apply_patch"}>
@@ -3839,7 +3839,7 @@ function WebSearch(props: ToolProps<typeof WebSearchTool>) {
   )
 }
 
-function Task(props: ToolProps<typeof TaskTool>) {
+function Task(props: ToolProps<typeof SubagentTool>) {
   const { navigate } = useRoute()
   const sync = useSync()
 
@@ -3872,7 +3872,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
   })
 
   const content = createMemo(() => {
-    const title = `${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${
+    const title = `${Locale.titlecase(props.input.agent_type ?? "General")} Task — ${
       props.input.description || "Preparing task..."
     }`
     const content = [title]

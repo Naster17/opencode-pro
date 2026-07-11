@@ -185,29 +185,29 @@ describe("Truncate", () => {
       }),
     )
 
-    it.live("suggests Task tool when agent has task permission", () =>
+    it.live("suggests subagent tool when agent has subagent permission", () =>
       Effect.gen(function* () {
         const svc = yield* Truncate.Service
         const lines = Array.from({ length: 100 }, (_, i) => `line${i}`).join("\n")
-        const agent = { permission: [{ permission: "task", pattern: "*", action: "allow" as const }] }
+        const agent = { permission: [{ permission: "subagent", pattern: "*", action: "allow" as const }] }
         const result = yield* svc.output(lines, { maxLines: 10 }, agent as any)
 
         expect(result.truncated).toBe(true)
         expect(result.content).toContain("Grep")
-        expect(result.content).toContain("Task tool")
+        expect(result.content).toContain("subagent tool")
       }),
     )
 
-    it.live("omits Task tool hint when agent lacks task permission", () =>
+    it.live("omits subagent tool hint when agent lacks subagent permission", () =>
       Effect.gen(function* () {
         const svc = yield* Truncate.Service
         const lines = Array.from({ length: 100 }, (_, i) => `line${i}`).join("\n")
-        const agent = { permission: [{ permission: "task", pattern: "*", action: "deny" as const }] }
+        const agent = { permission: [{ permission: "subagent", pattern: "*", action: "deny" as const }] }
         const result = yield* svc.output(lines, { maxLines: 10 }, agent as any)
 
         expect(result.truncated).toBe(true)
         expect(result.content).toContain("Grep")
-        expect(result.content).not.toContain("Task tool")
+        expect(result.content).not.toContain("subagent tool")
       }),
     )
 

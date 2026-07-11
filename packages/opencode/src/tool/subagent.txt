@@ -1,0 +1,67 @@
+Launch a new agent in a fresh sub-session to handle complex, multistep tasks
+autonomously. Use this when work can be cleanly delegated, parallelised, or
+sandboxed away from the main session.
+
+You must specify:
+  - `agent_type` — which subagent to use (e.g. "general", "explore").
+  - `model` — which model the subagent should run on. Pick from the list
+    returned by the `subagent_models` tool. The subagent inherits its
+    toolset, prompt, and permissions from the agent type; the model is the
+    only runtime override.
+
+Optional:
+  - `description` — 3-5 word label.
+  - `prompt` — the full task for the subagent.
+  - `session_id` — pass an existing subagent session id to resume it. When
+    resuming, the `model` field is ignored: the resumed session keeps its
+    original model.
+  - `command` — slash-command invocation, see below.
+
+When delegating, your prompt to the subagent MUST end with a `## Report
+(mandatory)` block. The subagent must output a fenced block titled
+`<subagent_log>` containing:
+  - files read (absolute paths)
+  - files edited (absolute paths + 1-line diff summary)
+  - commands run + exit status
+  - decisions the subagent made and why
+  - any failures and what was tried
+The orchestrator (Boss) uses this log to verify the work; do NOT skip it.
+
+When to use the subagent tool:
+- When you are instructed to execute custom slash commands. Pass the slash
+  command as the entire `prompt`, e.g.
+  `subagent(description="Check the file", prompt="/check-file path/to/file.py", ...)`.
+
+When NOT to use the subagent tool:
+- If you want to read a specific file path, use the Read or Glob tool instead.
+- If you are searching for code within a file or set of 2-3 files, use the
+  Read or Grep tool instead.
+- Other tasks that are not related to the agent descriptions above.
+
+Usage notes:
+1. Launch multiple agents concurrently whenever possible, to maximize
+   performance; use a single message with multiple tool uses.
+2. When the agent is done, it returns a single message wrapped in
+   `<task_result>...</task_result>`. Summarise for the user; do not dump
+   raw output unless asked.
+3. Each invocation starts a fresh context unless `session_id` is provided
+   (which continues the same subagent session with its previous messages
+   and tool outputs).
+4. Subagent output should be trusted for routine work; verify the
+   `<subagent_log>` for anything that touched code or state.
+5. Be explicit about whether the subagent must write code or only do
+   research, and tell it how to verify its work (e.g. relevant test
+   commands).
+6. If the agent description mentions that it should be used proactively,
+   use it without waiting for the user to ask.
+
+Example usage (the agents below are fictional, use the actual ones listed
+in the runtime description):
+
+<example>
+user: "Please write a function that checks if a number is prime"
+assistant: First I need a quick prime check, so I'll delegate to the
+general subagent on a small model.
+assistant: Calls `subagent(agent_type="general", model="anthropic/claude-haiku-4-5",
+  description="prime check", prompt="<task>...</task>")`.
+</example>
