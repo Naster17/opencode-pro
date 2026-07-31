@@ -2,6 +2,7 @@ import { PlanExitTool } from "./plan"
 import { Session } from "@/session/session"
 import { QuestionTool } from "./question"
 import { ShellTool } from "./shell"
+import { ShellThread, ShellThreadTool } from "./shell_thread"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
@@ -109,6 +110,7 @@ export const layer: Layer.Layer<
     const webfetch = yield* WebFetchTool
     const websearch = yield* WebSearchTool
     const shell = yield* ShellTool
+    const shellThread = yield* ShellThreadTool
     const globtool = yield* GlobTool
     const writetool = yield* WriteTool
     const edit = yield* EditTool
@@ -198,6 +200,7 @@ export const layer: Layer.Layer<
         const tool = yield* Effect.all({
           invalid: Tool.init(invalid),
           shell: Tool.init(shell),
+          shellThread: Tool.init(shellThread),
           read: Tool.init(read),
           glob: Tool.init(globtool),
           grep: Tool.init(greptool),
@@ -221,6 +224,7 @@ export const layer: Layer.Layer<
             tool.invalid,
             ...(questionEnabled ? [tool.question] : []),
             tool.shell,
+            tool.shellThread,
             tool.read,
             tool.glob,
             tool.grep,
@@ -335,7 +339,7 @@ export const layer: Layer.Layer<
 
     return Service.of({ ids, all, named, tools })
   }),
-)
+).pipe(Layer.provide(ShellThread.defaultLayer))
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(

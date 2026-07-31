@@ -1,0 +1,9 @@
+Manage background shell commands. Use this when a command should continue running while you perform other work.
+
+Actions:
+- start: starts a background shell command and returns a threadID. Requires command and description.
+- read: reads output from a thread. Provide threadID. Use since with the cursor returned by previous reads to fetch only new output.
+- list: lists shell threads for the current session.
+- stop: stops a running thread. Provide threadID.
+
+Use normal shell for short commands. Use shell_thread for long-running servers, watchers, builds, or diagnostics that should be checked periodically.
