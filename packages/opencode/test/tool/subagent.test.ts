@@ -166,7 +166,8 @@ describe("tool.subagent", () => {
         const build = yield* agent.get("build")
         const registry = yield* ToolRegistry.Service
         const description =
-          (yield* registry.tools({ ...ref, agent: build })).find((tool) => tool.id === SubagentTool.id)?.description ?? ""
+          (yield* registry.tools({ ...ref, agent: build })).find((tool) => tool.id === SubagentTool.id)?.description ??
+          ""
 
         expect(description).toContain("- alpha: Alpha agent")
         expect(description).not.toContain("- zebra: Zebra agent")
@@ -447,39 +448,41 @@ describe("tool.subagent", () => {
     },
   )
 
-  it.instance("execute strips subagent_models from subagent children", () =>
-    Effect.gen(function* () {
-      const { chat, assistant } = yield* seed()
-      const tool = yield* SubagentTool
-      const def = yield* tool.init()
-      let seen: SessionPrompt.PromptInput | undefined
-      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+  it.instance(
+    "execute strips subagent_models from subagent children",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* SubagentTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
 
-      yield* def.execute(
-        {
-          description: "delegate",
-          prompt: "do the thing",
-          agent_type: "reviewer",
-          model: "test/test-model",
-        },
-        {
-          sessionID: chat.id,
-          messageID: assistant.id,
-          agent: "build",
-          abort: new AbortController().signal,
-          extra: { promptOps },
-          messages: [],
-          metadata: () => Effect.void,
-          ask: () => Effect.void,
-        },
-      )
+        yield* def.execute(
+          {
+            description: "delegate",
+            prompt: "do the thing",
+            agent_type: "reviewer",
+            model: "test/test-model",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
 
-      expect(seen?.tools).toEqual({
-        todowrite: false,
-        subagent: false,
-        subagent_models: false,
-      })
-    }),
+        expect(seen?.tools).toEqual({
+          todowrite: false,
+          subagent: false,
+          subagent_models: false,
+        })
+      }),
     {
       config: {
         agent: {

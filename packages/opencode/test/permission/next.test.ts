@@ -86,14 +86,14 @@ function withProvided(dir: string) {
 
 test("fromConfig - string value becomes wildcard rule", () => {
   const result = Permission.fromConfig({ bash: "allow" })
-  expect(result).toEqual([{ permission: "bash", pattern: "*", action: "allow" }])
+  expect(result).toEqual([{ permission: "shell", pattern: "*", action: "allow" }])
 })
 
 test("fromConfig - object value converts to rules array", () => {
   const result = Permission.fromConfig({ bash: { "*": "allow", rm: "deny" } })
   expect(result).toEqual([
-    { permission: "bash", pattern: "*", action: "allow" },
-    { permission: "bash", pattern: "rm", action: "deny" },
+    { permission: "shell", pattern: "*", action: "allow" },
+    { permission: "shell", pattern: "rm", action: "deny" },
   ])
 })
 
@@ -104,11 +104,16 @@ test("fromConfig - mixed string and object values", () => {
     webfetch: "ask",
   })
   expect(result).toEqual([
-    { permission: "bash", pattern: "*", action: "allow" },
-    { permission: "bash", pattern: "rm", action: "deny" },
+    { permission: "shell", pattern: "*", action: "allow" },
+    { permission: "shell", pattern: "rm", action: "deny" },
     { permission: "edit", pattern: "*", action: "allow" },
     { permission: "webfetch", pattern: "*", action: "ask" },
   ])
+})
+
+test("fromConfig - shell key is canonical", () => {
+  const result = Permission.fromConfig({ shell: "allow" })
+  expect(result).toEqual([{ permission: "shell", pattern: "*", action: "allow" }])
 })
 
 test("fromConfig - empty object", () => {
@@ -144,8 +149,8 @@ test("fromConfig - preserves top-level config key order", () => {
   const wildcardFirst = Permission.fromConfig({ "*": "deny", bash: "allow" })
   const specificFirst = Permission.fromConfig({ bash: "allow", "*": "deny" })
 
-  expect(wildcardFirst.map((r) => r.permission)).toEqual(["*", "bash"])
-  expect(specificFirst.map((r) => r.permission)).toEqual(["bash", "*"])
+  expect(wildcardFirst.map((r) => r.permission)).toEqual(["*", "shell"])
+  expect(specificFirst.map((r) => r.permission)).toEqual(["shell", "*"])
 
   expect(Permission.evaluate("bash", "ls", wildcardFirst).action).toBe("allow")
   expect(Permission.evaluate("bash", "ls", specificFirst).action).toBe("deny")
@@ -164,7 +169,7 @@ test("fromConfig - top-level ordering is not sorted by wildcard specificity", ()
     edit: "deny",
     "mcp_*": "allow",
   })
-  expect(ruleset.map((r) => r.permission)).toEqual(["bash", "*", "edit", "mcp_*"])
+  expect(ruleset.map((r) => r.permission)).toEqual(["shell", "*", "edit", "mcp_*"])
 })
 
 test("fromConfig - sub-pattern insertion order inside a tool key is preserved", () => {

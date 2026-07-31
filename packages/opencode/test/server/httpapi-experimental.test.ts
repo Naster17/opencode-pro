@@ -82,14 +82,14 @@ describe("experimental HttpApi", () => {
     expect(toolList.status).toBe(200)
     expect(await toolList.json()).toContainEqual(
       expect.objectContaining({
-        id: "bash",
+        id: "shell",
         description: expect.any(String),
         parameters: expect.any(Object),
       }),
     )
 
     expect(toolIDs.status).toBe(200)
-    expect(await toolIDs.json()).toContain("bash")
+    expect(await toolIDs.json()).toContain("shell")
 
     expect(worktrees.status).toBe(200)
     expect(await worktrees.json()).toEqual([])

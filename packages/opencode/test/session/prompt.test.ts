@@ -695,12 +695,12 @@ it.live(
           title: "Pinned",
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         })
-      yield* llm.tool("subagent", {
-        description: "inspect bug",
-        prompt: "look into the cache key path",
-        agent_type: "general",
-        model: "test/test-model",
-      })
+        yield* llm.tool("subagent", {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          agent_type: "general",
+          model: "test/test-model",
+        })
         yield* llm.hang
         yield* user(chat.id, "hello")
 
@@ -800,7 +800,7 @@ unix(
                           index: 0,
                           id: "call_1",
                           type: "function",
-                          function: { name: "bash", arguments: "" },
+                          function: { name: "shell", arguments: "" },
                         },
                       ],
                     },
@@ -1161,18 +1161,20 @@ it.live(
   10_000,
 )
 
-it.live("assertNotBusy succeeds when idle", () =>
-  provideTmpdirInstance(
-    (_dir) =>
-      Effect.gen(function* () {
-        const run = yield* SessionRunState.Service
-        const sessions = yield* Session.Service
+it.live(
+  "assertNotBusy succeeds when idle",
+  () =>
+    provideTmpdirInstance(
+      (_dir) =>
+        Effect.gen(function* () {
+          const run = yield* SessionRunState.Service
+          const sessions = yield* Session.Service
 
-        const chat = yield* sessions.create({})
-        const exit = yield* run.assertNotBusy(chat.id).pipe(Effect.exit)
-        expect(Exit.isSuccess(exit)).toBe(true)
-      }),
-    { git: true },
+          const chat = yield* sessions.create({})
+          const exit = yield* run.assertNotBusy(chat.id).pipe(Effect.exit)
+          expect(Exit.isSuccess(exit)).toBe(true)
+        }),
+      { git: true },
     ),
   10_000,
 )
@@ -1576,7 +1578,7 @@ unix(
 )
 
 unix(
-  "cancel finalizes interrupted bash tool output through normal truncation",
+  "cancel finalizes interrupted shell tool output through normal truncation",
   () =>
     provideTmpdirServer(
       ({ dir, llm }) =>
@@ -1584,7 +1586,7 @@ unix(
           const prompt = yield* SessionPrompt.Service
           const sessions = yield* Session.Service
           const chat = yield* sessions.create({
-            title: "Interrupted bash truncation",
+            title: "Interrupted shell truncation",
             permission: [{ permission: "*", pattern: "*", action: "allow" }],
           })
 
@@ -1592,10 +1594,10 @@ unix(
             sessionID: chat.id,
             agent: "build",
             noReply: true,
-            parts: [{ type: "text", text: "run bash" }],
+            parts: [{ type: "text", text: "run shell" }],
           })
 
-          yield* llm.tool("bash", {
+          yield* llm.tool("shell", {
             command:
               'i=0; while [ "$i" -lt 4000 ]; do printf "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx %05d\\n" "$i"; i=$((i + 1)); done; sleep 30',
             description: "Print many lines",

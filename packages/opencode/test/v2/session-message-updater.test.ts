@@ -120,7 +120,7 @@ test("tool completion stores completed timestamp", () => {
       sessionID,
       timestamp: DateTime.makeUnsafe(2),
       callID,
-      name: "bash",
+      name: "shell",
     },
   } satisfies SessionEvent.Event)
 
@@ -131,7 +131,7 @@ test("tool completion stores completed timestamp", () => {
       sessionID,
       timestamp: DateTime.makeUnsafe(3),
       callID,
-      tool: "bash",
+      tool: "shell",
       input: { command: "pwd" },
       provider: { executed: true, metadata: { source: "provider" } },
     },

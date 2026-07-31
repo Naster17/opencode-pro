@@ -922,6 +922,7 @@ export type PermissionConfig =
       glob?: PermissionRuleConfig
       grep?: PermissionRuleConfig
       list?: PermissionRuleConfig
+      shell?: PermissionRuleConfig
       bash?: PermissionRuleConfig
       task?: PermissionRuleConfig
       external_directory?: PermissionRuleConfig
@@ -987,6 +988,7 @@ export type AgentConfig = {
 
 export type ProviderConfig = {
   api?: string
+  auto?: boolean
   name?: string
   env?: Array<string>
   id?: string
@@ -1064,6 +1066,22 @@ export type ProviderConfig = {
       }
     }
   }
+}
+
+export type SubagentModel = {
+  /**
+   * Provider ID, e.g. 'anthropic' or 'opencode'
+   */
+  provider: string
+  /**
+   * Model ID in the form accepted by the provider, e.g. 'claude-sonnet-4-5'
+   */
+  model: string
+  note?: string
+}
+
+export type SubagentModels = {
+  entries?: Array<SubagentModel>
 }
 
 export type McpLocalConfig = {
@@ -1175,6 +1193,7 @@ export type Config = {
   provider?: {
     [key: string]: ProviderConfig
   }
+  subagent_models?: SubagentModels
   mcp?: {
     [key: string]:
       | McpLocalConfig
