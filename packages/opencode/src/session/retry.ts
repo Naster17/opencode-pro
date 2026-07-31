@@ -98,7 +98,9 @@ export function retryable(error: Err) {
     if (
       lower.includes("rate increased too quickly") ||
       lower.includes("rate limit") ||
-      lower.includes("too many requests")
+      lower.includes("too many requests") ||
+      lower.includes("resourceexhausted") ||
+      lower.includes("resource exhausted")
     ) {
       return msg
     }
