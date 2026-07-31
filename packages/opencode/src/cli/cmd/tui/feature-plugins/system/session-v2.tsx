@@ -417,8 +417,11 @@ function AssistantTool(props: { part: SessionMessageAssistantTool }) {
   }
   return (
     <Switch>
-      <Match when={props.part.name === "bash"}>
+      <Match when={props.part.name === "shell" || props.part.name === "bash"}>
         <Bash {...toolprops} />
+      </Match>
+      <Match when={props.part.name === "shell_thread"}>
+        <ShellThread {...toolprops} />
       </Match>
       <Match when={props.part.name === "glob"}>
         <Glob {...toolprops} />
@@ -495,7 +498,8 @@ function toolErrorSummary(value: string) {
 
 function toolErrorTitle(value: string, fallback = "Tool error", tool?: string) {
   const compact = value.replace(/\\n/g, " ").replace(/\s+/g, " ").trim()
-  if (/QuestionRejectedError|rejected permission|specified a rule|user dismissed/i.test(compact)) return "Permission rejected"
+  if (/QuestionRejectedError|rejected permission|specified a rule|user dismissed/i.test(compact))
+    return "Permission rejected"
   if (/apply_patch verification failed|patch rejected/i.test(compact)) return "Patch failed"
   if (/too many redirects/i.test(compact)) return "Too many redirects"
   if (/timed?\s*out|timeout/i.test(compact) && ["webfetch", "fetch"].includes(tool ?? "")) return "Request timed out"
@@ -561,7 +565,11 @@ function InvalidToolCall(props: ToolProps) {
   const error = createMemo(() => stringValue(props.input.error) ?? props.output ?? "")
   return (
     <box paddingLeft={3} flexShrink={0}>
-      <CompactErrorBlock title={`Invalid ${tool} call`} error={error() || invalidToolError(error())} variant="warning" />
+      <CompactErrorBlock
+        title={`Invalid ${tool} call`}
+        error={error() || invalidToolError(error())}
+        variant="warning"
+      />
     </box>
   )
 }
@@ -670,7 +678,8 @@ function InlineTool(props: {
           setMargin(0)
           return
         }
-        if (previous.id.startsWith("msg_") || previous.id.startsWith("text") || previous.id.startsWith("tool-block-")) setMargin(1)
+        if (previous.id.startsWith("msg_") || previous.id.startsWith("text") || previous.id.startsWith("tool-block-"))
+          setMargin(1)
         else setMargin(0)
       }}
     >
@@ -771,11 +780,15 @@ function BlockTool(props: {
 
 function Bash(props: ToolProps) {
   const { theme } = useTheme()
-  const parsed = createMemo(() => shellOutput(stripAnsi((props.output ?? stringValue(props.metadata.output) ?? "").trim())))
+  const parsed = createMemo(() =>
+    shellOutput(stripAnsi((props.output ?? stringValue(props.metadata.output) ?? "").trim())),
+  )
   const output = createMemo(() => parsed().output)
   const notes = createMemo(() => parsed().notes)
   const exit = createMemo(() => numberValue(props.metadata.exit) ?? (props.metadata.exit === null ? null : undefined))
-  const markerColor = createMemo(() => (exit() === 0 ? theme.success : exit() !== undefined ? theme.error : theme.textMuted))
+  const markerColor = createMemo(() =>
+    exit() === 0 ? theme.success : exit() !== undefined ? theme.error : theme.textMuted,
+  )
   const command = createMemo(() => stringValue(props.input.command) ?? pendingInput(props.part))
   const title = createMemo(() => `# ${stringValue(props.input.description) ?? "Shell"}`)
   const [expanded, setExpanded] = createSignal(false)
@@ -825,8 +838,146 @@ function Bash(props: ToolProps) {
   )
 }
 
+function ShellThread(props: ToolProps) {
+  const { theme } = useTheme()
+  const action = createMemo(() => stringValue(props.input.action) ?? stringValue(props.metadata.action) ?? "thread")
+  const threadID = createMemo(() => stringValue(props.input.threadID) ?? stringValue(props.metadata.threadID))
+  const status = createMemo(() => stringValue(props.metadata.status))
+  const cursor = createMemo(() => numberValue(props.metadata.cursor))
+  const output = createMemo(() => stripAnsi((props.output ?? stringValue(props.metadata.output) ?? "").trim()))
+  const markerColor = createMemo(() => {
+    if (status() === "running") return theme.primary
+    if (status() === "exited") return theme.success
+    if (status() === "failed") return theme.error
+    if (status() === "stopped") return theme.warning
+    return theme.textMuted
+  })
+  const [expanded, setExpanded] = createSignal(false)
+  const lines = createMemo(() => output().split("\n"))
+  const overflow = createMemo(() => lines().length > 10)
+  const limited = createMemo(() => {
+    if (expanded() || !overflow()) return output()
+    return [...lines().slice(0, 10), "…"].join("\n")
+  })
+  const title = createMemo(() => {
+    const label =
+      action() === "start"
+        ? "Start shell thread"
+        : action() === "read"
+          ? "Read shell thread"
+          : action() === "stop"
+            ? "Stop shell thread"
+            : "List shell threads"
+    const id = threadID()
+    return id ? `# ${label} ${id}` : `# ${label}`
+  })
+  const threads = createMemo(() => shellThreadRows(props.metadata))
+  const color = (value?: string) => {
+    if (value === "running") return theme.primary
+    if (value === "exited") return theme.success
+    if (value === "failed") return theme.error
+    if (value === "stopped") return theme.warning
+    return theme.textMuted
+  }
+  return (
+    <Switch>
+      <Match when={action() === "list"}>
+        <BlockTool title={title()} part={props.part} marker markerColor={theme.textMuted}>
+          <box gap={0}>
+            <Show
+              when={threads().length}
+              fallback={<text fg={theme.textMuted}>No shell threads for this session.</text>}
+            >
+              <text fg={theme.textMuted} wrapMode="none" overflow="hidden">
+                s {shellThreadCell("id", 18)} {shellThreadCell("status", 8)} {shellThreadCell("pid", 8)}{" "}
+                {shellThreadCell("cur", 6)} {shellThreadCell("description", 24)} command
+              </text>
+              <For each={threads()}>
+                {(thread) => (
+                  <text wrapMode="none" overflow="hidden" width="100%">
+                    <span style={{ fg: color(thread.status) }}>#</span>{" "}
+                    {shellThreadCell(shellThreadID(thread.threadID), 18)}{" "}
+                    <span style={{ fg: color(thread.status) }}>{shellThreadCell(thread.status, 8)}</span>{" "}
+                    <span style={{ fg: theme.textMuted }}>{shellThreadCell(String(thread.pid), 8)}</span>{" "}
+                    <span style={{ fg: theme.textMuted }}>{shellThreadCell(String(thread.cursor), 6)}</span>{" "}
+                    <span style={{ fg: theme.text }}>{shellThreadCell(thread.description, 24)}</span>{" "}
+                    <span style={{ fg: theme.textMuted }}>$ {thread.command}</span>
+                  </text>
+                )}
+              </For>
+            </Show>
+          </box>
+        </BlockTool>
+      </Match>
+      <Match when={output()}>
+        <BlockTool
+          title={title()}
+          part={props.part}
+          marker
+          markerColor={markerColor()}
+          onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+        >
+          <box gap={0}>
+            <Show when={stringValue(props.input.command)}>
+              {(command) => (
+                <text fg={theme.text} wrapMode="char" width="100%">
+                  $ {command()}
+                </text>
+              )}
+            </Show>
+            <Show when={status()}>
+              {(value) => (
+                <text fg={theme.textMuted}>
+                  status: {value()} <Show when={cursor() !== undefined}>· cursor: {cursor()}</Show>
+                </text>
+              )}
+            </Show>
+            <text fg={theme.text}>{limited()}</text>
+            <Show when={overflow()}>
+              <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+            </Show>
+          </box>
+        </BlockTool>
+      </Match>
+      <Match when={true}>
+        <InlineTool icon="$" pending="Managing shell thread..." complete={toolComplete(props.part)} part={props.part}>
+          shell_thread {input(props.input)}
+        </InlineTool>
+      </Match>
+    </Switch>
+  )
+}
+
+function shellThreadRows(metadata: Record<string, unknown>) {
+  if (!Array.isArray(metadata.threads)) return []
+  return metadata.threads.flatMap((item) => {
+    if (!item || typeof item !== "object") return []
+    const thread = item as Record<string, unknown>
+    const threadID = stringValue(thread.threadID)
+    const status = stringValue(thread.status)
+    const pid = numberValue(thread.pid)
+    const cursor = numberValue(thread.cursor)
+    const description = stringValue(thread.description)
+    const command = stringValue(thread.command)
+    if (!threadID || !status || pid === undefined || cursor === undefined || !description || !command) return []
+    return [{ threadID, status, pid, cursor, description, command }]
+  })
+}
+
+function shellThreadID(value: string) {
+  if (value.length <= 18) return value
+  return `${value.slice(0, 8)}…${value.slice(-7)}`
+}
+
+function shellThreadCell(value: string, width: number) {
+  if (value.length > width) return value.slice(0, width - 1) + "…"
+  return value.padEnd(width)
+}
+
 function Glob(props: ToolProps) {
-  const pattern = createMemo(() => toolInputString(props.part, props.metadata, stringValue(props.input.pattern), "pattern"))
+  const pattern = createMemo(() =>
+    toolInputString(props.part, props.metadata, stringValue(props.input.pattern), "pattern"),
+  )
   const dir = createMemo(() => toolInputString(props.part, props.metadata, stringValue(props.input.path), "path"))
   return (
     <InlineTool icon="✱" pending="Finding files..." complete={toolComplete(props.part)} part={props.part}>
@@ -879,7 +1030,9 @@ function Read(props: ToolProps) {
 }
 
 function Grep(props: ToolProps) {
-  const pattern = createMemo(() => toolInputString(props.part, props.metadata, stringValue(props.input.pattern), "pattern"))
+  const pattern = createMemo(() =>
+    toolInputString(props.part, props.metadata, stringValue(props.input.pattern), "pattern"),
+  )
   const dir = createMemo(() => toolInputString(props.part, props.metadata, stringValue(props.input.path), "path"))
   return (
     <InlineTool icon="✱" pending="Searching content..." complete={toolComplete(props.part)} part={props.part}>
@@ -1156,7 +1309,11 @@ function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
       .filter((diagnostic) => diagnostic.severity === 1)
       .slice(0, 3)
   })
-  const message = createMemo(() => errors().map((diagnostic) => `Error ${stringValue(diagnostic.message)}`).join("\n"))
+  const message = createMemo(() =>
+    errors()
+      .map((diagnostic) => `Error ${stringValue(diagnostic.message)}`)
+      .join("\n"),
+  )
   return (
     <Show when={errors().length}>
       <CompactErrorBlock title="LSP" error={message()} />
@@ -1215,7 +1372,12 @@ function jsonStringPrefix(raw: string, key: string) {
   return result
 }
 
-function toolInputString(part: SessionMessageAssistantTool, metadata: Record<string, unknown>, value: string | undefined, key: string) {
+function toolInputString(
+  part: SessionMessageAssistantTool,
+  metadata: Record<string, unknown>,
+  value: string | undefined,
+  key: string,
+) {
   if (value) return value
   const interruptedRaw = typeof metadata.interruptedRaw === "string" ? metadata.interruptedRaw : ""
   return jsonStringPrefix(pendingInput(part) || interruptedRaw, key) ?? ""
@@ -1227,24 +1389,29 @@ function toolComplete(part: SessionMessageAssistantTool) {
 }
 
 function messageCodeStats(content: SessionMessageAssistant["content"]) {
-  return content.reduce(
-    (sum, part) => {
-      if (part.type !== "tool") return sum
-      const metadata = part.provider?.metadata ?? {}
-      const countedMetadata = addCodeStats(sum, metadata)
-      const countedFilediff = countedMetadata ? false : addCodeStats(sum, metadata.filediff)
-      const countedFiles = countedMetadata || countedFilediff
+  return content.reduce((sum, part) => {
+    if (part.type !== "tool") return sum
+    const metadata = part.provider?.metadata ?? {}
+    const countedMetadata = addCodeStats(sum, metadata)
+    const countedFilediff = countedMetadata ? false : addCodeStats(sum, metadata.filediff)
+    const countedFiles =
+      countedMetadata || countedFilediff
         ? false
         : arrayValue(metadata.files).reduce((counted, file) => addCodeStats(sum, file) || counted, false)
-      const countedDiff = countedMetadata || countedFilediff || countedFiles ? false : addDiffStats(sum, metadata.diff)
-      const input = toolInputRecord(part.state.input)
-      if (!countedMetadata && !countedFilediff && !countedFiles && !countedDiff && part.name === "write" && metadata.exists !== true) {
-        sum.additions += countLines(stringValue(input.content) ?? "")
-      }
-      return sum
-    },
-    emptyCodeStats(),
-  )
+    const countedDiff = countedMetadata || countedFilediff || countedFiles ? false : addDiffStats(sum, metadata.diff)
+    const input = toolInputRecord(part.state.input)
+    if (
+      !countedMetadata &&
+      !countedFilediff &&
+      !countedFiles &&
+      !countedDiff &&
+      part.name === "write" &&
+      metadata.exists !== true
+    ) {
+      sum.additions += countLines(stringValue(input.content) ?? "")
+    }
+    return sum
+  }, emptyCodeStats())
 }
 
 function assistantResponseCodeStats(messages: SessionMessage[], index: number) {

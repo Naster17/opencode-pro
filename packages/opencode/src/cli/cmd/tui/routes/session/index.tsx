@@ -40,6 +40,7 @@ import type { ReadTool } from "@/tool/read"
 import type { WriteTool } from "@/tool/write"
 import { ShellTool } from "@/tool/shell"
 import { ShellID } from "@/tool/shell/id"
+import { ShellThreadTool } from "@/tool/shell_thread"
 import type { GlobTool } from "@/tool/glob"
 import { TodoWriteTool } from "@/tool/todo"
 import type { GrepTool } from "@/tool/grep"
@@ -318,9 +319,12 @@ export function Session() {
                   (update) => update.part.messageID === response.info.id && update.part.id === part.id,
                 )?.part
                 const next = updated ?? part
-                const partDeltas = turnDeltas.filter((delta) => delta.messageID === response.info.id && delta.partID === next.id)
+                const partDeltas = turnDeltas.filter(
+                  (delta) => delta.messageID === response.info.id && delta.partID === next.id,
+                )
                 if (next.type === "tool" && next.state.status === "pending") {
-                  const currentRaw = part.type === "tool" && part.state.status === "pending" ? part.state.raw : undefined
+                  const currentRaw =
+                    part.type === "tool" && part.state.status === "pending" ? part.state.raw : undefined
                   const deltaRaw = partDeltas
                     .filter((delta) => delta.field === "raw")
                     .map((delta) => delta.delta)
@@ -356,7 +360,9 @@ export function Session() {
                       const deltaRaw = turnDeltas
                         .filter(
                           (delta) =>
-                            delta.messageID === response.info.id && delta.partID === update.part.id && delta.field === "raw",
+                            delta.messageID === response.info.id &&
+                            delta.partID === update.part.id &&
+                            delta.field === "raw",
                         )
                         .map((delta) => delta.delta)
                         .join("")
@@ -371,7 +377,9 @@ export function Session() {
                         turnDeltas
                           .filter(
                             (delta) =>
-                              delta.messageID === response.info.id && delta.partID === update.part.id && delta.field === "text",
+                              delta.messageID === response.info.id &&
+                              delta.partID === update.part.id &&
+                              delta.field === "text",
                           )
                           .map((delta) => delta.delta)
                           .join(""),
@@ -2935,8 +2943,11 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   return (
     <Show when={!shouldHide()}>
       <Switch>
-        <Match when={props.part.tool === ShellID.ToolID}>
+        <Match when={props.part.tool === ShellID.ToolID || props.part.tool === "bash"}>
           <Shell {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === ShellThreadTool.id}>
+          <ShellThread {...toolprops} />
         </Match>
         <Match when={props.part.tool === "glob"}>
           <Glob {...toolprops} />
@@ -3013,7 +3024,8 @@ function toolErrorSummary(value: string) {
 
 function toolErrorTitle(value: string, fallback = "Tool error", tool?: string) {
   const compact = value.replace(/\\n/g, " ").replace(/\s+/g, " ").trim()
-  if (/QuestionRejectedError|rejected permission|specified a rule|user dismissed/i.test(compact)) return "Permission rejected"
+  if (/QuestionRejectedError|rejected permission|specified a rule|user dismissed/i.test(compact))
+    return "Permission rejected"
   if (/apply_patch verification failed|patch rejected/i.test(compact)) return "Patch failed"
   if (/too many redirects/i.test(compact)) return "Too many redirects"
   if (/timed?\s*out|timeout/i.test(compact) && ["webfetch", "fetch"].includes(tool ?? "")) return "Request timed out"
@@ -3080,7 +3092,11 @@ function InvalidToolCall(props: ToolProps<any>) {
   const error = createMemo(() => stringValue(input.error) ?? props.output ?? "")
   return (
     <box paddingLeft={3} flexShrink={0}>
-      <CompactErrorBlock title={`Invalid ${tool} call`} error={error() || invalidToolError(error())} variant="warning" />
+      <CompactErrorBlock
+        title={`Invalid ${tool} call`}
+        error={error() || invalidToolError(error())}
+        variant="warning"
+      />
     </box>
   )
 }
@@ -3195,7 +3211,11 @@ function InlineTool(props: {
           setMargin(0)
           return
         }
-        if (previous.id.startsWith("msg_") || previous.id.startsWith("text-") || previous.id.startsWith("tool-block-")) {
+        if (
+          previous.id.startsWith("msg_") ||
+          previous.id.startsWith("text-") ||
+          previous.id.startsWith("tool-block-")
+        ) {
           setMargin(1)
           return
         }
@@ -3322,8 +3342,12 @@ function Shell(props: ToolProps<typeof ShellTool>) {
   const parsed = createMemo(() => shellOutput(stripAnsi((props.output ?? props.metadata.output ?? "").trim())))
   const output = createMemo(() => parsed().output)
   const notes = createMemo(() => parsed().notes)
-  const exit = createMemo(() => (typeof props.metadata.exit === "number" || props.metadata.exit === null ? props.metadata.exit : undefined))
-  const markerColor = createMemo(() => (exit() === 0 ? theme.success : exit() !== undefined ? theme.error : theme.textMuted))
+  const exit = createMemo(() =>
+    typeof props.metadata.exit === "number" || props.metadata.exit === null ? props.metadata.exit : undefined,
+  )
+  const markerColor = createMemo(() =>
+    exit() === 0 ? theme.success : exit() !== undefined ? theme.error : theme.textMuted,
+  )
   const previewWidth = createMemo(() => Math.max(20, ctx.width - 28))
   const clip = (line: string) => (line.length > previewWidth() ? line.slice(0, previewWidth() - 1) + "…" : line)
   const [expanded, setExpanded] = createSignal(false)
@@ -3420,7 +3444,150 @@ function Shell(props: ToolProps<typeof ShellTool>) {
   )
 }
 
-function PendingToolPreview(props: { content: string; filePath?: string; title: string; filetype?: string; part: ToolPart }) {
+function ShellThread(props: ToolProps<typeof ShellThreadTool>) {
+  const { theme } = useTheme()
+  const action = createMemo(() => props.input.action ?? stringValue(props.metadata.action) ?? "thread")
+  const threadID = createMemo(() => props.input.threadID ?? stringValue(props.metadata.threadID))
+  const status = createMemo(() => stringValue(props.metadata.status))
+  const cursor = createMemo(() => (typeof props.metadata.cursor === "number" ? props.metadata.cursor : undefined))
+  const output = createMemo(() => stripAnsi((props.output ?? stringValue(props.metadata.output) ?? "").trim()))
+  const markerColor = createMemo(() => {
+    if (status() === "running") return theme.primary
+    if (status() === "exited") return theme.success
+    if (status() === "failed") return theme.error
+    if (status() === "stopped") return theme.warning
+    return theme.textMuted
+  })
+  const [expanded, setExpanded] = createSignal(false)
+  const lines = createMemo(() => output().split("\n"))
+  const overflow = createMemo(() => lines().length > 10)
+  const limited = createMemo(() => {
+    if (expanded() || !overflow()) return output()
+    return [...lines().slice(0, 10), "…"].join("\n")
+  })
+  const title = createMemo(() => {
+    const label =
+      action() === "start"
+        ? "Start shell thread"
+        : action() === "read"
+          ? "Read shell thread"
+          : action() === "stop"
+            ? "Stop shell thread"
+            : "List shell threads"
+    const id = threadID()
+    return id ? `# ${label} ${id}` : `# ${label}`
+  })
+  const threads = createMemo(() => shellThreadRows(props.metadata))
+  const color = (value?: string) => {
+    if (value === "running") return theme.primary
+    if (value === "exited") return theme.success
+    if (value === "failed") return theme.error
+    if (value === "stopped") return theme.warning
+    return theme.textMuted
+  }
+
+  return (
+    <Switch>
+      <Match when={action() === "list"}>
+        <BlockTool title={title()} part={props.part} marker markerColor={theme.textMuted}>
+          <box gap={0}>
+            <Show
+              when={threads().length}
+              fallback={<text fg={theme.textMuted}>No shell threads for this session.</text>}
+            >
+              <text fg={theme.textMuted} wrapMode="none" overflow="hidden">
+                s {shellThreadCell("id", 18)} {shellThreadCell("status", 8)} {shellThreadCell("pid", 8)}{" "}
+                {shellThreadCell("cur", 6)} {shellThreadCell("description", 24)} command
+              </text>
+              <For each={threads()}>
+                {(thread) => (
+                  <text wrapMode="none" overflow="hidden" width="100%">
+                    <span style={{ fg: color(thread.status) }}>#</span>{" "}
+                    {shellThreadCell(shellThreadID(thread.threadID), 18)}{" "}
+                    <span style={{ fg: color(thread.status) }}>{shellThreadCell(thread.status, 8)}</span>{" "}
+                    <span style={{ fg: theme.textMuted }}>{shellThreadCell(String(thread.pid), 8)}</span>{" "}
+                    <span style={{ fg: theme.textMuted }}>{shellThreadCell(String(thread.cursor), 6)}</span>{" "}
+                    <span style={{ fg: theme.text }}>{shellThreadCell(thread.description, 24)}</span>{" "}
+                    <span style={{ fg: theme.textMuted }}>$ {thread.command}</span>
+                  </text>
+                )}
+              </For>
+            </Show>
+          </box>
+        </BlockTool>
+      </Match>
+      <Match when={props.metadata.output !== undefined || props.output !== undefined}>
+        <BlockTool
+          title={title()}
+          part={props.part}
+          marker
+          markerColor={markerColor()}
+          onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+        >
+          <box gap={0}>
+            <Show when={props.input.command}>
+              <text fg={theme.text} wrapMode="char" width="100%">
+                $ {props.input.command}
+              </text>
+            </Show>
+            <Show when={status()}>
+              {(value) => (
+                <text fg={theme.textMuted}>
+                  status: {value()} <Show when={cursor() !== undefined}>· cursor: {cursor()}</Show>
+                </text>
+              )}
+            </Show>
+            <Show when={output()}>
+              <text fg={theme.text}>{limited()}</text>
+            </Show>
+            <Show when={overflow()}>
+              <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+            </Show>
+          </box>
+        </BlockTool>
+      </Match>
+      <Match when={true}>
+        <InlineTool icon="$" pending="Managing shell thread..." complete={props.input.action} part={props.part}>
+          shell_thread {input(props.input)}
+        </InlineTool>
+      </Match>
+    </Switch>
+  )
+}
+
+function shellThreadRows(metadata: Record<string, unknown>) {
+  if (!Array.isArray(metadata.threads)) return []
+  return metadata.threads.flatMap((item) => {
+    if (!item || typeof item !== "object") return []
+    const thread = item as Record<string, unknown>
+    const threadID = stringValue(thread.threadID)
+    const status = stringValue(thread.status)
+    const pid = typeof thread.pid === "number" ? thread.pid : undefined
+    const cursor = typeof thread.cursor === "number" ? thread.cursor : undefined
+    const description = stringValue(thread.description)
+    const command = stringValue(thread.command)
+    if (!threadID || !status || pid === undefined || cursor === undefined || !description || !command) return []
+    return [{ threadID, status, pid, cursor, description, command }]
+  })
+}
+
+function shellThreadID(value: string) {
+  if (value.length <= 18) return value
+  return `${value.slice(0, 8)}…${value.slice(-7)}`
+}
+
+function shellThreadCell(value: string, width: number) {
+  if (value.length > width) return value.slice(0, width - 1) + "…"
+  return value.padEnd(width)
+}
+
+function PendingToolPreview(props: {
+  content: string
+  filePath?: string
+  title: string
+  filetype?: string
+  part: ToolPart
+}) {
   const { theme, syntax } = useTheme()
   const normalized = createMemo(() => props.content.replace(/\r\n/g, "\n").replace(/\r/g, "\n"))
   const display = createMemo(() => normalized() || "waiting for streamed tool input...")
@@ -3435,7 +3602,12 @@ function PendingToolPreview(props: { content: string; filePath?: string; title: 
 
   return (
     <BlockTool title={`${props.title} · line ${currentLine()}`} part={props.part} spinner={true}>
-      <line_number fg={theme.textMuted} minWidth={lineNumberWidth()} paddingRight={1} lineNumberOffset={firstLine() - 1}>
+      <line_number
+        fg={theme.textMuted}
+        minWidth={lineNumberWidth()}
+        paddingRight={1}
+        lineNumberOffset={firstLine() - 1}
+      >
         <code
           conceal={false}
           fg={normalized() ? theme.text : theme.textMuted}
@@ -3593,9 +3765,12 @@ function diffPreview(diff: string, limit: number) {
   const newStart = Number(match[3]) + countDiffLines(content.slice(0, start), "new")
   const oldCount = countDiffLines(selected, "old")
   const newCount = countDiffLines(selected, "new")
-  return [oldHeader, newHeader, `@@ -${oldStart},${oldCount} +${newStart},${newCount} @@${match[5] ?? ""}`, ...selected].join(
-    "\n",
-  )
+  return [
+    oldHeader,
+    newHeader,
+    `@@ -${oldStart},${oldCount} +${newStart},${newCount} @@${match[5] ?? ""}`,
+    ...selected,
+  ].join("\n")
 }
 
 function diffHeaders(diff: string) {
@@ -3631,7 +3806,8 @@ function pendingToolRaw(part: ToolPart) {
 
 function toolInputString(part: ToolPart, metadata: unknown, value: string | undefined, key: string) {
   if (value) return value
-  const interruptedRaw = isRecord(metadata) && typeof metadata.interruptedRaw === "string" ? metadata.interruptedRaw : ""
+  const interruptedRaw =
+    isRecord(metadata) && typeof metadata.interruptedRaw === "string" ? metadata.interruptedRaw : ""
   return jsonStringPrefix(pendingToolRaw(part) || interruptedRaw, key) ?? ""
 }
 
@@ -3691,7 +3867,9 @@ function Write(props: ToolProps<typeof WriteTool>) {
   const code = createMemo(() => {
     return props.input.content ?? jsonStringPrefix(raw(), "content") ?? raw()
   })
-  const showStreamingPreview = createMemo(() => props.part.state.status === "pending" || props.part.state.status === "running")
+  const showStreamingPreview = createMemo(
+    () => props.part.state.status === "pending" || props.part.state.status === "running",
+  )
 
   return (
     <Switch>
@@ -3919,7 +4097,9 @@ function Edit(props: ToolProps<typeof EditTool>) {
   const newString = createMemo(() => props.input.newString ?? jsonStringPrefix(raw(), "newString") ?? "")
   const oldString = createMemo(() => props.input.oldString ?? jsonStringPrefix(raw(), "oldString") ?? "")
   const preview = createMemo(() => newString() || oldString() || raw())
-  const showStreamingPreview = createMemo(() => props.part.state.status === "pending" || props.part.state.status === "running")
+  const showStreamingPreview = createMemo(
+    () => props.part.state.status === "pending" || props.part.state.status === "running",
+  )
 
   const view = createMemo(() => {
     const diffStyle = ctx.tui.diff_style
@@ -3960,7 +4140,9 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
   const { theme } = useTheme()
   const raw = createMemo(() => pendingToolRaw(props.part))
   const patchText = createMemo(() => props.input.patchText ?? jsonStringPrefix(raw(), "patchText") ?? raw())
-  const showStreamingPreview = createMemo(() => props.part.state.status === "pending" || props.part.state.status === "running")
+  const showStreamingPreview = createMemo(
+    () => props.part.state.status === "pending" || props.part.state.status === "running",
+  )
 
   const files = createMemo(() => props.metadata.files ?? [])
 
@@ -3999,7 +4181,12 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
         </For>
       </Match>
       <Match when={showStreamingPreview()}>
-        <PendingToolPreview content={patchText()} title={patchPreviewTitle(patchText())} filetype="diff" part={props.part} />
+        <PendingToolPreview
+          content={patchText()}
+          title={patchPreviewTitle(patchText())}
+          filetype="diff"
+          part={props.part}
+        />
       </Match>
       <Match when={true}>
         <InlineTool icon="%" pending="Preparing patch..." complete={false} part={props.part}>
@@ -4081,7 +4268,10 @@ function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]
   })
   const message = createMemo(() =>
     errors()
-      .map((diagnostic) => `Error [${diagnostic.range.start.line + 1}:${diagnostic.range.start.character + 1}] ${diagnostic.message}`)
+      .map(
+        (diagnostic) =>
+          `Error [${diagnostic.range.start.line + 1}:${diagnostic.range.start.character + 1}] ${diagnostic.message}`,
+      )
       .join("\n"),
   )
 

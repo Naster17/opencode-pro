@@ -20,7 +20,7 @@ type AgentMode = "all" | "primary" | "subagent"
 // permission — e.g. write/edit/apply_patch all gate on `edit` — so we configure
 // agents at the permission level to match how the runtime actually enforces it.
 const AVAILABLE_PERMISSIONS = [
-  "bash",
+  "shell",
   "read",
   "edit",
   "glob",

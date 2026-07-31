@@ -188,7 +188,7 @@ export const layer = Layer.effect(
                 grep: "allow",
                 glob: "allow",
                 list: "allow",
-                bash: "allow",
+                shell: "allow",
                 webfetch: "allow",
                 websearch: "allow",
                 read: "allow",

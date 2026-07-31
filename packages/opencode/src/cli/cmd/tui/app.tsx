@@ -115,6 +115,7 @@ function errorMessage(error: unknown) {
 
 function activeTitleState(tool: string) {
   if (tool === "apply_patch") return "Patching"
+  if (tool === "shell_thread") return "Shell thread"
   const label = tool === "shell" || tool === "bash" ? "execute" : tool
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
@@ -124,10 +125,7 @@ function titleLabel(state: string) {
 }
 
 function titlePhrase(value: string) {
-  return value
-    .split(" ")
-    .map(titleLabel)
-    .join(" ")
+  return value.split(" ").map(titleLabel).join(" ")
 }
 
 function animatedTitle(label: string, frame: number) {
@@ -378,7 +376,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     const parts = sync.data.part[assistant.id] ?? []
     const hasResponse = parts.some((part) => {
       if (part.type === "text") return !!part.text.trim() && !part.synthetic && !part.ignored
-      if (part.type === "reasoning") return kv.get("thinking_visibility", true) !== false && !!reasoningContent(part.text)
+      if (part.type === "reasoning")
+        return kv.get("thinking_visibility", true) !== false && !!reasoningContent(part.text)
       if (part.type === "tool") return ["completed", "error"].includes(part.state.status)
       return false
     })
