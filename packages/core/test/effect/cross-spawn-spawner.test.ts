@@ -89,6 +89,24 @@ describe("cross-spawn spawner", () => {
     )
 
     fx.effect(
+      "returns exit code when descendants keep stdio open",
+      Effect.gen(function* () {
+        if (process.platform === "win32" || !Bun.which("bash")) return
+
+        const started = Date.now()
+        const handle = yield* ChildProcess.make("sleep 2 & jobs", [], {
+          shell: "bash",
+          stdin: "ignore",
+        })
+        const code = yield* handle.exitCode
+        yield* handle.kill({ killSignal: "SIGKILL", forceKillAfter: 100 }).pipe(Effect.ignore)
+
+        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+        expect(Date.now() - started).toBeLessThan(1_000)
+      }),
+    )
+
+    fx.effect(
       "returns non-zero exit code",
       Effect.gen(function* () {
         const handle = yield* js("process.exit(42)")
