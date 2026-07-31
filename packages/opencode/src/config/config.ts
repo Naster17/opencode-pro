@@ -133,7 +133,7 @@ export const Info = Schema.Struct({
     description: "JSON schema reference for configuration validation",
   }),
   shell: Schema.optional(Schema.String).annotate({
-    description: "Default shell to use for terminal and bash tool",
+    description: "Default shell to use for terminal and shell tool",
   }),
   logLevel: Schema.optional(LogLevelRef).annotate({ description: "Log level" }),
   server: Schema.optional(ConfigServer.Server).annotate({
@@ -270,7 +270,8 @@ export const Info = Schema.Struct({
         description: "Enable pruning of old tool outputs (default: true)",
       }),
       stable_prune: Schema.optional(Schema.Boolean).annotate({
-        description: "Store pruned tool metadata separately to maintain cache stability (default: true). Set to false to restore legacy behavior where tool parts are modified directly.",
+        description:
+          "Store pruned tool metadata separately to maintain cache stability (default: true). Set to false to restore legacy behavior where tool parts are modified directly.",
       }),
       tail_turns: Schema.optional(NonNegativeInt).annotate({
         description:
@@ -310,7 +311,8 @@ export const Info = Schema.Struct({
           "Inline stored reasoning back into assistant text for local prompt-cache continuity (default: true for llama.cpp reasoning models).",
       }),
       stable_history: Schema.optional(Schema.Boolean).annotate({
-        description: "Prevent modifying old messages with summary diffs to maintain cache stability (default: true). Set to false to restore legacy behavior where diffs are added to user messages.",
+        description:
+          "Prevent modifying old messages with summary diffs to maintain cache stability (default: true). Set to false to restore legacy behavior where diffs are added to user messages.",
       }),
     }),
   ).annotate({

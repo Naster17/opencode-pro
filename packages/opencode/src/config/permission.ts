@@ -28,6 +28,7 @@ const InputObject = Schema.StructWithRest(
     glob: Schema.optional(Rule),
     grep: Schema.optional(Rule),
     list: Schema.optional(Rule),
+    shell: Schema.optional(Rule),
     bash: Schema.optional(Rule),
     task: Schema.optional(Rule),
     external_directory: Schema.optional(Rule),

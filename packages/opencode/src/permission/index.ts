@@ -13,7 +13,7 @@ import { withStatics } from "@/util/schema"
 import { Wildcard } from "@/util/wildcard"
 import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import os from "os"
-import { evaluate as evalRule } from "./evaluate"
+import { evaluate as evalRule, normalize as normalizePermission } from "./evaluate"
 import { PermissionID } from "./schema"
 
 const log = Log.create({ service: "permission" })
@@ -188,7 +188,9 @@ export const layer = Layer.effect(
         log.info("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny") {
           return yield* new DeniedError({
-            ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+            ruleset: ruleset.filter((rule) =>
+              Wildcard.match(normalizePermission(request.permission), normalizePermission(rule.permission)),
+            ),
           })
         }
         if (rule.action === "allow") continue
@@ -307,12 +309,13 @@ function expand(pattern: string): string {
 export function fromConfig(permission: ConfigPermission.Info) {
   const ruleset: Ruleset = []
   for (const [key, value] of Object.entries(permission)) {
+    const name = key === "bash" ? "shell" : key
     if (typeof value === "string") {
-      ruleset.push({ permission: key, action: value, pattern: "*" })
+      ruleset.push({ permission: name, action: value, pattern: "*" })
       continue
     }
     ruleset.push(
-      ...Object.entries(value).map(([pattern, action]) => ({ permission: key, pattern: expand(pattern), action })),
+      ...Object.entries(value).map(([pattern, action]) => ({ permission: name, pattern: expand(pattern), action })),
     )
   }
   return ruleset
@@ -327,8 +330,8 @@ const EDIT_TOOLS = ["edit", "write", "apply_patch"]
 export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
   const result = new Set<string>()
   for (const tool of tools) {
-    const permission = EDIT_TOOLS.includes(tool) ? "edit" : tool
-    const rule = ruleset.findLast((rule) => Wildcard.match(permission, rule.permission))
+    const permission = normalizePermission(EDIT_TOOLS.includes(tool) ? "edit" : tool)
+    const rule = ruleset.findLast((rule) => Wildcard.match(permission, normalizePermission(rule.permission)))
     if (!rule) continue
     if (rule.pattern === "*" && rule.action === "deny") result.add(tool)
   }
