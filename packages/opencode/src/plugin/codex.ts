@@ -27,8 +27,14 @@ const ALLOWED_MODELS = new Set([
   "gpt-5.4-mini",
 ])
 
+function isCodexModelID(modelID: string) {
+  if (ALLOWED_MODELS.has(modelID)) return true
+  const match = modelID.match(/^gpt-(\d+\.\d+)/)
+  return match ? parseFloat(match[1]) > 5.4 : false
+}
+
 export function isCodexModel(providerID: string, modelID: string) {
-  return providerID === "openai" && ALLOWED_MODELS.has(modelID)
+  return providerID === "openai" && isCodexModelID(modelID)
 }
 
 interface PkceCodes {
@@ -570,11 +576,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
 
         return Object.fromEntries(
           Object.entries(provider.models)
-            .filter(([, model]) => {
-              if (ALLOWED_MODELS.has(model.api.id)) return true
-              const match = model.api.id.match(/^gpt-(\d+\.\d+)/)
-              return match ? parseFloat(match[1]) > 5.4 : false
-            })
+            .filter(([, model]) => isCodexModelID(model.api.id))
             .map(([modelID, model]) => [
               modelID,
               {

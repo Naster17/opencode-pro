@@ -9,6 +9,7 @@ import { Locale } from "@/util/locale"
 import { isCodexModel } from "@/plugin/codex"
 import { clearCodexUsageCache, formatResetDuration, getCodexUsage } from "./codex-usage"
 import { useBtwUsage } from "@tui/context/btw"
+import { useLocal } from "@tui/context/local"
 
 const id = "internal:sidebar-metrics"
 const usageWidgetsHiddenKey = "usage_widgets_hidden"
@@ -22,6 +23,7 @@ const codexHotSwapRefreshDelays = [0, 1_000, 3_000, 8_000]
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const sync = useSync()
   const btwUsage = useBtwUsage()
+  const local = useLocal()
   const theme = () => props.api.theme.current
   const allSessions = createMemo(() => props.api.state.session.all())
   const [now, setNow] = createSignal(Date.now())
@@ -52,6 +54,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     ...descendantSessions().flatMap((id) => sync.data.message[id] ?? []),
   ])
   const codexSelected = createMemo(() => {
+    const current = local.model.current()
+    if (current && isCodexModel(current.providerID, current.modelID)) return true
     const model = sync.data.config.model
     if (!model) return false
     const [providerID, ...rest] = model.split("/")

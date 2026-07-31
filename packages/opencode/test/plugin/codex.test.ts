@@ -5,6 +5,7 @@ import {
   parseJwtClaims,
   extractAccountIdFromClaims,
   extractAccountId,
+  isCodexModel,
   loadCockpitCodexSelection,
   loadCodexCliAuth,
   resolveCodexAuth,
@@ -19,6 +20,17 @@ function createTestJwt(payload: object): string {
 }
 
 describe("plugin.codex", () => {
+  describe("isCodexModel", () => {
+    test("matches codex OAuth GPT model variants", () => {
+      expect(isCodexModel("openai", "gpt-5.5")).toBe(true)
+      expect(isCodexModel("openai", "gpt-5.5-fast")).toBe(true)
+      expect(isCodexModel("openai", "gpt-5.6-sol-pro")).toBe(true)
+      expect(isCodexModel("openai", "gpt-5.4-mini")).toBe(true)
+      expect(isCodexModel("openai", "gpt-5.4-fast")).toBe(false)
+      expect(isCodexModel("anthropic", "gpt-5.5")).toBe(false)
+    })
+  })
+
   describe("parseJwtClaims", () => {
     test("parses valid JWT with claims", () => {
       const payload = { email: "test@example.com", chatgpt_account_id: "acc-123" }

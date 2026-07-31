@@ -136,6 +136,37 @@ function estimateCurrentContextTokens(messages: readonly Message[], getParts: (m
   )
 }
 
+function zeroTokens(): AssistantMessage["tokens"] {
+  return { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+}
+
+function addTokens(left: AssistantMessage["tokens"], right: AssistantMessage["tokens"]): AssistantMessage["tokens"] {
+  return {
+    input: left.input + right.input,
+    output: left.output + right.output,
+    reasoning: left.reasoning + right.reasoning,
+    cache: {
+      read: left.cache.read + right.cache.read,
+      write: left.cache.write + right.cache.write,
+    },
+  }
+}
+
+function hasTokens(tokens: AssistantMessage["tokens"]) {
+  return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write > 0
+}
+
+function assistantUsage(message: AssistantMessage, getParts: (messageID: string) => readonly Part[]) {
+  const finishes = getParts(message.id).filter((part): part is Extract<Part, { type: "step-finish" }> =>
+    part.type === "step-finish",
+  )
+  if (finishes.length === 0) return { tokens: message.tokens, cost: message.cost ?? 0 }
+  return {
+    tokens: finishes.reduce((sum, part) => addTokens(sum, part.tokens), zeroTokens()),
+    cost: finishes.reduce((sum, part) => sum + part.cost, 0),
+  }
+}
+
 function filterCompactedMessages(messages: readonly Message[], getParts: (messageID: string) => readonly Part[]) {
   const completed = new Set(
     messages.flatMap((message) => {
@@ -161,12 +192,13 @@ function currentContextUsage(
 ) {
   const visibleMessages = filterCompactedMessages(messages, getParts)
   const lastAssistantIndex = visibleMessages.findLastIndex(
-    (item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0,
+    (item): item is AssistantMessage => item.role === "assistant" && hasTokens(assistantUsage(item, getParts).tokens),
   )
   const lastAssistant = lastAssistantIndex >= 0 ? (visibleMessages[lastAssistantIndex] as AssistantMessage) : undefined
   const latestAssistant = visibleMessages.findLast((item): item is AssistantMessage => item.role === "assistant")
   const latestUser = visibleMessages.findLast((item): item is Extract<Message, { role: "user" }> => item.role === "user")
-  const exactTokens = lastAssistant ? lastAssistant.tokens.input + lastAssistant.tokens.cache.read + lastAssistant.tokens.cache.write : 0
+  const lastUsage = lastAssistant ? assistantUsage(lastAssistant, getParts).tokens : undefined
+  const exactTokens = lastUsage ? lastUsage.input + lastUsage.cache.read + lastUsage.cache.write : 0
   const liveAssistant = latestAssistant && !latestAssistant.time.completed ? latestAssistant : undefined
   const latestMessageIndex = visibleMessages.length - 1
   const compactedSummary =
@@ -226,14 +258,15 @@ export function summarizeUsage(
         })),
       )
       const assistants = messages.filter((item): item is AssistantMessage => item.role === "assistant")
-      const generation = assistants
-        .filter((item) => item.tokens.output > 0 && !!item.time.completed)
+      const assistantUsages = assistants.map((message) => ({ message, ...assistantUsage(message, session.getParts) }))
+      const generation = assistantUsages
+        .filter((item) => item.tokens.output > 0 && !!item.message.time.completed)
         .reduce(
           (state, item) => {
-            const completedAt = item.time.completed
+            const completedAt = item.message.time.completed
             if (!completedAt) return state
             const startedAt = session
-              .getParts(item.id)
+              .getParts(item.message.id)
               .flatMap((part) => {
                 if (part.type === "text" && part.time?.start) return [part.time.start]
                 if (part.type === "reasoning" && part.time?.start) return [part.time.start]
@@ -250,13 +283,13 @@ export function summarizeUsage(
           },
           { output: 0, duration: 0 },
         )
-      const cost = assistants.reduce((acc, item) => acc + (item.cost ?? 0), 0)
+      const cost = assistantUsages.reduce((acc, item) => acc + item.cost, 0)
 
-      const reasoningTokens = assistants.reduce((acc, item) => {
+      const reasoningTokens = assistantUsages.reduce((acc, item) => {
         let tokens = item.tokens.reasoning
         // Fallback for models that don't report reasoning tokens but have reasoning parts
         if (tokens === 0) {
-          const reasoningParts = session.getParts(item.id).filter((p) => p.type === "reasoning")
+          const reasoningParts = session.getParts(item.message.id).filter((p) => p.type === "reasoning")
           for (const part of reasoningParts) {
             if ("text" in part) {
               tokens += Math.ceil(part.text.length / 4)
@@ -266,7 +299,7 @@ export function summarizeUsage(
         return acc + tokens
       }, 0)
 
-      const session_tokens = assistants.reduce(
+      const session_tokens = assistantUsages.reduce(
         (acc, item) =>
           acc +
           item.tokens.input +
@@ -276,19 +309,19 @@ export function summarizeUsage(
           item.tokens.cache.write,
         0,
       )
-      const last = assistants.findLast((item) => item.tokens.output > 0)
+      const last = assistantUsages.findLast((item) => hasTokens(item.tokens))
       const context_tokens = last ? last.tokens.input + last.tokens.cache.read + last.tokens.cache.write : 0
       const context_percent =
         last && context_tokens > 0
           ? (() => {
-              const limit = providers.find((item) => item.id === last.providerID)?.models[last.modelID]?.limit.context
+              const limit = providers.find((item) => item.id === last.message.providerID)?.models[last.message.modelID]?.limit.context
               if (!limit) return null
               return Math.round((context_tokens / limit) * 100)
             })()
           : null
-      const model_usage = assistants.reduce(
+      const model_usage = assistantUsages.reduce(
         (acc, item) => {
-          const key = `${item.providerID}:${item.modelID}`
+          const key = `${item.message.providerID}:${item.message.modelID}`
           const tokens =
             item.tokens.input +
             item.tokens.output +
@@ -296,9 +329,9 @@ export function summarizeUsage(
             item.tokens.cache.read +
             item.tokens.cache.write
           const prev = acc.get(key) ?? {
-            providerID: item.providerID,
-            modelID: item.modelID,
-            name: modelLabel(providers, item.providerID, item.modelID),
+            providerID: item.message.providerID,
+            modelID: item.message.modelID,
+            name: modelLabel(providers, item.message.providerID, item.message.modelID),
             count: 0,
             tokens: 0,
             cost: 0,
@@ -307,7 +340,7 @@ export function summarizeUsage(
             ...prev,
             count: prev.count + 1,
             tokens: prev.tokens + tokens,
-            cost: prev.cost + (item.cost ?? 0),
+            cost: prev.cost + item.cost,
           })
           return acc
         },
@@ -326,11 +359,11 @@ export function summarizeUsage(
       const liveContext = currentContextUsage(session.session, messages, session.getParts, providers)
 
       return {
-        input: sum.input + assistants.reduce((acc, item) => acc + item.tokens.input, 0),
-        output: sum.output + assistants.reduce((acc, item) => acc + item.tokens.output, 0),
+        input: sum.input + assistantUsages.reduce((acc, item) => acc + item.tokens.input, 0),
+        output: sum.output + assistantUsages.reduce((acc, item) => acc + item.tokens.output, 0),
         reasoning: sum.reasoning + reasoningTokens,
-        cache_read: sum.cache_read + assistants.reduce((acc, item) => acc + item.tokens.cache.read, 0),
-        cache_write: sum.cache_write + assistants.reduce((acc, item) => acc + item.tokens.cache.write, 0),
+        cache_read: sum.cache_read + assistantUsages.reduce((acc, item) => acc + item.tokens.cache.read, 0),
+        cache_write: sum.cache_write + assistantUsages.reduce((acc, item) => acc + item.tokens.cache.write, 0),
         cost: sum.cost + cost,
         tools: sum.tools + parts.filter(({ part }) => part.type === "tool").length,
         compact: sum.compact + parts.filter(({ part }) => part.type === "compaction").length,
