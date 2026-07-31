@@ -185,6 +185,30 @@ describe("tool.shell", () => {
     })
   })
 
+  test("does not timeout when pkill matches the invoking shell", async () => {
+    if (process.platform === "win32" || !Bun.which("pkill")) return
+
+    await WithInstance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await initShell()
+        const result = await Effect.runPromise(
+          bash.execute(
+            {
+              command: "pkill -f opencode-shell-pkill-self-test 2>/dev/null; sleep 1",
+              description: "Kill matching shell command",
+              timeout: 500,
+            },
+            ctx,
+          ),
+        )
+
+        expect(result.metadata.exit).toBe(null)
+        expect(result.output).not.toContain("terminated command after exceeding timeout")
+      },
+    })
+  })
+
   test("falls back from terminal-only configured shell", async () => {
     await using tmp = await tmpdir({
       config: { shell: "fish" },
