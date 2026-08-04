@@ -5,7 +5,6 @@ import { LSPOverride } from "@/lsp/override"
 const id = "internal:sidebar-lsp"
 
 function View(props: { api: TuiPluginApi }) {
-  const [open, setOpen] = createSignal(true)
   const [override, setOverride] = createSignal<boolean | undefined>()
   const theme = () => props.api.theme.current
   const list = createMemo(() => props.api.state.lsp())
@@ -18,38 +17,33 @@ function View(props: { api: TuiPluginApi }) {
 
   return (
     <box>
-      <box flexDirection="row" gap={1} onMouseDown={() => list().length > 2 && setOpen((x) => !x)}>
-        <Show when={list().length > 2}>
-          <text fg={theme().text}>{open() ? "▼" : "▶"}</text>
-        </Show>
+      <box flexDirection="row" gap={1}>
         <text fg={theme().text}>
           <b>LSP</b>
         </text>
       </box>
-      <Show when={list().length <= 2 || open()}>
-        <Show when={list().length === 0}>
-          <text fg={theme().textMuted}>
-            {off() ? "LSPs have been disabled in settings" : "LSPs will activate as files are read"}
-          </text>
-        </Show>
-        <For each={list()}>
-          {(item) => (
-            <box flexDirection="row" gap={1}>
-              <text
-                flexShrink={0}
-                style={{
-                  fg: item.status === "connected" ? theme().success : theme().error,
-                }}
-              >
-                •
-              </text>
-              <text fg={theme().textMuted}>
-                {item.id} {item.root}
-              </text>
-            </box>
-          )}
-        </For>
+      <Show when={list().length === 0}>
+        <text fg={theme().textMuted}>
+          {off() ? "LSPs have been disabled in settings" : "LSPs will activate as files are read"}
+        </text>
       </Show>
+      <For each={list()}>
+        {(item) => (
+          <box flexDirection="row" gap={1}>
+            <text
+              flexShrink={0}
+              style={{
+                fg: item.status === "connected" ? theme().success : theme().error,
+              }}
+            >
+              •
+            </text>
+            <text fg={theme().textMuted}>
+              {item.id} {item.root}
+            </text>
+          </box>
+        )}
+      </For>
     </box>
   )
 }

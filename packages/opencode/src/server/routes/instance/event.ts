@@ -7,6 +7,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { AsyncQueue } from "@/util/queue"
 import "@/session/btw"
+import "@/tool/shell_thread"
 
 const log = Log.create({ service: "server" })
 

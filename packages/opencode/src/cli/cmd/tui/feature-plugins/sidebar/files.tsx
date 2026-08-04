@@ -47,15 +47,13 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
         ref={(value: BoxRenderable) => (container = value)}
         onMouseOut={closeIfOutside}
       >
-        <box flexDirection="row" gap={1} onMouseDown={() => list().length > 2 && setOpen((x) => !x)}>
+        <box flexDirection="row" gap={1} onMouseDown={() => setOpen((x) => !x)}>
           <text fg={theme().text}>
             <b>Modified Files</b>
           </text>
-          <Show when={list().length > 2}>
-            <text fg={theme().text}>{open() ? "▼" : "▶"}</text>
-          </Show>
+          <text fg={theme().textMuted}>{open() ? "▼" : "▶"}</text>
         </box>
-        <Show when={list().length <= 2 || open()}>
+        <Show when={open()}>
           <For each={list()}>
             {(item) => {
               const active = () => hover() === item.file

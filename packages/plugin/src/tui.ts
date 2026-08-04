@@ -286,6 +286,7 @@ export type TuiState = {
   part: (messageID: string) => ReadonlyArray<Part>
   lsp: () => ReadonlyArray<TuiSidebarLspItem>
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>
+  shellThread: (sessionID: string) => ReadonlyArray<TuiSidebarShellThreadItem>
 }
 
 type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "keybinds" | "plugin"> &
@@ -319,6 +320,14 @@ export type TuiSidebarFileItem = {
   file: string
   additions: number
   deletions: number
+}
+
+export type TuiSidebarShellThreadItem = {
+  threadID: string
+  status: "running" | "exited" | "stopped" | "failed"
+  description: string
+  startedAt: number
+  updatedAt: number
 }
 
 export type TuiHostSlotMap = {

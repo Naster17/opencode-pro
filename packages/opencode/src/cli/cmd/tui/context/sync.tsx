@@ -71,6 +71,14 @@ type QueuedPartDelta = {
   delta: string
 }
 
+type ShellThreadItem = {
+  threadID: string
+  status: "running" | "exited" | "stopped" | "failed"
+  description: string
+  startedAt: number
+  updatedAt: number
+}
+
 function partDeltaKey(input: QueuedPartDelta) {
   return `${input.messageID}:${input.partID}:${input.field}`
 }
@@ -120,6 +128,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       part: {
         [messageID: string]: Part[]
       }
+      shell_thread: {
+        [sessionID: string]: ShellThreadItem[]
+      }
       lsp: LspStatus[]
       mcp: {
         [key: string]: McpStatus
@@ -151,6 +162,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       todo: {},
       message: {},
       part: {},
+      shell_thread: {},
       lsp: [],
       mcp: {},
       mcp_resource: {},
@@ -488,6 +500,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 draft.splice(result.index, 1)
               }),
             )
+          break
+        }
+
+        case "shell_thread.updated": {
+          setStore("shell_thread", event.properties.sessionID, reconcile(event.properties.threads))
           break
         }
 

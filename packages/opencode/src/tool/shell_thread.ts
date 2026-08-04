@@ -1,10 +1,13 @@
 import { Config } from "@/config/config"
+import { Bus } from "@/bus"
+import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { Identifier } from "@/id/id"
 import { BashArity } from "@/permission/arity"
 import { Plugin } from "@/plugin"
 import { containsPath } from "@/project/instance-context"
 import { Shell } from "@/shell/shell"
+import { SessionID } from "@/session/schema"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect"
@@ -19,6 +22,23 @@ const MAX_BYTES = 256 * 1024
 const MAX_CHUNKS = 2_000
 
 const Signal = Schema.Literals(["SIGTERM", "SIGKILL", "SIGINT", "SIGHUP"])
+export const ThreadSnapshot = Schema.Struct({
+  threadID: Schema.String,
+  status: Schema.Literals(["running", "exited", "stopped", "failed"]),
+  description: Schema.String,
+  startedAt: Schema.Number,
+  updatedAt: Schema.Number,
+})
+export type ThreadSnapshot = Schema.Schema.Type<typeof ThreadSnapshot>
+export const Event = {
+  Updated: BusEvent.define(
+    "shell_thread.updated",
+    Schema.Struct({
+      sessionID: SessionID,
+      threads: Schema.Array(ThreadSnapshot),
+    }),
+  ),
+}
 const Parameters = Schema.Struct({
   action: Schema.Literals(["start", "read", "list", "stop"]).annotate({
     description: "Operation to perform: start, read, list, or stop",
@@ -42,7 +62,7 @@ type Chunk = {
 
 type Thread = {
   id: string
-  sessionID: string
+  sessionID: SessionID
   command: string
   description: string
   cwd: string
@@ -113,17 +133,17 @@ function commandSpec(shell: string, command: string, cwd: string, env: NodeJS.Pr
 
 export interface Interface {
   readonly start: (input: {
-    sessionID: string
+    sessionID: SessionID
     command: string
     description: string
     cwd: string
     env: NodeJS.ProcessEnv
     shell: string
   }) => Effect.Effect<Thread, unknown>
-  readonly get: (input: { sessionID: string; threadID: string }) => Effect.Effect<Thread>
-  readonly list: (sessionID: string) => Effect.Effect<Thread[]>
+  readonly get: (input: { sessionID: SessionID; threadID: string }) => Effect.Effect<Thread>
+  readonly list: (sessionID: SessionID) => Effect.Effect<Thread[]>
   readonly stop: (input: {
-    sessionID: string
+    sessionID: SessionID
     threadID: string
     signal?: Schema.Schema.Type<typeof Signal>
   }) => Effect.Effect<Thread, unknown>
@@ -135,6 +155,7 @@ export const layer: Layer.Layer<Service, never, ChildProcessSpawner> = Layer.eff
   Service,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner
+    const bus = yield* Bus.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("ShellThread.state")(function* () {
         const threads = new Map<string, Thread>()
@@ -149,7 +170,24 @@ export const layer: Layer.Layer<Service, never, ChildProcessSpawner> = Layer.eff
       }),
     )
 
-    const get = Effect.fn("ShellThread.get")(function* (input: { sessionID: string; threadID: string }) {
+    const snapshot = (thread: Thread): ThreadSnapshot => ({
+      threadID: thread.id,
+      status: thread.status,
+      description: thread.description,
+      startedAt: thread.startedAt,
+      updatedAt: thread.updatedAt,
+    })
+
+    const publish = Effect.fn("ShellThread.publish")(function* (s: State, sessionID: SessionID) {
+      yield* bus.publish(Event.Updated, {
+        sessionID,
+        threads: Array.from(s.threads.values())
+          .filter((thread) => thread.sessionID === sessionID && thread.status === "running")
+          .map(snapshot),
+      })
+    })
+
+    const get = Effect.fn("ShellThread.get")(function* (input: { sessionID: SessionID; threadID: string }) {
       const thread = (yield* InstanceState.get(state)).threads.get(input.threadID)
       if (!thread || thread.sessionID !== input.sessionID) throw new Error(`Shell thread not found: ${input.threadID}`)
       return thread
@@ -162,7 +200,7 @@ export const layer: Layer.Layer<Service, never, ChildProcessSpawner> = Layer.eff
     })
 
     const start = Effect.fn("ShellThread.start")(function* (input: {
-      sessionID: string
+      sessionID: SessionID
       command: string
       description: string
       cwd: string
@@ -191,6 +229,7 @@ export const layer: Layer.Layer<Service, never, ChildProcessSpawner> = Layer.eff
         scope,
       }
       s.threads.set(thread.id, thread)
+      yield* publish(s, thread.sessionID)
 
       yield* Scope.provide(scope)(
         Stream.runForEach(Stream.decodeText(handle.all), (chunk) => Effect.sync(() => append(thread, chunk))).pipe(
@@ -214,14 +253,14 @@ export const layer: Layer.Layer<Service, never, ChildProcessSpawner> = Layer.eff
               thread.error = error.message
               thread.exitCode = null
               thread.updatedAt = Date.now()
-            }),
+            }).pipe(Effect.andThen(publish(s, thread.sessionID))),
           onSuccess: (code) =>
             Effect.sync(() => {
               if (thread.status === "stopped") return
               thread.status = "exited"
               thread.exitCode = code
               thread.updatedAt = Date.now()
-            }),
+            }).pipe(Effect.andThen(publish(s, thread.sessionID))),
         }),
         Effect.forkIn(scope),
       )
@@ -230,7 +269,7 @@ export const layer: Layer.Layer<Service, never, ChildProcessSpawner> = Layer.eff
     })
 
     const stop = Effect.fn("ShellThread.stop")(function* (input: {
-      sessionID: string
+      sessionID: SessionID
       threadID: string
       signal?: Schema.Schema.Type<typeof Signal>
     }) {
@@ -243,6 +282,7 @@ export const layer: Layer.Layer<Service, never, ChildProcessSpawner> = Layer.eff
           .pipe(Effect.ignore)
       }
       yield* Scope.close(thread.scope, Exit.void).pipe(Effect.ignore)
+      yield* publish(yield* InstanceState.get(state), thread.sessionID)
       return thread
     })
 
@@ -420,6 +460,6 @@ export const ShellThreadTool = Tool.define<
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide(CrossSpawnSpawner.defaultLayer), Layer.provide(Bus.layer))
 
 export * as ShellThread from "./shell_thread"

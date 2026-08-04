@@ -278,36 +278,36 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       <text fg={theme().text}>
         <b>Metrics</b>
       </text>
-      <box flexDirection="row">
-        <box width={totalStats().columnGap}>{totalStats().ctx}</box>
-        <Show when={usage().additions > 0 || usage().deletions > 0}>{totalStats().code}</Show>
-      </box>
-      <box flexDirection="row">
-        <box width={totalStats().columnGap}>{totalStats().in}</box>
-        {totalStats().out}
-      </box>
-      <box flexDirection="row">
-        <box width={totalStats().columnGap}>{totalStats().total}</box>
-        {totalStats().cached}
-      </box>
-      <box flexDirection="row">
-        <box width={totalStats().columnGap}>{totalStats().tools}</box>
-        {totalStats().compact}
-      </box>
-      <box flexDirection="row">
-        <box width={totalStats().columnGap}>{totalStats().spent}</box>
-        {totalStats().avg}
-      </box>
-      <Show when={codexStats()}>
-        <box marginTop={1}>
-          <text fg={theme().text}>
-            <b>Codex Usage</b>
-          </text>
+        <box flexDirection="row">
+          <box width={totalStats().columnGap}>{totalStats().ctx}</box>
+          <Show when={usage().additions > 0 || usage().deletions > 0}>{totalStats().code}</Show>
         </box>
-        {codexStats()?.usage}
-        {codexStats()?.reset}
-        {codexStats()?.account}
-      </Show>
+        <box flexDirection="row">
+          <box width={totalStats().columnGap}>{totalStats().in}</box>
+          {totalStats().out}
+        </box>
+        <box flexDirection="row">
+          <box width={totalStats().columnGap}>{totalStats().total}</box>
+          {totalStats().cached}
+        </box>
+        <box flexDirection="row">
+          <box width={totalStats().columnGap}>{totalStats().tools}</box>
+          {totalStats().compact}
+        </box>
+        <box flexDirection="row">
+          <box width={totalStats().columnGap}>{totalStats().spent}</box>
+          {totalStats().avg}
+        </box>
+        <Show when={codexStats()}>
+          <box marginTop={1}>
+            <text fg={theme().text}>
+              <b>Codex Usage</b>
+            </text>
+          </box>
+          {codexStats()?.usage}
+          {codexStats()?.reset}
+          {codexStats()?.account}
+        </Show>
     </box>
   )
 }

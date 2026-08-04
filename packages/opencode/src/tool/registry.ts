@@ -339,7 +339,7 @@ export const layer: Layer.Layer<
 
     return Service.of({ ids, all, named, tools })
   }),
-).pipe(Layer.provide(ShellThread.defaultLayer))
+).pipe(Layer.provide(ShellThread.layer))
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(

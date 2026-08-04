@@ -4,6 +4,7 @@ import SidebarMetrics from "../feature-plugins/sidebar/context"
 import SidebarMcp from "../feature-plugins/sidebar/mcp"
 import SidebarLsp from "../feature-plugins/sidebar/lsp"
 import SidebarTodo from "../feature-plugins/sidebar/todo"
+import SidebarShellThreads from "../feature-plugins/sidebar/shell-threads"
 import SidebarFiles from "../feature-plugins/sidebar/files"
 import SidebarFooter from "../feature-plugins/sidebar/footer"
 import PluginManager from "../feature-plugins/system/plugins"
@@ -24,6 +25,7 @@ export const INTERNAL_TUI_PLUGINS: InternalTuiPlugin[] = [
   SidebarMcp,
   SidebarLsp,
   SidebarTodo,
+  SidebarShellThreads,
   SidebarFiles,
   SidebarFooter,
   PluginManager,

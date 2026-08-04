@@ -189,6 +189,9 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
           error: item.status === "failed" ? item.error : undefined,
         }))
     },
+    shellThread(sessionID) {
+      return sync.data.shell_thread[sessionID] ?? []
+    },
   }
 }
 

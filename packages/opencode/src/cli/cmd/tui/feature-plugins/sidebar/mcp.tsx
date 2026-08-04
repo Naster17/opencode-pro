@@ -28,21 +28,18 @@ function View(props: { api: TuiPluginApi }) {
   return (
     <Show when={list().length > 0}>
       <box>
-        <box flexDirection="row" gap={1} onMouseDown={() => list().length > 2 && setOpen((x) => !x)}>
-          <Show when={list().length > 2}>
-            <text fg={theme().text}>{open() ? "▼" : "▶"}</text>
-          </Show>
+        <box flexDirection="row" gap={1} onMouseDown={() => setOpen((x) => !x)}>
           <text fg={theme().text}>
             <b>MCP</b>
-            <Show when={!open()}>
-              <span style={{ fg: theme().textMuted }}>
-                {" "}
-                ({on()} active{bad() > 0 ? `, ${bad()} error${bad() > 1 ? "s" : ""}` : ""})
-              </span>
-            </Show>
           </text>
+          <text fg={theme().textMuted}>{open() ? "▼" : "▶"}</text>
+          <Show when={!open()}>
+            <text fg={theme().textMuted}>
+              ({on()} active{bad() > 0 ? `, ${bad()} error${bad() > 1 ? "s" : ""}` : ""})
+            </text>
+          </Show>
         </box>
-        <Show when={list().length <= 2 || open()}>
+        <Show when={open()}>
           <For each={list()}>
             {(item) => (
               <box flexDirection="row" gap={1}>
@@ -79,7 +76,7 @@ function View(props: { api: TuiPluginApi }) {
 
 const tui: TuiPlugin = async (api) => {
   api.slots.register({
-    order: 200,
+    order: 350,
     slots: {
       sidebar_content() {
         return <View api={api} />

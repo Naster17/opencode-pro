@@ -25,6 +25,7 @@ export type Event =
   | EventSessionStatus
   | EventSessionIdle
   | EventSessionCompacted
+  | EventShellThreadUpdated1
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow1
@@ -798,6 +799,7 @@ export type GlobalEvent = {
     | EventSessionStatus
     | EventSessionIdle
     | EventSessionCompacted
+    | EventShellThreadUpdated
     | EventTuiPromptAppend
     | EventTuiCommandExecute
     | EventTuiToastShow
@@ -2489,6 +2491,21 @@ export type EventSessionCompacted = {
   }
 }
 
+export type EventShellThreadUpdated = {
+  id: string
+  type: "shell_thread.updated"
+  properties: {
+    sessionID: string
+    threads: Array<{
+      threadID: string
+      status: "running" | "exited" | "stopped" | "failed"
+      description: string
+      startedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }>
+  }
+}
+
 export type EventMcpToolsChanged = {
   id: string
   type: "mcp.tools.changed"
@@ -3322,6 +3339,21 @@ export type SessionMessage =
   | SessionMessageShell
   | SessionMessageAssistant
   | SessionMessageCompaction
+
+export type EventShellThreadUpdated1 = {
+  id: string
+  type: "shell_thread.updated"
+  properties: {
+    sessionID: string
+    threads: Array<{
+      threadID: string
+      status: "running" | "exited" | "stopped" | "failed"
+      description: string
+      startedAt: number | "NaN" | "Infinity" | "-Infinity"
+      updatedAt: number | "NaN" | "Infinity" | "-Infinity"
+    }>
+  }
+}
 
 export type EventTuiToastShow1 = {
   id: string
