@@ -6,7 +6,6 @@ import z from "zod"
 import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
-import { SessionRunState } from "@/session/run-state"
 import { SessionCompaction } from "@/session/compaction"
 import { SessionRevert } from "@/session/revert"
 import { SessionShare } from "@/share/session"
@@ -771,9 +770,7 @@ export const SessionRoutes = lazy(() =>
       async (c) =>
         jsonRequest("SessionRoutes.deleteMessage", c, function* () {
           const params = c.req.valid("param")
-          const state = yield* SessionRunState.Service
           const session = yield* Session.Service
-          yield* state.assertNotBusy(params.sessionID)
           yield* session.removeMessage({
             sessionID: params.sessionID,
             messageID: params.messageID,

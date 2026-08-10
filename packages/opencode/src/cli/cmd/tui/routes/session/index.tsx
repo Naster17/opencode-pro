@@ -23,7 +23,7 @@ import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { selectedForeground, tint, useTheme } from "@tui/context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
-import { Prompt, type BtwSubmission, type PromptRef } from "@tui/component/prompt"
+import { Prompt, type BtwSubmission, type DeferredHold, type PromptRef } from "@tui/component/prompt"
 import type {
   AssistantMessage,
   Part,
@@ -52,6 +52,7 @@ import type { SubagentTool } from "@/tool/subagent"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
+import { produce } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useEditorContext } from "@tui/context/editor"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -93,6 +94,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { SessionRetry } from "@/session/retry"
+import { MessageID } from "@/session/schema"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { Token } from "@/util/token"
 import * as SystemPrompt from "@/session/system"
@@ -211,6 +213,89 @@ export function Session() {
   const pending = createMemo(() => {
     return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
   })
+
+  // A user message is QUEUED while the loop hasn't started a turn for it yet
+  // (its id is newer than the in-flight assistant). It's already on the
+  // server and will be injected mid-loop; the pending strip only restyles it.
+  // It enters the conversation inline once the loop starts answering it.
+  function isQueued(message: { id: string; role: string }): boolean {
+    if ((sync.data.session_status[route.sessionID]?.type ?? "idle") === "idle") return false
+    const p = pending()
+    if (!p) return false
+    return message.role === "user" && message.id > p
+  }
+  const queuedMessages = createMemo(() => messages().filter(isQueued))
+
+  // Messages drafted with the defer keybind while the agent is busy are HELD
+  // locally: they render in the pending strip above the prompt (never inline
+  // in history) and are delivered as brand-new messages once the loop fully
+  // ends, like a user who waited for the answer before hitting Enter. An
+  // empty-input defer press deepens the last held message by one cycle, so
+  // "HELD ×N" goes out at the Nth loop end instead of the next one.
+  const [heldItems, setHeldItems] = createSignal<DeferredHold[]>([])
+  // How long the session must stay idle before held messages are released.
+  // Guards against transient "idle" events emitted mid-run (e.g. error halt):
+  // a still-running loop flips back to busy at the top of its next iteration.
+  const HELD_SETTLE_DELAY = 500
+  const heldIds = createMemo(() => new Set(heldItems().map((i) => i.messageID)))
+
+  // Combined pending strip (held + server-queued), oldest first. Both are
+  // ordered by their submit-time ascending ids, so one sort interleaves them
+  // in the exact order the user drafted them.
+  const pendingStrip = createMemo(() => {
+    const held = heldItems().map((item) => ({ kind: "held" as const, id: item.messageID, item }))
+    const queued = queuedMessages().map((message) => ({ kind: "queued" as const, id: message.id, message }))
+    return [...held, ...queued].sort((a, b) => (a.id === b.id ? 0 : a.id < b.id ? -1 : 1))
+  })
+
+  function onDeferHold(item: DeferredHold) {
+    setHeldItems((prev) => [...prev, item])
+  }
+
+  // Empty-input defer submit: push the last held message one cycle deeper, so
+  // it goes out one agentic loop end later (shown as "HELD ×N" in the strip).
+  function onDeferDeepen() {
+    setHeldItems((prev) => {
+      const last = prev[prev.length - 1]
+      if (!last) return prev
+      return [...prev.slice(0, -1), { ...last, cycles: last.cycles + 1 }]
+    })
+  }
+
+  // Drop the oldest pending message (held or server-queued, one per call).
+  // Held = client-only removal; queued = server delete (now permitted while
+  // busy) plus local part cleanup. Returns false when nothing is left to
+  // cancel, so the caller falls back to aborting the agent.
+  async function cancelOldestPending(): Promise<boolean> {
+    // Held ids are minted at submit time and sort ascending like any other
+    // message id, so a plain sort picks the globally oldest candidate.
+    const target = [...heldItems().map((i) => i.messageID), ...queuedMessages().map((m) => m.id)].sort()[0]
+    if (!target) return false
+    if (heldIds().has(target)) {
+      setHeldItems((prev) => prev.filter((i) => i.messageID !== target))
+      return true
+    }
+    await sdk.client.session.deleteMessage({ sessionID: route.sessionID, messageID: target }).catch(() => {})
+    sync.set(
+      produce((draft) => {
+        delete draft.part[target]
+      }),
+    )
+    return true
+  }
+
+  // Held messages never enter the history store, so unmount only drops them.
+  onCleanup(() => setHeldItems([]))
+
+  // Single-line preview of message parts for the pending strip.
+  function previewText(parts: Part[]): string {
+    const line = parts
+      .flatMap((part) => (part.type === "text" && !part.synthetic ? [part.text] : []))
+      .join(" ")
+      .split("\n")[0]
+    if (line.length > 120) return line.slice(0, 119).trimEnd() + "…"
+    return line || "…"
+  }
 
   const lastAssistant = createMemo(() => {
     return messages().findLast((x) => x.role === "assistant")
@@ -605,6 +690,53 @@ export function Session() {
       if (dontShowAgain) kv.set(GO_UPSELL_DONT_SHOW, true)
       kv.set(GO_UPSELL_LAST_SEEN_AT, Date.now())
     })
+  })
+
+  // Release HELD messages (deferred submit, held locally while busy) in FIFO
+  // order once the agentic loop fully ends. The loop can emit a transient
+  // "idle" from mid-run error handling before continuing to the next iteration
+  // (the status flips back to busy at the top of the loop), so only release
+  // after the session stays idle for a settle window — releasing on a
+  // transient idle would let the server inject the message mid-loop like a
+  // regular queued message.
+  event.on("session.status", (evt) => {
+    if (evt.properties.sessionID !== route.sessionID) return
+    if (evt.properties.status.type !== "idle") return
+    setTimeout(() => {
+      if ((sync.data.session_status[route.sessionID]?.type ?? "idle") !== "idle") return
+      if (heldItems().length === 0) return
+      // One full loop end passed: every staged message moves one cycle closer
+      // to delivery; only those reaching zero go out now, the rest keep
+      // waiting (e.g. HELD ×2 fires after the next turn completes too).
+      const ticked = heldItems().map((item) => ({ ...item, cycles: item.cycles - 1 }))
+      const ready = ticked.filter((item) => item.cycles <= 0)
+      // Stall guard: the loop is over, so nothing would ever produce another
+      // loop end — release the closest-to-ready message(s) anyway instead of
+      // parking the strip forever.
+      const min = Math.min(...ticked.map((item) => item.cycles))
+      const release = ready.length > 0 ? ready : ticked.filter((item) => item.cycles === min)
+      setHeldItems(ticked.filter((item) => !release.includes(item)))
+      for (const item of release) {
+        // Mint a fresh id at release time: history sorts by ascending id, so
+        // the hold-time id would land the message in the middle of history,
+        // where the loop treats it as already answered and exits without ever
+        // responding. A fresh id makes it the newest message and starts a
+        // real new turn, as if the user waited out the answer and hit Enter.
+        const messageID = MessageID.ascending()
+        sync.set(
+          produce((draft) => {
+            const store = draft.message[item.sessionID] ?? []
+            store.push({ ...item.optimisticMessage, id: messageID, time: { created: Date.now() } })
+            draft.message[item.sessionID] = store
+            draft.part[messageID] = item.optimisticParts.map((part) => ({ ...part, messageID }))
+          }),
+        )
+        void sdk.client.session
+          .promptAsync({ ...item.asyncArgs, messageID })
+          .catch(() => {})
+      }
+      toBottom()
+    }, HELD_SETTLE_DELAY)
   })
 
   event.on("session.next.reasoning.started", (evt) => {
@@ -1632,8 +1764,10 @@ export function Session() {
 
   const renderedMessages = createMemo(() => {
     const cutoff = visualClearAfter()
-    if (!cutoff) return messages()
-    return messages().filter((message) => message.id > cutoff)
+    const history = cutoff ? messages().filter((message) => message.id > cutoff) : messages()
+    // Queued user messages live in the pending strip until the loop starts a
+    // turn for them; only then do they enter the conversation inline.
+    return history.filter((message) => !isQueued(message))
   })
   const renderedBtwTurnsAfter = (message: AssistantMessage | UserMessage, index: number) => {
     const next = renderedMessages()[index + 1]
@@ -1897,7 +2031,6 @@ export function Session() {
                           }}
                           message={message as UserMessage}
                           parts={sync.data.part[message.id] ?? []}
-                          pending={pending()}
                         />
                       </Match>
                       <Match when={message.role === "assistant"}>
@@ -1934,6 +2067,45 @@ export function Session() {
               <Show when={session()?.parentID}>
                 <SubagentFooter />
               </Show>
+              <Show when={pendingStrip().length > 0}>
+                <box flexDirection="column" flexShrink={0} paddingLeft={2} paddingRight={2} paddingTop={1}>
+                  <For each={pendingStrip()}>
+                    {(entry) => {
+                      // Deeper-staged held messages (HELD ×2+) render subdued:
+                      // muted background with the agent color only in the text.
+                      const depth = entry.kind === "held" ? entry.item.cycles : 1
+                      const label =
+                        entry.kind === "held" ? (depth > 1 ? ` HELD ×${depth} ` : " HELD ") : " QUEUED "
+                      const color = createMemo(() =>
+                        local.agent.color(
+                          entry.kind === "held" ? entry.item.optimisticMessage.agent : entry.message.agent,
+                        ),
+                      )
+                      const fg = createMemo(() => selectedForeground(theme, color()))
+                      return (
+                        <box flexDirection="row" gap={1}>
+                          <text>
+                            <span
+                              style={
+                                entry.kind === "held" && depth > 1
+                                  ? { bg: theme.backgroundElement, fg: color(), bold: true }
+                                  : { bg: color(), fg: fg(), bold: true }
+                              }
+                            >
+                              {label}
+                            </span>
+                          </text>
+                          <text fg={theme.textMuted}>
+                            {entry.kind === "held"
+                              ? previewText(entry.item.optimisticParts)
+                              : previewText(sync.data.part[entry.message.id] ?? [])}
+                          </text>
+                        </box>
+                      )
+                    }}
+                  </For>
+                </box>
+              </Show>
               <Show when={visible()}>
                 <TuiPluginRuntime.Slot
                   name="session_prompt"
@@ -1949,6 +2121,9 @@ export function Session() {
                     ref={bind}
                     disabled={disabled()}
                     onBtwSubmit={submitBtw}
+                    onDeferHold={onDeferHold}
+                    onDeferDeepen={onDeferDeepen}
+                    cancelOldestPending={cancelOldestPending}
                     activeActionLabel={activeActionLabel}
                     onSubmit={() => {
                       toBottom()
@@ -2002,7 +2177,6 @@ function UserMessage(props: {
   parts: Part[]
   onMouseUp: () => void
   index: number
-  pending?: string
 }) {
   const ctx = use()
   const local = useLocal()
@@ -2020,10 +2194,7 @@ function UserMessage(props: {
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
-  const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => local.agent.color(props.message.agent))
-  const queuedFg = createMemo(() => selectedForeground(theme, color()))
-  const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
 
@@ -2053,7 +2224,7 @@ function UserMessage(props: {
           >
             <text fg={theme.text}>{text()}</text>
             <Show when={files().length}>
-              <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
+              <box flexDirection="row" paddingBottom={ctx.showTimestamps() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
                 <For each={files()}>
                   {(file) => {
                     const bg = createMemo(() => {
@@ -2071,20 +2242,11 @@ function UserMessage(props: {
                 </For>
               </box>
             </Show>
-            <Show
-              when={queued()}
-              fallback={
-                <Show when={ctx.showTimestamps()}>
-                  <text fg={theme.textMuted}>
-                    <span style={{ fg: theme.textMuted }}>
-                      {Locale.todayTimeOrDateTime(props.message.time.created)}
-                    </span>
-                  </text>
-                </Show>
-              }
-            >
+            <Show when={ctx.showTimestamps()}>
               <text fg={theme.textMuted}>
-                <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+                <span style={{ fg: theme.textMuted }}>
+                  {Locale.todayTimeOrDateTime(props.message.time.created)}
+                </span>
               </text>
             </Show>
           </box>

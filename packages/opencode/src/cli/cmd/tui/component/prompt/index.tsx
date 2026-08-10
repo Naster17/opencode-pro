@@ -58,6 +58,9 @@ export type PromptProps = {
   disabled?: boolean
   onSubmit?: () => void
   onBtwSubmit?: (input: BtwSubmission) => Promise<void> | void
+  onDeferHold?: (item: DeferredHold) => void
+  onDeferDeepen?: () => void
+  cancelOldestPending?: () => Promise<boolean>
   activeActionLabel?: () => string | undefined
   ref?: (ref: PromptRef | undefined) => void
   hint?: JSX.Element
@@ -67,6 +70,24 @@ export type PromptProps = {
     normal?: string[]
     shell?: string[]
   }
+}
+
+/** Args object forwarded to sdk.client.session.promptAsync, captured at submit time
+ *  so a held (deferred) message can be sent later unchanged. */
+export type PromptAsyncArgs = Parameters<ReturnType<typeof useSDK>["client"]["session"]["promptAsync"]>[0]
+
+/** A message drafted with the defer keybind and held locally until the agent loop fully ends. */
+export type DeferredHold = {
+  /** Hold-time id, used for cancel matching. Replaced with a fresh ascending id at release. */
+  messageID: string
+  sessionID: string
+  /** How many agentic loop ends this message still waits out before delivery; 1 = the next one. */
+  cycles: number
+  /** Ready-made optimistic history entry (re-ided at release time). */
+  optimisticMessage: UserMessage
+  optimisticParts: Part[]
+  /** Original promptAsync args; released with the re-minted messageID. */
+  asyncArgs: PromptAsyncArgs
 }
 
 export type BtwSubmission = {
@@ -623,6 +644,7 @@ export function Prompt(props: PromptProps) {
             return
           }
           if (!props.sessionID) return
+          const sessionID = props.sessionID
 
           setStore("interrupt", store.interrupt + 1)
 
@@ -631,10 +653,13 @@ export function Prompt(props: PromptProps) {
           }, 5000)
 
           if (store.interrupt >= 2) {
-            void sdk.client.session.abort({
-              sessionID: props.sessionID,
-            })
             setStore("interrupt", 0)
+            // Double-press: first drain any pending queued/held messages (one per
+            // double-press). Only when none remain do we actually abort the agent.
+            void props.cancelOldestPending?.().then((cancelled) => {
+              if (cancelled) return
+              void sdk.client.session.abort({ sessionID })
+            })
           }
           dialog.clear()
         },
@@ -995,7 +1020,7 @@ export function Prompt(props: PromptProps) {
     },
   ])
 
-  async function submit() {
+  async function submit(options?: { defer?: boolean }) {
     setWarpNotice(undefined)
 
     // IME: double-defer may fire before onContentChange flushes the last
@@ -1204,6 +1229,11 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
+      // Held (deferred) submits are only deferred while the session is actually
+      // running (busy or retrying); when idle they go out immediately, exactly
+      // like a normal submit. Capture the status before the optimistic write
+      // below marks the session busy.
+      const defer = !!options?.defer && status().type !== "idle"
       const optimisticMessage: UserMessage = {
         id: messageID,
         sessionID,
@@ -1223,34 +1253,46 @@ export function Prompt(props: PromptProps) {
       }))
       sync.set(
         produce((draft) => {
-          const messages = draft.message[sessionID] ?? []
-          const result = messages.findIndex((item) => item.id === messageID)
-          if (result >= 0) messages[result] = optimisticMessage
-          else messages.push(optimisticMessage)
-          draft.message[sessionID] = messages
-          draft.part[messageID] = optimisticParts
+          // Held (deferred) messages stay client-only until release: the
+          // session route renders them in a pinned strip above the prompt
+          // instead of inline in the message history.
+          if (!defer) {
+            const messages = draft.message[sessionID] ?? []
+            const result = messages.findIndex((item) => item.id === messageID)
+            if (result >= 0) messages[result] = optimisticMessage
+            else messages.push(optimisticMessage)
+            draft.message[sessionID] = messages
+            draft.part[messageID] = optimisticParts
+          }
           draft.session_status[sessionID] = { type: "busy" }
         }),
       )
-      sdk.client.session
-        .promptAsync({
-          sessionID,
-          ...selectedModel,
-          messageID,
-          agent: agent.name,
-          model: selectedModel,
-          variant,
-          parts: requestParts,
-        })
-        .catch(() => {
-          sync.set(
-            produce((draft) => {
-              draft.message[sessionID] = (draft.message[sessionID] ?? []).filter((item) => item.id !== messageID)
-              delete draft.part[messageID]
-              draft.session_status[sessionID] = { type: "idle" }
-            }),
-          )
-        })
+      const asyncArgs: PromptAsyncArgs = {
+        sessionID,
+        ...selectedModel,
+        messageID,
+        agent: agent.name,
+        model: selectedModel,
+        variant,
+        parts: requestParts,
+      }
+      // Held (deferred) messages are sent later by the route once the session
+      // goes idle; while busy the message stays client-side instead of firing.
+      if (defer) {
+        props.onDeferHold?.({ messageID, sessionID, cycles: 1, optimisticMessage, optimisticParts, asyncArgs })
+      } else {
+        sdk.client.session
+          .promptAsync(asyncArgs)
+          .catch(() => {
+            sync.set(
+              produce((draft) => {
+                draft.message[sessionID] = (draft.message[sessionID] ?? []).filter((item) => item.id !== messageID)
+                delete draft.part[messageID]
+                draft.session_status[sessionID] = { type: "idle" }
+              }),
+            )
+          })
+      }
       if (editorParts.length > 0) editor.markSelectionSent()
     }
     history.append({
@@ -1507,6 +1549,20 @@ export function Prompt(props: PromptProps) {
               onKeyDown={async (e) => {
                 if (props.disabled) {
                   e.preventDefault()
+                  return
+                }
+                // Defer keybind (ctrl+return / alt+return): submit and hold the
+                // message until the agent loop fully ends. With an empty input
+                // it instead deepens the last held message by one cycle
+                // ("deliver one loop end later"), shown as HELD ×N.
+                if (keybind.match("input_defer_submit", e)) {
+                  e.preventDefault()
+                  if (!store.prompt.input) {
+                    props.onDeferDeepen?.()
+                    return
+                  }
+                  // same IME double-defer as the textarea onSubmit path
+                  setTimeout(() => setTimeout(() => submit({ defer: true }), 0), 0)
                   return
                 }
                 // Check clipboard for images before terminal-handled paste runs.
