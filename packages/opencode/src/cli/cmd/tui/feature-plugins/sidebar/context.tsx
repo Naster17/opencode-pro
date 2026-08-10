@@ -236,7 +236,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       cached: formatRow("cached", Locale.number(usage().cached), rightWidth),
       tools: formatRow("tools", usage().tools.toString(), leftWidth),
       compact: formatRow("compact", usage().compact.toString(), rightWidth),
-      spent: formatRow("spent", money.format(usage().cost), leftWidth),
+      spent: formatRow("spent", money(usage().cost), leftWidth),
       avg: formatRow("avg.gen", usage().avg_tokens_per_second.replace(" t/s", "t/s"), rightWidth),
       code: (
         <text wrapMode="none">

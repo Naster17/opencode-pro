@@ -4,12 +4,20 @@ const ACTIVE_EVENT_SPAN_MS = 30 * 1000
 const ACTIVE_IDLE_GAP_MS = 5 * 60 * 1000
 const CHARS_PER_TOKEN = 4
 
-export const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 4,
-  maximumFractionDigits: 4,
-})
+const moneyFormatters = [0, 1, 2, 3, 4].map(
+  (digits) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    }),
+)
+
+export function money(value: number) {
+  const integerDigits = Math.floor(Math.abs(value)).toString().length
+  return moneyFormatters[Math.max(0, 5 - integerDigits)].format(value)
+}
 
 export function formatCompactTokens(value: number) {
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(value >= 10_000_000_000 ? 0 : 1)}B`

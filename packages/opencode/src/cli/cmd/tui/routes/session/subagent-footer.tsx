@@ -49,7 +49,7 @@ export function SubagentFooter() {
     return {
       context: pct ? `${Locale.number(summary.context_tokens)} (${pct})` : Locale.number(summary.context_tokens),
       total: `total ${Locale.number(summary.tokens)}`,
-      cost: money.format(summary.cost),
+      cost: money(summary.cost),
     }
   })
 

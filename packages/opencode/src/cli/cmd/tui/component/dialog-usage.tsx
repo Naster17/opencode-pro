@@ -194,8 +194,8 @@ export function DialogUsage() {
   })
 
   const spentRow = createMemo(() => {
-    const left = `spent ${money.format(overviewUsage().cost)}`
-    const right = `avg/session ${money.format(overviewUsage().avg_spent_per_session)}`
+    const left = `spent ${money(overviewUsage().cost)}`
+    const right = `avg/session ${money(overviewUsage().avg_spent_per_session)}`
     return formatAlignedRow(left, right, Math.max(left.length, 18) + 1)
   })
 
@@ -204,7 +204,7 @@ export function DialogUsage() {
   const sessions = createMemo(() => sessionsUsage().session_usage)
   const models = createMemo(() => modelsUsage().model_usage)
   const sessionSpentWidth = createMemo(() =>
-    Math.max("spent".length, ...sessions().map((item) => money.format(item.cost).length)),
+    Math.max("spent".length, ...sessions().map((item) => money(item.cost).length)),
   )
   const sessionTokensWidth = createMemo(() =>
     Math.max("tokens".length, ...sessions().map((item) => formatCompactTokens(item.tokens).length)),
@@ -217,7 +217,7 @@ export function DialogUsage() {
     Math.max("tokens".length, ...models().map((item) => formatCompactTokens(item.tokens).length)),
   )
   const modelSpentWidth = createMemo(() =>
-    Math.max("spent".length, ...models().map((item) => money.format(item.cost).length)),
+    Math.max("spent".length, ...models().map((item) => money(item.cost).length)),
   )
   const modelTitleWidth = createMemo(() =>
     Math.max(12, contentWidth - 1 - modelCallsWidth() - 2 - modelTokensWidth() - 2 - modelSpentWidth()),
@@ -433,7 +433,7 @@ export function DialogUsage() {
                     fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted}
                     wrapMode="none"
                   >
-                    {money.format(item.cost).padStart(sessionSpentWidth(), " ")}
+                    {money(item.cost).padStart(sessionSpentWidth(), " ")}
                   </text>
                 </box>
                 <box width={2}>
@@ -564,7 +564,7 @@ export function DialogUsage() {
                     fg={active && mode() === "content" ? selectedForeground(theme, bg) : theme.textMuted}
                     wrapMode="none"
                   >
-                    {money.format(item.cost).padStart(modelSpentWidth(), " ")}
+                    {money(item.cost).padStart(modelSpentWidth(), " ")}
                   </text>
                 </box>
               </box>
