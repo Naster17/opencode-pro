@@ -9,7 +9,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
 import z from "zod"
 import path from "path"
-import { readFileSync, readdirSync, existsSync } from "fs"
+import { readFileSync, readdirSync, existsSync, renameSync } from "fs"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
 import { InstanceState } from "@/effect/instance-state"
@@ -55,6 +55,56 @@ function applyMigrations(db: SQLiteBunDatabase, entries: Journal) {
   migrateFromJournal(db, entries)
 }
 
+function configureDatabase(db: SQLiteBunDatabase) {
+  db.run("PRAGMA journal_mode = WAL")
+  db.run("PRAGMA synchronous = NORMAL")
+  db.run("PRAGMA busy_timeout = 5000")
+  db.run("PRAGMA cache_size = -64000")
+  db.run("PRAGMA foreign_keys = ON")
+  db.run("PRAGMA wal_checkpoint(PASSIVE)")
+}
+
+function isSqliteIdempotenceConflict(error: unknown): boolean {
+  let current: unknown = error
+  for (let depth = 0; depth < 5 && current; depth++) {
+    if (current instanceof Error && current.name === "SQLiteError") {
+      return /already exists|duplicate column name/i.test(current.message)
+    }
+    current = current instanceof Error ? current.cause : undefined
+  }
+  return false
+}
+
+function sqliteCauseMessage(error: unknown): string {
+  const parts: string[] = []
+  let current: unknown = error
+  for (let depth = 0; depth < 8 && current; depth++) {
+    if (current instanceof Error && current.message) parts.push(current.message)
+    current = current instanceof Error ? current.cause : undefined
+  }
+  return [...new Set(parts)].join(" Caused by: ")
+}
+
+// An existing database written by a different migration lineage (an older
+// opencode build) has a __drizzle_migrations journal whose names never match
+// ours, so drizzle re-runs every bundled migration against an already-populated
+// schema. Back those files up so the binary can boot against a fresh database;
+// the old data is preserved in the backup.
+function backupIncompatibleDatabase(db: { $client: { close(): void } }, entries: Journal) {
+  if (Path === ":memory:") return
+  db.$client.close()
+  const suffix = `.backup-${new Date().toISOString().replace(/[:.]/g, "")}`
+  const backup = Path + suffix
+  for (const file of [Path, `${Path}-wal`, `${Path}-shm`]) {
+    if (!existsSync(file)) continue
+    renameSync(file, file + suffix)
+  }
+  log.warn("detected incompatible pre-existing database; backed up and recreated fresh", {
+    backup,
+    applied: entries.length,
+  })
+}
+
 function time(tag: string) {
   const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(tag)
   if (!match) return 0
@@ -92,13 +142,7 @@ export const Client = lazy(() => {
   log.info("opening database", { path: Path })
 
   const db = init(Path)
-
-  db.run("PRAGMA journal_mode = WAL")
-  db.run("PRAGMA synchronous = NORMAL")
-  db.run("PRAGMA busy_timeout = 5000")
-  db.run("PRAGMA cache_size = -64000")
-  db.run("PRAGMA foreign_keys = ON")
-  db.run("PRAGMA wal_checkpoint(PASSIVE)")
+  configureDatabase(db)
 
   // Apply schema migrations
   const entries =
@@ -115,7 +159,25 @@ export const Client = lazy(() => {
         item.sql = "select 1;"
       }
     }
-    applyMigrations(db, entries)
+    try {
+      applyMigrations(db, entries)
+    } catch (error) {
+      if (!isSqliteIdempotenceConflict(error)) {
+        if (error instanceof Error && error.cause) {
+          error.message += `\nCaused by: ${sqliteCauseMessage(error.cause)}`
+        }
+        throw error
+      }
+
+      // A database created by a different migration lineage re-runs every
+      // migration and fails on the first already-present table or column.
+      // Back it up, then start from a fresh database so the app can boot.
+      backupIncompatibleDatabase(db, entries)
+      const fresh = init(Path)
+      configureDatabase(fresh)
+      applyMigrations(fresh, entries)
+      return fresh
+    }
   }
 
   return db
