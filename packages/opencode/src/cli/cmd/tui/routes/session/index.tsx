@@ -13,6 +13,7 @@ import {
   Show,
   Switch,
   useContext,
+  untrack,
 } from "solid-js"
 import path from "path"
 import { useRoute, useRouteData } from "@tui/context/route"
@@ -52,7 +53,7 @@ import type { SubagentTool } from "@/tool/subagent"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import { produce } from "solid-js/store"
+import { produce, unwrap } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useEditorContext } from "@tui/context/editor"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -232,18 +233,25 @@ export function Session() {
   // ends, like a user who waited for the answer before hitting Enter. An
   // empty-input defer press deepens the last held message by one cycle, so
   // "HELD ×N" goes out at the Nth loop end instead of the next one.
+  // Held items are stored in one global list (the route component persists
+  // across session switches, so the signal survives navigation), but each item
+  // carries the session it was drafted in. Display, cancel, deepen and the
+  // pending strip are scoped to the currently viewed session so a held message
+  // stays pinned to the conversation it belongs to instead of following the
+  // user around; background sessions still flush their own held queue on idle.
   const [heldItems, setHeldItems] = createSignal<DeferredHold[]>([])
   // How long the session must stay idle before held messages are released.
   // Guards against transient "idle" events emitted mid-run (e.g. error halt):
   // a still-running loop flips back to busy at the top of its next iteration.
   const HELD_SETTLE_DELAY = 500
-  const heldIds = createMemo(() => new Set(heldItems().map((i) => i.messageID)))
+  const sessionHeld = createMemo(() => heldItems().filter((i) => i.sessionID === route.sessionID))
+  const heldIds = createMemo(() => new Set(sessionHeld().map((i) => i.messageID)))
 
-  // Combined pending strip (held + server-queued), oldest first. Both are
-  // ordered by their submit-time ascending ids, so one sort interleaves them
-  // in the exact order the user drafted them.
+  // Combined pending strip (held + server-queued) for the current session,
+  // oldest first. Both are ordered by their submit-time ascending ids, so one
+  // sort interleaves them in the exact order the user drafted them.
   const pendingStrip = createMemo(() => {
-    const held = heldItems().map((item) => ({ kind: "held" as const, id: item.messageID, item }))
+    const held = sessionHeld().map((item) => ({ kind: "held" as const, id: item.messageID, item }))
     const queued = queuedMessages().map((message) => ({ kind: "queued" as const, id: message.id, message }))
     return [...held, ...queued].sort((a, b) => (a.id === b.id ? 0 : a.id < b.id ? -1 : 1))
   })
@@ -252,24 +260,26 @@ export function Session() {
     setHeldItems((prev) => [...prev, item])
   }
 
-  // Empty-input defer submit: push the last held message one cycle deeper, so
-  // it goes out one agentic loop end later (shown as "HELD ×N" in the strip).
+  // Empty-input defer submit: push the current session's last held message one
+  // cycle deeper, so it goes out one agentic loop end later (shown as
+  // "HELD ×N" in the strip).
   function onDeferDeepen() {
     setHeldItems((prev) => {
-      const last = prev[prev.length - 1]
+      const last = [...prev].reverse().find((i) => i.sessionID === route.sessionID)
       if (!last) return prev
-      return [...prev.slice(0, -1), { ...last, cycles: last.cycles + 1 }]
+      return prev.map((i) => (i === last ? { ...i, cycles: i.cycles + 1 } : i))
     })
   }
 
-  // Drop the oldest pending message (held or server-queued, one per call).
-  // Held = client-only removal; queued = server delete (now permitted while
-  // busy) plus local part cleanup. Returns false when nothing is left to
-  // cancel, so the caller falls back to aborting the agent.
+  // Drop the oldest pending message of the current session (held or
+  // server-queued, one per call). Held = client-only removal; queued = server
+  // delete (now permitted while busy) plus local part cleanup. Returns false
+  // when nothing is left to cancel, so the caller falls back to aborting the
+  // agent.
   async function cancelOldestPending(): Promise<boolean> {
     // Held ids are minted at submit time and sort ascending like any other
-    // message id, so a plain sort picks the globally oldest candidate.
-    const target = [...heldItems().map((i) => i.messageID), ...queuedMessages().map((m) => m.id)].sort()[0]
+    // message id, so a plain sort picks the session's oldest candidate.
+    const target = [...sessionHeld().map((i) => i.messageID), ...queuedMessages().map((m) => m.id)].sort()[0]
     if (!target) return false
     if (heldIds().has(target)) {
       setHeldItems((prev) => prev.filter((i) => i.messageID !== target))
@@ -700,22 +710,26 @@ export function Session() {
   // transient idle would let the server inject the message mid-loop like a
   // regular queued message.
   event.on("session.status", (evt) => {
-    if (evt.properties.sessionID !== route.sessionID) return
+    const sid = evt.properties.sessionID
     if (evt.properties.status.type !== "idle") return
     setTimeout(() => {
-      if ((sync.data.session_status[route.sessionID]?.type ?? "idle") !== "idle") return
-      if (heldItems().length === 0) return
+      if ((sync.data.session_status[sid]?.type ?? "idle") !== "idle") return
+      // Only this session's held items are eligible; other sessions have their
+      // own pending queues and must flush on their own idle events.
+      const queue = heldItems().filter((i) => i.sessionID === sid)
+      if (queue.length === 0) return
       // One full loop end passed: every staged message moves one cycle closer
       // to delivery; only those reaching zero go out now, the rest keep
       // waiting (e.g. HELD ×2 fires after the next turn completes too).
-      const ticked = heldItems().map((item) => ({ ...item, cycles: item.cycles - 1 }))
+      const ticked = queue.map((item) => ({ ...item, cycles: item.cycles - 1 }))
       const ready = ticked.filter((item) => item.cycles <= 0)
       // Stall guard: the loop is over, so nothing would ever produce another
       // loop end — release the closest-to-ready message(s) anyway instead of
       // parking the strip forever.
       const min = Math.min(...ticked.map((item) => item.cycles))
       const release = ready.length > 0 ? ready : ticked.filter((item) => item.cycles === min)
-      setHeldItems(ticked.filter((item) => !release.includes(item)))
+      const releaseIds = new Set(release.map((i) => i.messageID))
+      setHeldItems((prev) => prev.filter((i) => !(i.sessionID === sid && releaseIds.has(i.messageID))))
       for (const item of release) {
         // Mint a fresh id at release time: history sorts by ascending id, so
         // the hold-time id would land the message in the middle of history,
@@ -735,7 +749,9 @@ export function Session() {
           .promptAsync({ ...item.asyncArgs, messageID })
           .catch(() => {})
       }
-      toBottom()
+      // Only auto-scroll when the flushed session is the one the user is
+      // looking at; background flushes must not yank the viewport.
+      if (sid === route.sessionID) toBottom()
     }, HELD_SETTLE_DELAY)
   })
 
@@ -1897,6 +1913,34 @@ export function Session() {
     ),
   )
   createEffect(on(() => route.sessionID, toBottom))
+
+  // The prompt's draft text is one shared store, but it should feel per-session:
+  // typing in session A, switching to B shows B's draft, switching back to A
+  // brings A's draft back. The route component stays mounted across session
+  // switches (only route.sessionID changes), so a module-scoped draft map keyed
+  // by session id survives navigation; on each switch we stash the outgoing
+  // session's text and swap in the incoming session's saved draft (or clear it).
+  const promptDrafts = new Map<string, PromptRef["current"]>()
+  createEffect(
+    on(
+      () => route.sessionID,
+      (next, prev) => {
+        if (!prompt) return
+        if (prev === undefined || next === undefined || prev === next) return
+        // Save the outgoing session's draft (or drop the entry if it's empty),
+        // reading without tracking so keystrokes don't re-trigger this effect.
+        const cur = untrack(() => prompt!.current)
+        if (cur.input || cur.parts.length) promptDrafts.set(prev, unwrap(cur))
+        else promptDrafts.delete(prev)
+        // Restore the incoming session's draft, or clear the field if it has
+        // none. Initial mount is skipped (prev === undefined) so a CLI-deeplink
+        // prompt seeded via route.prompt isn't clobbered by a stale draft.
+        const saved = promptDrafts.get(next)
+        if (saved) prompt.set(saved)
+        else prompt.reset()
+      },
+    ),
+  )
 
   return (
     <context.Provider
