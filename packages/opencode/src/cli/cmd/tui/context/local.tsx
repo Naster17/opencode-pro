@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, untrack } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
@@ -766,6 +766,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const [sessionStore, setSessionStore] = createStore({
         ready: false,
         favorite: [] as string[],
+        // Sessions that were visited or did work during this app session, in
+        // first-seen order. Never persisted — a restart drops these and keeps
+        // only the favorites.
+        active: [] as string[],
       })
       const filePath = path.join(Global.Path.state, "session-favorites.json")
       const state = {
@@ -802,10 +806,41 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         favorite() {
           return sessionStore.favorite
         },
+        active() {
+          return sessionStore.active
+        },
         pinned() {
           return sessionStore.favorite
             .map((id) => sync.data.session.find((item) => item.id === id))
             .filter((item) => item !== undefined)
+        },
+        // Favorites first, then every active session not already pinned.
+        tabs() {
+          const extra = sessionStore.active
+            .filter((id) => !this.isFavorite(id))
+            .map((id) => sync.data.session.find((item) => item.id === id))
+            .filter((item) => item !== undefined)
+          return [...this.pinned(), ...extra]
+        },
+        markActive(id: string) {
+          // Untracked: callers run this inside effects, and reading stores
+          // reactively would resubscribe them — removeActive (or any session
+          // list change) would retrigger the effect and the tab would pop
+          // right back.
+          const blocked = untrack(() => {
+            if (sessionStore.active.includes(id)) return true
+            const item = sync.data.session.find((entry) => entry.id === id)
+            return !item || !!item.parentID
+          })
+          if (blocked) return
+          setSessionStore("active", [...untrack(() => sessionStore.active), id])
+        },
+        removeActive(id: string) {
+          if (!sessionStore.active.includes(id)) return
+          setSessionStore(
+            "active",
+            sessionStore.active.filter((item) => item !== id),
+          )
         },
         isFavorite(id: string) {
           return sessionStore.favorite.includes(id)

@@ -34,6 +34,7 @@ const KeybindsSchema = Schema.Struct({
   session_pin_toggle: keybind("<leader>f", "Pin or unpin the current session as a tab"),
   session_tab_next: keybind("<leader>]", "Switch to next pinned session tab"),
   session_tab_previous: keybind("<leader>[", "Switch to previous pinned session tab"),
+  session_tab_close: keybind("<leader>w", "Close the current session tab"),
   stash_delete: keybind("ctrl+d", "Delete stash entry"),
   model_provider_list: keybind("ctrl+a", "Open provider list from model dialog"),
   model_favorite_toggle: keybind("ctrl+f", "Toggle model favorite status"),

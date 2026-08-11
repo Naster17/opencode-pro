@@ -69,7 +69,7 @@ import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
-import { SessionTabs } from "../../component/session-tabs"
+import { SessionTabs, useTabClose } from "../../component/session-tabs"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
@@ -186,6 +186,7 @@ function use() {
 export function Session() {
   const route = useRouteData("session")
   const { navigate } = useRoute()
+  const closeTab = useTabClose()
   const sync = useSync()
   const event = useEvent()
   const project = useProject()
@@ -1099,14 +1100,13 @@ export function Session() {
   }
 
   function moveTab(direction: 1 | -1) {
-    const pinned = local.session.pinned()
-    if (pinned.length < 2) return
-    const index = pinned.findIndex((item) => item.id === route.sessionID)
-    const next =
-      index === -1 ? (direction === 1 ? 0 : pinned.length - 1) : (index + direction + pinned.length) % pinned.length
+    const tabs = local.session.tabs()
+    if (tabs.length < 2) return
+    const index = tabs.findIndex((item) => item.id === route.sessionID)
+    const next = index === -1 ? (direction === 1 ? 0 : tabs.length - 1) : (index + direction + tabs.length) % tabs.length
     navigate({
       type: "session",
-      sessionID: pinned[next].id,
+      sessionID: tabs[next].id,
     })
   }
 
@@ -1808,26 +1808,43 @@ export function Session() {
       },
     },
     {
-      title: "Next pinned session tab",
+      title: "Next session tab",
       value: "session.tab.next",
       keybind: "session_tab_next",
       category: "Session",
       hidden: true,
-      enabled: local.session.pinned().length >= 2,
+      enabled: local.session.tabs().length >= 2,
       onSelect: (dialog) => {
         moveTab(1)
         dialog.clear()
       },
     },
     {
-      title: "Previous pinned session tab",
+      title: "Previous session tab",
       value: "session.tab.previous",
       keybind: "session_tab_previous",
       category: "Session",
       hidden: true,
-      enabled: local.session.pinned().length >= 2,
+      enabled: local.session.tabs().length >= 2,
       onSelect: (dialog) => {
         moveTab(-1)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Close current session tab",
+      value: "session.tab.close",
+      keybind: "session_tab_close",
+      category: "Session",
+      hidden: true,
+      enabled: local.session.tabs().some((item) => item.id === route.sessionID),
+      onSelect: (dialog) => {
+        closeTab(route.sessionID)
+        toast.show({
+          variant: "info",
+          message: "Session tab closed",
+          duration: 2000,
+        })
         dialog.clear()
       },
     },
