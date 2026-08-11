@@ -762,6 +762,72 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
+    const session = iife(() => {
+      const [sessionStore, setSessionStore] = createStore({
+        ready: false,
+        favorite: [] as string[],
+      })
+      const filePath = path.join(Global.Path.state, "session-favorites.json")
+      const state = {
+        pending: false,
+      }
+
+      function save() {
+        if (!sessionStore.ready) {
+          state.pending = true
+          return
+        }
+        state.pending = false
+        void Filesystem.writeJson(filePath, {
+          favorite: sessionStore.favorite,
+        })
+      }
+
+      Filesystem.readJson(filePath)
+        .then((x: any) => {
+          if (Array.isArray(x.favorite)) {
+            setSessionStore(
+              "favorite",
+              x.favorite.filter((item: unknown): item is string => typeof item === "string"),
+            )
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          setSessionStore("ready", true)
+          if (state.pending) save()
+        })
+
+      return {
+        favorite() {
+          return sessionStore.favorite
+        },
+        pinned() {
+          return sessionStore.favorite
+            .map((id) => sync.data.session.find((item) => item.id === id))
+            .filter((item) => item !== undefined)
+        },
+        isFavorite(id: string) {
+          return sessionStore.favorite.includes(id)
+        },
+        setFavorites(ids: string[]) {
+          setSessionStore("favorite", [...new Set(ids)])
+          save()
+        },
+        toggleFavorite(id: string) {
+          if (this.isFavorite(id)) {
+            this.setFavorites(sessionStore.favorite.filter((item) => item !== id))
+            return
+          }
+          this.setFavorites([...sessionStore.favorite, id])
+        },
+        removeFavorite(id: string) {
+          if (!this.isFavorite(id)) return
+          this.setFavorites(sessionStore.favorite.filter((item) => item !== id))
+        },
+      }
+    })
+
     const mcp = {
       isEnabled(name: string) {
         const status = sync.data.mcp[name]
@@ -793,6 +859,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const result = {
       model,
       agent,
+      session,
       mcp,
     }
     return result

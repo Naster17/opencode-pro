@@ -962,6 +962,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   })
 
   event.on("session.deleted", (evt) => {
+    local.session.removeFavorite(evt.properties.info.id)
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
       route.navigate({ type: "home" })
       toast.show({

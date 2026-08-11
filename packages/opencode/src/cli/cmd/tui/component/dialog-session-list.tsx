@@ -6,6 +6,7 @@ import { createMemo, createResource, createSignal, onMount, type JSX } from "sol
 import { Locale } from "@/util/locale"
 import { useProject } from "@tui/context/project"
 import { useKeybind } from "../context/keybind"
+import { useLocal } from "../context/local"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -24,6 +25,7 @@ export function DialogSessionList() {
   const sync = useSync()
   const project = useProject()
   const keybind = useKeybind()
+  const local = useLocal()
   const { theme } = useTheme()
   const sdk = useSDK()
   const toast = useToast()
@@ -118,7 +120,7 @@ export function DialogSessionList() {
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
-    return sessions()
+    const base = sessions()
       .filter((x) => x.parentID === undefined)
       .toSorted((a, b) => {
         const updatedDay = new Date(b.time.updated).setHours(0, 0, 0, 0) - new Date(a.time.updated).setHours(0, 0, 0, 0)
@@ -162,6 +164,11 @@ export function DialogSessionList() {
           gutter: isWorking ? () => <Spinner /> : undefined,
         }
       })
+    const favorites = local.session
+      .favorite()
+      .flatMap((id) => base.filter((option) => option.value === id))
+      .map((option) => ({ ...option, category: "Favorites" }))
+    return [...favorites, ...base.filter((option) => !local.session.isFavorite(option.value))]
   })
 
   onMount(() => {
@@ -239,6 +246,13 @@ export function DialogSessionList() {
           title: "rename",
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)
+          },
+        },
+        {
+          keybind: keybind.all.session_favorite_toggle?.[0],
+          title: "favorite",
+          onTrigger: (option) => {
+            local.session.toggleFavorite(option.value)
           },
         },
       ]}

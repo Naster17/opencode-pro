@@ -69,6 +69,7 @@ import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
+import { SessionTabs } from "../../component/session-tabs"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
@@ -211,8 +212,30 @@ export function Session() {
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
 
+  // Message ids increase over time, so when a run starts (idle → busy) every
+  // message already in history belongs to runs that are over — including
+  // "ghost" assistants left behind when a run died between creating its
+  // assistant message and marking it complete (no finish/error/completed).
+  // Anchor the in-flight lookup at the last user message seen when the run
+  // began so pending() can't latch onto such a ghost; otherwise every later
+  // user message would briefly flap into the queued strip on the next submit,
+  // until the server creates the new run's assistant.
+  const [runAnchor, setRunAnchor] = createSignal("")
+  let anchorPrevSession = route.sessionID
+  let anchorPrevStatus = "idle"
+  createEffect(() => {
+    const sid = route.sessionID
+    const type = sync.data.session_status[sid]?.type ?? "idle"
+    if (type === "busy" && (anchorPrevStatus === "idle" || sid !== anchorPrevSession)) {
+      setRunAnchor(untrack(() => messages().findLast((x) => x.role === "user")?.id ?? ""))
+    }
+    anchorPrevSession = sid
+    anchorPrevStatus = type
+  })
+
   const pending = createMemo(() => {
-    return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
+    const anchor = runAnchor()
+    return messages().findLast((x) => x.role === "assistant" && !x.time.completed && x.id > anchor)?.id
   })
 
   // A user message is QUEUED while the loop hasn't started a turn for it yet
@@ -1075,6 +1098,18 @@ export function Session() {
     }
   }
 
+  function moveTab(direction: 1 | -1) {
+    const pinned = local.session.pinned()
+    if (pinned.length < 2) return
+    const index = pinned.findIndex((item) => item.id === route.sessionID)
+    const next =
+      index === -1 ? (direction === 1 ? 0 : pinned.length - 1) : (index + direction + pinned.length) % pinned.length
+    navigate({
+      type: "session",
+      sessionID: pinned[next].id,
+    })
+  }
+
   function childSessionHandler(func: (dialog: DialogContext) => void) {
     return (dialog: DialogContext) => {
       if (!session()?.parentID || dialog.stack.length > 0) return
@@ -1753,6 +1788,49 @@ export function Session() {
         dialog.clear()
       }),
     },
+    {
+      title: local.session.isFavorite(route.sessionID) ? "Unpin current session" : "Pin current session",
+      value: "session.pin.toggle",
+      keybind: "session_pin_toggle",
+      category: "Session",
+      slash: {
+        name: "pin",
+      },
+      onSelect: (dialog) => {
+        const pinned = local.session.isFavorite(route.sessionID)
+        local.session.toggleFavorite(route.sessionID)
+        toast.show({
+          variant: "info",
+          message: pinned ? "Session unpinned" : "Session pinned to tabs",
+          duration: 2000,
+        })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Next pinned session tab",
+      value: "session.tab.next",
+      keybind: "session_tab_next",
+      category: "Session",
+      hidden: true,
+      enabled: local.session.pinned().length >= 2,
+      onSelect: (dialog) => {
+        moveTab(1)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Previous pinned session tab",
+      value: "session.tab.previous",
+      keybind: "session_tab_previous",
+      category: "Session",
+      hidden: true,
+      enabled: local.session.pinned().length >= 2,
+      onSelect: (dialog) => {
+        moveTab(-1)
+        dialog.clear()
+      },
+    },
   ])
 
   const revertInfo = createMemo(() => session()?.revert)
@@ -1961,7 +2039,9 @@ export function Session() {
         tui: tuiConfig,
       }}
     >
-      <box flexDirection="row">
+      <box flexDirection="row" flexGrow={1}>
+        <box flexDirection="column" flexGrow={1}>
+        <SessionTabs />
         <box flexGrow={1} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
             <scrollbox
@@ -2180,6 +2260,7 @@ export function Session() {
             </box>
           </Show>
           <Toast />
+        </box>
         </box>
         <Show when={sidebarVisible()}>
           <Switch>
