@@ -11,6 +11,7 @@ import { SessionRevert } from "@/session/revert"
 import { SessionShare } from "@/share/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
+import { SessionLimits } from "@/session/limits"
 import { Todo } from "@/session/todo"
 import { Effect } from "effect"
 import { Agent } from "@/agent/agent"
@@ -611,6 +612,47 @@ export const SessionRoutes = lazy(() =>
             auto: body.auto,
           })
           yield* prompt.loop({ sessionID })
+          return true
+        }),
+    )
+    .post(
+      "/:sessionID/nocompact",
+      describeRoute({
+        summary: "Toggle no-compact mode",
+        description:
+          "Per-session runtime flag that disables auto-compaction and context window limit enforcement for the session.",
+        operationId: "session.nocompact",
+        responses: {
+          200: {
+            description: "Updated",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          enabled: z.boolean(),
+        }),
+      ),
+      async (c) =>
+        jsonRequest("SessionRoutes.nocompact", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const session = yield* Session.Service
+          yield* session.get(sessionID)
+          const limits = yield* SessionLimits.Service
+          yield* limits.set(sessionID, c.req.valid("json").enabled)
           return true
         }),
     )

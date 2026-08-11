@@ -22,6 +22,7 @@ import { fn } from "@/util/fn"
 import { EventV2 } from "@/v2/event"
 import { SessionEvent } from "@/v2/session-event"
 import { CacheOptimizer } from "./cache-optimizer"
+import { SessionLimits } from "./limits"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -257,6 +258,7 @@ export interface Interface {
   readonly isOverflow: (input: {
     tokens: MessageV2.Assistant["tokens"]
     model: Provider.Model
+    sessionID: SessionID
   }) => Effect.Effect<boolean>
   readonly prune: (input: { sessionID: SessionID }) => Effect.Effect<void>
   readonly process: (input: {
@@ -288,6 +290,7 @@ export const layer: Layer.Layer<
   | SessionProcessor.Service
   | Provider.Service
   | Storage.Service
+  | SessionLimits.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -299,12 +302,19 @@ export const layer: Layer.Layer<
     const processors = yield* SessionProcessor.Service
     const provider = yield* Provider.Service
     const storage = yield* Storage.Service
+    const limits = yield* SessionLimits.Service
 
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: MessageV2.Assistant["tokens"]
       model: Provider.Model
+      sessionID: SessionID
     }) {
-      return overflow({ cfg: yield* config.get(), tokens: input.tokens, model: input.model })
+      return overflow({
+        cfg: yield* config.get(),
+        tokens: input.tokens,
+        model: input.model,
+        noCompact: yield* limits.get(input.sessionID),
+      })
     })
 
     const estimate = Effect.fn("SessionCompaction.estimate")(function* (input: {
@@ -749,12 +759,17 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(Storage.defaultLayer),
+    Layer.provide(SessionLimits.defaultLayer),
   ),
 )
 
 const { runPromise } = makeRuntime(Service, defaultLayer)
 
-export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
+export async function isOverflow(input: {
+  tokens: MessageV2.Assistant["tokens"]
+  model: Provider.Model
+  sessionID: SessionID
+}) {
   return runPromise((svc) => svc.isOverflow(input))
 }
 

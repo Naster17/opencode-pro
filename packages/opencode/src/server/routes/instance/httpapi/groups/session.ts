@@ -60,6 +60,9 @@ export const SummarizePayload = Schema.Struct({
   modelID: ModelID,
   auto: Schema.optional(Schema.Boolean),
 })
+export const NoCompactPayload = Schema.Struct({
+  enabled: Schema.Boolean,
+})
 export const PromptPayload = Schema.Struct(Struct.omit(SessionPrompt.PromptInput.fields, ["sessionID"]))
 export const BtwPayload = Schema.Struct(Struct.omit(SessionPrompt.BtwInput.fields, ["sessionID"]))
 export const CommandPayload = Schema.Struct(Struct.omit(SessionPrompt.CommandInput.fields, ["sessionID"]))
@@ -86,6 +89,7 @@ export const SessionPaths = {
   share: `${root}/:sessionID/share`,
   init: `${root}/:sessionID/init`,
   summarize: `${root}/:sessionID/summarize`,
+  noCompact: `${root}/:sessionID/nocompact`,
   prompt: `${root}/:sessionID/message`,
   promptAsync: `${root}/:sessionID/prompt_async`,
   btw: `${root}/:sessionID/btw`,
@@ -292,6 +296,19 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.summarize",
             summary: "Summarize session",
             description: "Generate a concise summary of the session using AI compaction to preserve key information.",
+          }),
+        ),
+        HttpApiEndpoint.post("noCompact", SessionPaths.noCompact, {
+          params: { sessionID: SessionID },
+          payload: NoCompactPayload,
+          success: described(Schema.Boolean, "Updated"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.nocompact",
+            summary: "Toggle no-compact mode",
+            description:
+              "Per-session runtime flag that disables auto-compaction and context window limit enforcement for the session.",
           }),
         ),
         HttpApiEndpoint.post("prompt", SessionPaths.prompt, {

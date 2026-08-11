@@ -14,8 +14,13 @@ export function usable(input: { cfg: Config.Info; model: Provider.Model }) {
   return Math.max(0, (input.model.limit.input ?? context) - reserved)
 }
 
-export function isOverflow(input: { cfg: Config.Info; tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
-  if (input.cfg.compaction?.auto === false) return false
+export function isOverflow(input: {
+  cfg: Config.Info
+  tokens: MessageV2.Assistant["tokens"]
+  model: Provider.Model
+  noCompact?: boolean
+}) {
+  if (input.cfg.compaction?.auto === false || input.noCompact) return false
   if (input.model.limit.context === 0) return false
 
   const count =

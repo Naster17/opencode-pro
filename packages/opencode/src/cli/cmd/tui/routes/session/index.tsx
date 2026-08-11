@@ -222,6 +222,7 @@ export function Session() {
   // user message would briefly flap into the queued strip on the next submit,
   // until the server creates the new run's assistant.
   const [runAnchor, setRunAnchor] = createSignal("")
+  const [noCompact, setNoCompact] = createSignal(false)
   let anchorPrevSession = route.sessionID
   let anchorPrevStatus = "idle"
   createEffect(() => {
@@ -1242,6 +1243,39 @@ export function Session() {
           providerID: selectedModel.providerID,
         })
         dialog.clear()
+      },
+    },
+    {
+      title: noCompact() ? "Re-enable auto-compact & context limits" : "Disable auto-compact & context limits",
+      value: "session.nocompact",
+      category: "Session",
+      slash: {
+        name: "nocompact",
+        aliases: ["no-compact", "autocompact"],
+      },
+      onSelect: (dialog) => {
+        const next = !noCompact()
+        setNoCompact(next)
+        dialog.clear()
+        void sdk.client.session
+          .nocompact({
+            sessionID: route.sessionID,
+            enabled: next,
+          })
+          .then(() =>
+            toast.show({
+              variant: "success",
+              message: next
+                ? "Auto-compact and context limits disabled for this session"
+                : "Auto-compact and context limits enabled for this session",
+            }),
+          )
+          .catch(() =>
+            toast.show({
+              variant: "error",
+              message: "Failed to update auto-compact for this session",
+            }),
+          )
       },
     },
     {

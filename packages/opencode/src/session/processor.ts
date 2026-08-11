@@ -10,6 +10,7 @@ import * as Session from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
+import { SessionLimits } from "./limits"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
@@ -253,6 +254,7 @@ export const layer: Layer.Layer<
   | Plugin.Service
   | SessionSummary.Service
   | SessionStatus.Service
+  | SessionLimits.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -267,6 +269,7 @@ export const layer: Layer.Layer<
     const summary = yield* SessionSummary.Service
     const scope = yield* Scope.Scope
     const status = yield* SessionStatus.Service
+    const limits = yield* SessionLimits.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -982,7 +985,12 @@ export const layer: Layer.Layer<
             if (
               !input.ephemeral &&
               !ctx.assistantMessage.summary &&
-              isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
+              isOverflow({
+                cfg: yield* config.get(),
+                tokens: usage.tokens,
+                model: ctx.model,
+                noCompact: yield* limits.get(ctx.sessionID),
+              })
             ) {
               ctx.needsCompaction = true
             }
@@ -1131,7 +1139,10 @@ export const layer: Layer.Layer<
             ctx.assistantMessage.error = error
             return
           }
-          if ((yield* config.get()).compaction?.auto === false) {
+          if (
+            (yield* config.get()).compaction?.auto === false ||
+            (yield* limits.get(ctx.assistantMessage.sessionID))
+          ) {
             ctx.assistantMessage.error = error
             yield* bus.publish(Session.Event.Error, { sessionID: ctx.assistantMessage.sessionID, error })
             yield* status.set(ctx.sessionID, { type: "idle" })
@@ -1288,6 +1299,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(SessionStatus.defaultLayer),
     Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
+    Layer.provide(SessionLimits.defaultLayer),
   ),
 )
 

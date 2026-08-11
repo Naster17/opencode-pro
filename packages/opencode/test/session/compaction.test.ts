@@ -8,6 +8,7 @@ import { Config } from "@/config/config"
 import { Agent } from "../../src/agent/agent"
 import { LLM } from "../../src/session/llm"
 import { SessionCompaction } from "../../src/session/compaction"
+import { SessionLimits } from "../../src/session/limits"
 import { Token } from "@/util/token"
 import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
@@ -235,6 +236,7 @@ function runtime(
       Layer.provide(bus),
       Layer.provide(config),
       Layer.provide(Storage.defaultLayer),
+      Layer.provide(SessionLimits.defaultLayer),
     ),
   )
 }
@@ -247,6 +249,7 @@ const deps = Layer.mergeAll(
   Bus.layer,
   Config.defaultLayer,
   Storage.defaultLayer,
+  SessionLimits.defaultLayer,
 )
 
 const env = Layer.mergeAll(
@@ -296,6 +299,7 @@ function liveRuntime(layer: Layer.Layer<LLM.Service>, provider = ProviderTest.fa
       Layer.provide(bus),
       Layer.provide(config),
       Layer.provide(Storage.defaultLayer),
+      Layer.provide(SessionLimits.defaultLayer),
     ),
   )
 }
@@ -400,7 +404,7 @@ describe("session.compaction.isOverflow", () => {
         const compact = yield* SessionCompaction.Service
         const model = createModel({ context: 100_000, output: 32_000 })
         const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
-        expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
+        expect(yield* compact.isOverflow({ tokens, model, sessionID: SessionID.descending() })).toBe(true)
       }),
     ),
   )
@@ -412,7 +416,7 @@ describe("session.compaction.isOverflow", () => {
         const compact = yield* SessionCompaction.Service
         const model = createModel({ context: 200_000, output: 32_000 })
         const tokens = { input: 100_000, output: 10_000, reasoning: 0, cache: { read: 0, write: 0 } }
-        expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+        expect(yield* compact.isOverflow({ tokens, model, sessionID: SessionID.descending() })).toBe(false)
       }),
     ),
   )
@@ -424,7 +428,7 @@ describe("session.compaction.isOverflow", () => {
         const compact = yield* SessionCompaction.Service
         const model = createModel({ context: 100_000, output: 32_000 })
         const tokens = { input: 60_000, output: 10_000, reasoning: 0, cache: { read: 10_000, write: 0 } }
-        expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
+        expect(yield* compact.isOverflow({ tokens, model, sessionID: SessionID.descending() })).toBe(true)
       }),
     ),
   )
@@ -436,7 +440,7 @@ describe("session.compaction.isOverflow", () => {
         const compact = yield* SessionCompaction.Service
         const model = createModel({ context: 400_000, input: 272_000, output: 128_000 })
         const tokens = { input: 271_000, output: 1_000, reasoning: 0, cache: { read: 2_000, write: 0 } }
-        expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
+        expect(yield* compact.isOverflow({ tokens, model, sessionID: SessionID.descending() })).toBe(true)
       }),
     ),
   )
@@ -448,7 +452,7 @@ describe("session.compaction.isOverflow", () => {
         const compact = yield* SessionCompaction.Service
         const model = createModel({ context: 400_000, input: 272_000, output: 128_000 })
         const tokens = { input: 200_000, output: 20_000, reasoning: 0, cache: { read: 10_000, write: 0 } }
-        expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+        expect(yield* compact.isOverflow({ tokens, model, sessionID: SessionID.descending() })).toBe(false)
       }),
     ),
   )
@@ -460,7 +464,7 @@ describe("session.compaction.isOverflow", () => {
         const compact = yield* SessionCompaction.Service
         const model = createModel({ context: 200_000, input: 120_000, output: 10_000 })
         const tokens = { input: 50_000, output: 9_999, reasoning: 0, cache: { read: 0, write: 0 } }
-        expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+        expect(yield* compact.isOverflow({ tokens, model, sessionID: SessionID.descending() })).toBe(false)
       }),
     ),
   )
@@ -476,7 +480,7 @@ describe("session.compaction.isOverflow", () => {
         const compact = yield* SessionCompaction.Service
         const model = createModel({ context: 200_000, input: 200_000, output: 32_000 })
         const tokens = { input: 170_000, output: 12_000, reasoning: 0, cache: { read: 3_000, write: 0 } }
-        expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
+        expect(yield* compact.isOverflow({ tokens, model, sessionID: SessionID.descending() })).toBe(true)
       }),
     ),
   )
@@ -488,7 +492,7 @@ describe("session.compaction.isOverflow", () => {
         const compact = yield* SessionCompaction.Service
         const model = createModel({ context: 200_000, output: 32_000 })
         const tokens = { input: 170_000, output: 12_000, reasoning: 0, cache: { read: 3_000, write: 0 } }
-        const result = yield* compact.isOverflow({ tokens, model })
+        const result = yield* compact.isOverflow({ tokens, model, sessionID: SessionID.descending() })
         expect(result).toBe(true)
       }),
     ),
@@ -503,8 +507,12 @@ describe("session.compaction.isOverflow", () => {
         const withoutInputLimit = createModel({ context: 200_000, output: 32_000 })
         const tokens = { input: 166_000, output: 9_000, reasoning: 0, cache: { read: 5_000, write: 0 } }
 
-        const withLimit = yield* compact.isOverflow({ tokens, model: withInputLimit })
-        const withoutLimit = yield* compact.isOverflow({ tokens, model: withoutInputLimit })
+        const withLimit = yield* compact.isOverflow({ tokens, model: withInputLimit, sessionID: SessionID.descending() })
+        const withoutLimit = yield* compact.isOverflow({
+          tokens,
+          model: withoutInputLimit,
+          sessionID: SessionID.descending(),
+        })
 
         expect(withLimit).toBe(true)
         expect(withoutLimit).toBe(true)
@@ -519,7 +527,7 @@ describe("session.compaction.isOverflow", () => {
         const compact = yield* SessionCompaction.Service
         const model = createModel({ context: 100_000, output: 32_000 })
         const tokens = { input: 60_000, output: 1_000, reasoning: 19_000, cache: { read: 0, write: 0 } }
-        expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
+        expect(yield* compact.isOverflow({ tokens, model, sessionID: SessionID.descending() })).toBe(true)
       }),
     ),
   )
@@ -531,7 +539,7 @@ describe("session.compaction.isOverflow", () => {
         const compact = yield* SessionCompaction.Service
         const model = createModel({ context: 0, output: 32_000 })
         const tokens = { input: 100_000, output: 10_000, reasoning: 0, cache: { read: 0, write: 0 } }
-        expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+        expect(yield* compact.isOverflow({ tokens, model, sessionID: SessionID.descending() })).toBe(false)
       }),
     ),
   )
@@ -544,13 +552,28 @@ describe("session.compaction.isOverflow", () => {
           const compact = yield* SessionCompaction.Service
           const model = createModel({ context: 100_000, output: 32_000 })
           const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
-          expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+          expect(yield* compact.isOverflow({ tokens, model, sessionID: SessionID.descending() })).toBe(false)
         }),
       {
         config: {
           compaction: { auto: false },
         },
       },
+    ),
+  )
+
+  it.live(
+    "returns false when noCompact runtime flag is set for the session",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const limits = yield* SessionLimits.Service
+        const sessionID = SessionID.descending()
+        const model = createModel({ context: 100_000, output: 32_000 })
+        const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
+        yield* limits.set(sessionID, true)
+        expect(yield* compact.isOverflow({ tokens, model, sessionID })).toBe(false)
+      }),
     ),
   )
 })

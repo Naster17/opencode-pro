@@ -5809,6 +5809,42 @@ export type SessionSummarizeResponses = {
 
 export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSummarizeResponses]
 
+export type SessionNocompactData = {
+  body?: {
+    enabled: boolean
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/nocompact"
+}
+
+export type SessionNocompactErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionNocompactError = SessionNocompactErrors[keyof SessionNocompactErrors]
+
+export type SessionNocompactResponses = {
+  /**
+   * Updated
+   */
+  200: boolean
+}
+
+export type SessionNocompactResponse = SessionNocompactResponses[keyof SessionNocompactResponses]
+
 export type SessionPromptAsyncData = {
   body?: {
     messageID?: string

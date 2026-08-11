@@ -13,6 +13,7 @@ import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
+import { SessionLimits } from "@/session/limits"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { NotFoundError } from "@/storage/storage"
@@ -30,6 +31,7 @@ import {
   InitPayload,
   ListQuery,
   MessagesQuery,
+  NoCompactPayload,
   PermissionResponsePayload,
   PromptPayload,
   RevertPayload,
@@ -51,6 +53,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const statusSvc = yield* SessionStatus.Service
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
+    const limitsSvc = yield* SessionLimits.Service
     const bus = yield* Bus.Service
     const scope = yield* Scope.Scope
 
@@ -244,6 +247,15 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return true
     })
 
+    const noCompact = Effect.fn("SessionHttpApi.noCompact")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof NoCompactPayload.Type
+    }) {
+      yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
+      yield* limitsSvc.set(ctx.params.sessionID, ctx.payload.enabled)
+      return true
+    })
+
     const prompt = Effect.fn("SessionHttpApi.prompt")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof PromptPayload.Type
@@ -374,6 +386,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("share", share)
       .handle("unshare", unshare)
       .handle("summarize", summarize)
+      .handle("noCompact", noCompact)
       .handle("prompt", prompt)
       .handle("promptAsync", promptAsync)
       .handle("btw", btw)
