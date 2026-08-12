@@ -96,6 +96,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
     const PART_EVENT_FLUSH_MS = 16
+    // History is loaded lazily in a sliding window at the tail of the session.
+    // Opening a session only fetches the most recent HISTORY_TAIL_LIMIT
+    // messages; older pages (HISTORY_EARLIER_LIMIT each) are fetched on demand
+    // when the user scrolls past the top of the loaded window. HISTORY_MESSAGE_CAP
+    // bounds how many messages are retained once new ones keep arriving, dropping
+    // the oldest so a long-lived session never balloons in the TUI store.
+    const HISTORY_TAIL_LIMIT = 200
+    const HISTORY_EARLIER_LIMIT = 200
+    const HISTORY_MESSAGE_CAP = 250
     const [store, setStore] = createStore<{
       status: "loading" | "partial" | "complete"
       provider: Provider[]
@@ -177,6 +186,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     const fullSyncedSessions = new Set<string>()
     const fullHistorySyncedSessions = new Set<string>()
+    // Lazy history windowing state: the next `before` cursor for older messages
+    // of a session, whether the server still has older messages, and a guard
+    // against overlapping "load earlier" fetches for the same session.
+    const earlierCursor = new Map<string, string>()
+    const hasMoreOlderSessions = new Map<string, boolean>()
+    const earlierLoadingSessions = new Set<string>()
     let syncedWorkspace = project.workspace.current()
     const queuedPartEvents: Array<{ type: "update"; part: Part } | ({ type: "delta" } & QueuedPartDelta)> = []
     const pendingPartDeltas = new Map<string, QueuedPartDelta>()
@@ -248,12 +263,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       queuedPartFlush = setTimeout(flushQueuedPartEvents, PART_EVENT_FLUSH_MS)
     }
 
-    async function fetchSessionMessages(sessionID: string, fullHistory?: boolean) {
-      if (!fullHistory) {
-        const result = await sdk.client.session.messages({ sessionID, limit: 100 })
-        return result.data ?? []
-      }
-
+    async function fetchSessionMessages(sessionID: string) {
       const all = []
       let before: string | undefined
 
@@ -266,6 +276,41 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
 
       return all.flat()
+    }
+
+    // Fetch a single page of messages for a session. Without `before` this is
+    // the most recent `limit` messages of the session; with `before` it is the
+    // `limit` messages strictly older than the cursor. The returned `next` is the
+    // cursor for the following (older) page, or undefined when the server has no
+    // more older messages.
+    async function fetchMessagePage(sessionID: string, limit: number, before?: string) {
+      const result = await sdk.client.session.messages({ sessionID, limit, before })
+      const next = result.response.headers.get("x-next-cursor") ?? undefined
+      return { messages: result.data ?? [], next }
+    }
+
+    // The server encodes a history cursor as base64url JSON of the oldest loaded
+    // message ({ id, time }), meaning "fetch messages older than this". Rebuild
+    // it from whatever message is currently the earliest loaded one so that
+    // evicting old messages never creates a gap when the user scrolls up again.
+    function encodeCursor(message: { id: string; time: { created: number } }) {
+      return Buffer.from(JSON.stringify({ id: message.id, time: message.time.created })).toString("base64url")
+    }
+
+    // Advance the load-earlier cursor to the message that is now the earliest
+    // loaded one (after dropping older messages) and mark that older history
+    // exists again. Dropping the oldest loaded message(s) always leaves older
+    // messages on the server (the dropped ones are older than the new earliest
+    // and can be re-fetched), so the flag decays back to false on the next
+    // loadEarlier when the server reports the real page boundary.
+    function setEarlierCursor(sessionID: string, earliest: { id: string; time: { created: number } } | undefined) {
+      if (earliest) {
+        earlierCursor.set(sessionID, encodeCursor(earliest))
+        hasMoreOlderSessions.set(sessionID, true)
+      } else {
+        earlierCursor.delete(sessionID)
+        hasMoreOlderSessions.delete(sessionID)
+      }
     }
 
     function sessionListQuery(): { scope?: "project"; path?: string } {
@@ -423,7 +468,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
           )
           const updated = store.message[event.properties.info.sessionID]
-          if (!fullHistorySyncedSessions.has(event.properties.info.sessionID) && updated.length > 100) {
+          if (!fullHistorySyncedSessions.has(event.properties.info.sessionID) && updated.length > HISTORY_MESSAGE_CAP) {
             const oldest = updated[0]
             batch(() => {
               setStore(
@@ -440,6 +485,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 }),
               )
             })
+            // Keep the "load earlier" cursor pointing at the new oldest loaded
+            // message so a later scroll-up re-fetches the dropped messages
+            // without leaving a gap in the window.
+            setEarlierCursor(event.properties.info.sessionID, updated[1])
           }
           break
         }
@@ -530,6 +579,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       if (workspace !== syncedWorkspace) {
         fullSyncedSessions.clear()
         fullHistorySyncedSessions.clear()
+        earlierCursor.clear()
+        hasMoreOlderSessions.clear()
+        earlierLoadingSessions.clear()
         syncedWorkspace = workspace
       }
       const projectPromise = project.sync()
@@ -669,13 +721,26 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (last.role === "user") return "working"
           return last.time.completed ? "idle" : "working"
         },
-        async sync(sessionID: string, options?: { fullHistory?: boolean }) {
+        async sync(sessionID: string, options?: { fullHistory?: boolean; limit?: number }) {
           const fullHistory = options?.fullHistory ?? false
           if (fullHistory && fullHistorySyncedSessions.has(sessionID)) return
-          if (!fullHistory && fullSyncedSessions.has(sessionID)) return
-          const [session, messages, todo, diff] = await Promise.all([
+          if (!fullHistory && (fullHistorySyncedSessions.has(sessionID) || fullSyncedSessions.has(sessionID))) return
+
+          // Full history fetches every page once; the windowed path only fetches
+          // the most recent `limit` messages and remembers the cursor for older
+          // pages that `loadEarlier` will pull in as the user scrolls up.
+          let next: string | undefined
+          let messages: Awaited<ReturnType<typeof fetchSessionMessages>>
+          if (fullHistory) {
+            messages = await fetchSessionMessages(sessionID)
+          } else {
+            const page = await fetchMessagePage(sessionID, options?.limit ?? HISTORY_TAIL_LIMIT)
+            messages = page.messages
+            next = page.next
+          }
+
+          const [session, todo, diff] = await Promise.all([
             sdk.client.session.get({ sessionID }, { throwOnError: true }),
-            fetchSessionMessages(sessionID, fullHistory),
             sdk.client.session.todo({ sessionID }),
             sdk.client.session.diff({ sessionID }),
           ])
@@ -701,7 +766,101 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
           )
           fullSyncedSessions.add(sessionID)
-          if (fullHistory) fullHistorySyncedSessions.add(sessionID)
+          if (fullHistory) {
+            fullHistorySyncedSessions.add(sessionID)
+            earlierCursor.delete(sessionID)
+            hasMoreOlderSessions.delete(sessionID)
+          } else {
+            if (next) earlierCursor.set(sessionID, next)
+            else earlierCursor.delete(sessionID)
+            if (next) hasMoreOlderSessions.set(sessionID, true)
+            else hasMoreOlderSessions.delete(sessionID)
+          }
+        },
+        // Fetch the next older page of history and prepend it into the store.
+        // Returns true when older messages were loaded (the viewport should be
+        // re-anchored), false when there is nothing more to load.
+        async loadEarlier(sessionID: string) {
+          if (fullHistorySyncedSessions.has(sessionID)) return false
+          if (earlierLoadingSessions.has(sessionID)) return false
+          const cursor = earlierCursor.get(sessionID)
+          if (!cursor) return false
+          earlierLoadingSessions.add(sessionID)
+          try {
+            const { messages, next } = await fetchMessagePage(sessionID, HISTORY_EARLIER_LIMIT, cursor)
+            if (messages.length === 0) {
+              earlierCursor.delete(sessionID)
+              hasMoreOlderSessions.delete(sessionID)
+              return false
+            }
+            setStore(
+              produce((draft) => {
+                const existing = draft.message[sessionID] ?? []
+                const existingIds = new Set(existing.map((message) => message.id))
+                const fresh = messages.filter((message) => !existingIds.has(message.info.id))
+                if (fresh.length === 0) return
+                draft.message[sessionID] = [...fresh.map((message) => message.info), ...existing]
+                for (const message of fresh) {
+                  const current = draft.part[message.info.id] ?? []
+                  const merged = message.parts.map((part) => {
+                    const existingPart = current.find((item) => item.id === part.id)
+                    return mergePart(existingPart, part)
+                  })
+                  draft.part[message.info.id] = [
+                    ...merged,
+                    ...current.filter((part) => isLivePart(part) && !merged.some((item) => item.id === part.id)),
+                  ].toSorted((a, b) => a.id.localeCompare(b.id))
+                }
+              }),
+            )
+            if (next) earlierCursor.set(sessionID, next)
+            else earlierCursor.delete(sessionID)
+            if (next) hasMoreOlderSessions.set(sessionID, true)
+            else hasMoreOlderSessions.delete(sessionID)
+            return true
+          } finally {
+            earlierLoadingSessions.delete(sessionID)
+          }
+        },
+        hasMoreOlder(sessionID: string) {
+          return hasMoreOlderSessions.get(sessionID) === true
+        },
+        // Fetch the complete message list for a session without touching the
+        // windowed store, used by transcript copy/export which need the whole
+        // conversation regardless of how much history is currently loaded.
+        async allMessages(sessionID: string) {
+          const messages = await fetchSessionMessages(sessionID)
+          return messages.map((message) => ({ info: message.info, parts: message.parts }))
+        },
+        // Hard bound for the lazy history window: drop the oldest loaded
+        // messages until at most HISTORY_MESSAGE_CAP remain. The viewport must
+        // be at the tail when this is called (the dropped messages sit above
+        // it), and the load-earlier cursor is advanced to the new oldest message
+        // so a later scroll-up re-fetches them without leaving a gap. Returns
+        // the number of messages dropped.
+        trimToTail(sessionID: string) {
+          if (fullHistorySyncedSessions.has(sessionID)) return 0
+          const messages = store.message[sessionID] ?? []
+          const excess = messages.length - HISTORY_MESSAGE_CAP
+          if (excess <= 0) return 0
+          const dropped = messages.slice(0, excess)
+          batch(() => {
+            setStore(
+              "message",
+              sessionID,
+              produce((draft) => {
+                draft.splice(0, excess)
+              }),
+            )
+            setStore(
+              "part",
+              produce((draft) => {
+                for (const message of dropped) delete draft[message.id]
+              }),
+            )
+          })
+          setEarlierCursor(sessionID, messages[excess])
+          return excess
         },
       },
       bootstrap,

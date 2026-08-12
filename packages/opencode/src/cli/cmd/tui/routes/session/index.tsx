@@ -666,7 +666,9 @@ export function Session() {
         } catch {}
       }
       editor.reconnect(result.data.directory)
-      await sync.session.sync(sessionID, { fullHistory: true })
+      // Load only the tail of the session's history; older messages are pulled
+      // in lazily as the user scrolls up past the top of the loaded window.
+      await sync.session.sync(sessionID)
       if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
@@ -1017,11 +1019,16 @@ export function Session() {
     const messagesList = messages()
     const scrollTop = scroll.y
 
+    // Index messages by id so the per-child lookup below is O(1) instead of
+    // O(messages) for every child in the scrollbox.
+    const byId = new Map<string, (typeof messagesList)[number]>()
+    for (const message of messagesList) byId.set(message.id, message)
+
     // Get visible messages sorted by position, filtering for valid non-synthetic, non-ignored content
     const visibleMessages = children
       .filter((c) => {
         if (!c.id) return false
-        const message = messagesList.find((m) => m.id === c.id)
+        const message = byId.get(c.id)
         if (!message) return false
 
         // Check if message has valid non-synthetic, non-ignored text parts
@@ -1070,6 +1077,71 @@ export function Session() {
     setVisualClearAfter(last)
     toBottom()
   }
+
+  // Lazy history windowing: a session opens with only the most recent messages
+  // loaded (see sync.session.sync). When the user scrolls up past the top of the
+  // loaded window, pull in the next older page and nudge the scroll position down
+  // by the height of the prepended content so the messages on screen stay put.
+  let historyLoading = false
+  let historyArmed = false
+  let historyPoll: ReturnType<typeof setInterval> | undefined
+
+  async function loadEarlierHistory() {
+    if (historyLoading || !scroll || scroll.isDestroyed) return
+    historyLoading = true
+    const sid = route.sessionID
+    const beforeHeight = scroll.scrollHeight
+    try {
+      const more = await sync.session.loadEarlier(sid)
+      if (!more || !scroll || scroll.isDestroyed) return
+      setTimeout(() => {
+        if (route.sessionID !== sid) return
+        if (!scroll || scroll.isDestroyed) return
+        const delta = scroll.scrollHeight - beforeHeight
+        if (delta > 0) scroll.scrollBy(delta)
+      }, 40)
+    } finally {
+      historyLoading = false
+    }
+  }
+
+  createEffect(
+    on(
+      () => route.sessionID,
+      () => {
+        if (historyPoll) clearInterval(historyPoll)
+        historyArmed = false
+        historyPoll = setInterval(() => {
+          if (!historyArmed || !scroll || scroll.isDestroyed) return
+          const sid = route.sessionID
+          if (scroll.scrollTop > 1) {
+            // Not at the top of the loaded window. Once the user returns to the
+            // tail region (active chat or after scrolling back down), drop the
+            // oldest loaded messages back to the window cap so history loaded
+            // while browsing up is released from memory.
+            const viewportHeight = scroll.viewport.height
+            const maxScrollTop = Math.max(0, scroll.scrollHeight - viewportHeight)
+            if (scroll.scrollTop >= maxScrollTop - viewportHeight * 2) {
+              sync.session.trimToTail(sid)
+            }
+            return
+          }
+          if (sync.session.hasMoreOlder(sid)) void loadEarlierHistory()
+        }, 200)
+        // Give the initial load and scroll-to-bottom time to settle before the
+        // poller is allowed to trigger, so it can't fire on the brief scrollTop 0
+        // state right after a session is opened.
+        const arm = setTimeout(() => {
+          historyArmed = true
+        }, 500)
+        onCleanup(() => clearTimeout(arm))
+      },
+    ),
+  )
+
+  onCleanup(() => {
+    if (historyPoll) clearInterval(historyPoll)
+  })
 
   const local = useLocal()
 
@@ -1688,17 +1760,16 @@ export function Session() {
         try {
           const sessionData = session()
           if (!sessionData) return
-          const sessionMessages = messages()
-          const transcript = formatTranscript(
-            sessionData,
-            sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
-            {
-              thinking: showThinking(),
-              toolDetails: showDetails(),
-              assistantMetadata: showAssistantMetadata(),
-              providers: sync.data.provider,
-            },
-          )
+          // The store only holds the loaded history window; fetch the complete
+          // conversation (without touching the store) so the copied transcript
+          // includes messages that haven't been scrolled to yet.
+          const sessionMessages = await sync.session.allMessages(route.sessionID)
+          const transcript = formatTranscript(sessionData, sessionMessages, {
+            thinking: showThinking(),
+            toolDetails: showDetails(),
+            assistantMetadata: showAssistantMetadata(),
+            providers: sync.data.provider,
+          })
           await Clipboard.copy(transcript)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
         } catch {
@@ -1719,7 +1790,9 @@ export function Session() {
         try {
           const sessionData = session()
           if (!sessionData) return
-          const sessionMessages = messages()
+          // Fetch the complete conversation so exports include messages outside
+          // the currently loaded history window.
+          const sessionMessages = await sync.session.allMessages(route.sessionID)
 
           const defaultFilename = `session-${sessionData.id.slice(0, 8)}.md`
 
@@ -1734,16 +1807,12 @@ export function Session() {
 
           if (options === null) return
 
-          const transcript = formatTranscript(
-            sessionData,
-            sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
-            {
-              thinking: options.thinking,
-              toolDetails: options.toolDetails,
-              assistantMetadata: options.assistantMetadata,
-              providers: sync.data.provider,
-            },
-          )
+          const transcript = formatTranscript(sessionData, sessionMessages, {
+            thinking: options.thinking,
+            toolDetails: options.toolDetails,
+            assistantMetadata: options.assistantMetadata,
+            providers: sync.data.provider,
+          })
 
           if (options.openWithoutSaving) {
             // Just open in editor without saving
