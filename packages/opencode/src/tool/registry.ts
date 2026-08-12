@@ -7,7 +7,7 @@ import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ReadTool } from "./read"
-import { SubagentTool } from "./subagent"
+import { SubagentTool, ParametersWithoutModel as SubagentParametersWithoutModel } from "./subagent"
 import { SubagentModelsTool } from "./subagent_models"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
@@ -291,6 +291,7 @@ export const layer: Layer.Layer<
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const isSubagent = input.agent.mode === "subagent"
+      const isBoss = input.agent.name === "boss"
       const filtered = (yield* all()).filter((tool) => {
         if (tool.id === WebSearchTool.id) {
           return input.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
@@ -301,6 +302,7 @@ export const layer: Layer.Layer<
         if (tool.id === EditTool.id || tool.id === WriteTool.id) return !usePatch
 
         if (isSubagent && (tool.id === SubagentTool.id || tool.id === SubagentModelsTool.id)) return false
+        if (tool.id === SubagentModelsTool.id && !isBoss) return false
 
         return true
       })
@@ -311,7 +313,8 @@ export const layer: Layer.Layer<
           using _ = log.time(tool.id)
           const output = {
             description: tool.description,
-            parameters: tool.parameters,
+            parameters:
+              tool.id === SubagentTool.id && !isBoss ? SubagentParametersWithoutModel : tool.parameters,
           }
           yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
           return {

@@ -349,7 +349,6 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
     "description",
     "prompt",
     "agent_type",
-    "model",
   ],
   "type": "object",
 }

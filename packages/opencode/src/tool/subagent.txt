@@ -4,14 +4,14 @@ sandboxed away from the main session.
 
 You must specify:
   - `agent_type` — which subagent to use (e.g. "general", "explore").
-  - `model` — which model the subagent should run on. Pick from the list
-    returned by the `subagent_models` tool. The subagent inherits its
-    toolset, prompt, and permissions from the agent type; the model is the
-    only runtime override.
 
 Optional:
   - `description` — 3-5 word label.
   - `prompt` — the full task for the subagent.
+  - `model` — which model the subagent should run on, in 'provider/model'
+    form. Available to the Boss orchestrator agent; pick from the list
+    returned by the `subagent_models` tool. When omitted, the subagent's
+    configured model (or your current model) is used.
   - `session_id` — pass an existing subagent session id to resume it. When
     resuming, the `model` field is ignored: the resumed session keeps its
     original model.

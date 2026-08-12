@@ -156,7 +156,7 @@ function task(info: ToolProps<typeof SubagentTool>) {
   const input = info.part.state.input
   const status = info.part.state.status
   const subagent =
-    typeof input.subagent_type === "string" && input.subagent_type.trim().length > 0 ? input.subagent_type : "unknown"
+    typeof input.agent_type === "string" && input.agent_type.trim().length > 0 ? input.agent_type : "unknown"
   const agent = Locale.titlecase(subagent)
   const desc =
     typeof input.description === "string" && input.description.trim().length > 0 ? input.description : undefined

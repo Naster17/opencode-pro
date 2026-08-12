@@ -221,8 +221,10 @@ describe("tool parameters", () => {
       })
       expect(parsed.session_id).toBe("ses_abc")
     })
-    test("rejects missing model", () => {
-      expect(accepts(Task, { description: "d", prompt: "p", agent_type: "general" })).toBe(false)
+    test("accepts missing model", () => {
+      const parsed = parse(Task, { description: "d", prompt: "p", agent_type: "general" })
+      expect(parsed.agent_type).toBe("general")
+      expect(parsed.model).toBeUndefined()
     })
     test("rejects missing prompt", () => {
       expect(accepts(Task, { description: "d", agent_type: "general", model: "p/m" })).toBe(false)

@@ -19,21 +19,26 @@ export interface TaskPromptOps {
 
 const id = "subagent"
 
-export const Parameters = Schema.Struct({
-  description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
-  prompt: Schema.String.annotate({ description: "The task for the agent to perform" }),
-  agent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
-  model: Schema.String.annotate({
-    description:
-      "The model the subagent should run on, in 'provider/model' form. " +
-      "Pick from the list returned by the subagent_models tool. " +
-      "Ignored when session_id is set (resumed sessions keep their original model).",
-  }),
-  session_id: Schema.optional(Schema.String).annotate({
-    description: "Pass an existing subagent session id to resume that session instead of creating a fresh one",
-  }),
-  command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
+const description = Schema.String.annotate({ description: "A short (3-5 words) description of the task" })
+const prompt = Schema.String.annotate({ description: "The task for the agent to perform" })
+const agent_type = Schema.String.annotate({ description: "The type of specialized agent to use for this task" })
+const model = Schema.optional(Schema.String).annotate({
+  description:
+    "The model the subagent should run on, in 'provider/model' form. " +
+    "Pick from the list returned by the subagent_models tool. " +
+    "Ignored when session_id is set (resumed sessions keep their original model).",
 })
+const session_id = Schema.optional(Schema.String).annotate({
+  description: "Pass an existing subagent session id to resume that session instead of creating a fresh one",
+})
+const command = Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" })
+
+export const Parameters = Schema.Struct({ description, prompt, agent_type, model, session_id, command })
+
+// Non-boss agents (build, plan, ...) have no subagent_models tool, so the
+// model argument is not exposed to them. The execute path still accepts it
+// because it decodes against the full `Parameters` schema.
+export const ParametersWithoutModel = Schema.Struct({ description, prompt, agent_type, session_id, command })
 
 export const SubagentTool = Tool.define(
   id,
@@ -44,15 +49,17 @@ export const SubagentTool = Tool.define(
     const sessions = yield* Session.Service
 
     const resolveModel = Effect.fnUntraced(function* (
-      requested: string,
+      requested: string | undefined,
       next: Agent.Info,
       parent: MessageV2.Assistant,
     ) {
-      const parsed = Provider.parseModel(requested)
-      const requestedHit = yield* providers
-        .getModel(parsed.providerID, parsed.modelID)
-        .pipe(Effect.exit)
-      if (Exit.isSuccess(requestedHit)) return parsed
+      if (requested) {
+        const parsed = Provider.parseModel(requested)
+        const requestedHit = yield* providers
+          .getModel(parsed.providerID, parsed.modelID)
+          .pipe(Effect.exit)
+        if (Exit.isSuccess(requestedHit)) return parsed
+      }
 
       if (next.model) {
         const agentHit = yield* providers
