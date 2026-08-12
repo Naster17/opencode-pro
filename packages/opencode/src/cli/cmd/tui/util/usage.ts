@@ -500,3 +500,57 @@ export function summarizeUsage(
         : "0 t/s",
   }
 }
+
+// Per-session accounting breakdown used by the sidebar's cumulative usage
+// widget. Unlike `summarizeUsage`, these sums are maintained incrementally by
+// `BilledUsageTracker`: a single full-history snapshot seeds them and then
+// new messages/parts only adjust small per-message units.
+export type BilledSums = {
+  input: number
+  output: number
+  reasoning: number
+  cache_read: number
+  cache_write: number
+  cost: number
+  tools: number
+  compact: number
+  generation_output: number
+  generation_duration: number
+}
+
+export function emptyBilledSums(): BilledSums {
+  return {
+    input: 0,
+    output: 0,
+    reasoning: 0,
+    cache_read: 0,
+    cache_write: 0,
+    cost: 0,
+    tools: 0,
+    compact: 0,
+    generation_output: 0,
+    generation_duration: 0,
+  }
+}
+
+export function combineBilledSums(left: BilledSums, right: BilledSums): BilledSums {
+  return {
+    input: left.input + right.input,
+    output: left.output + right.output,
+    reasoning: left.reasoning + right.reasoning,
+    cache_read: left.cache_read + right.cache_read,
+    cache_write: left.cache_write + right.cache_write,
+    cost: left.cost + right.cost,
+    tools: left.tools + right.tools,
+    compact: left.compact + right.compact,
+    generation_output: left.generation_output + right.generation_output,
+    generation_duration: left.generation_duration + right.generation_duration,
+  }
+}
+
+export function billedAvgTokensPerSecond(input: Pick<BilledSums, "generation_output" | "generation_duration">) {
+  if (input.generation_output > 0 && input.generation_duration > 0) {
+    return formatTokensPerSecond(input.generation_output / (input.generation_duration / 1000))
+  }
+  return "0 t/s"
+}

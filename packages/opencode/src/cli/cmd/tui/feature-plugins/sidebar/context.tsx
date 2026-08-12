@@ -1,13 +1,14 @@
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import path from "path"
-import { createEffect, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, on, onCleanup, Show } from "solid-js"
 import type { JSX } from "@opentui/solid"
 import { useSync } from "@tui/context/sync"
 import { Global } from "@opencode-ai/core/global"
-import { formatCompactTokens, money, summarizeUsage } from "@tui/util/usage"
+import { billedAvgTokensPerSecond, formatCompactTokens, money, summarizeUsage } from "@tui/util/usage"
 import { Locale } from "@/util/locale"
 import { isCodexModel } from "@/plugin/codex"
 import { clearCodexUsageCache, formatResetDuration, getCodexUsage } from "./codex-usage"
+import { BilledUsageTracker } from "./billed-usage"
 import { useBtwUsage } from "@tui/context/btw"
 import { useLocal } from "@tui/context/local"
 
@@ -29,6 +30,13 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const [now, setNow] = createSignal(Date.now())
   const [codexUsageVersion, setCodexUsageVersion] = createSignal(0)
   const codexHotSwapTimers = new Set<ReturnType<typeof setTimeout>>()
+
+  // Cumulative billed usage (in/out/reasoning/cache/cost/tools/compact) for the
+  // session subtree. Computed once per session from a transient full-history
+  // fetch (kept out of the sync store to preserve the lazy-window memory win),
+  // then maintained incrementally from message/part events so new messages
+  // never trigger another full re-fetch.
+  const billedTracker = new BilledUsageTracker((sessionID) => sync.session.allMessages(sessionID))
 
   const descendantSessions = createMemo(() => {
     const rootID = props.session_id
@@ -155,37 +163,64 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   onCleanup(offIdle)
   onCleanup(offModel)
 
+  // Rebuild the billed snapshot when the viewed session changes.
+  createEffect(
+    on(
+      () => props.session_id,
+      () => billedTracker.reset(),
+    ),
+  )
+
+  // Track the current session plus all subagent descendants, fetching each
+  // session's full history once (newly spawned descendants are picked up as
+  // they appear).
   createEffect(() => {
-    // Ensure all descendant session messages are synced for accurate metrics
+    const ids = trackedSessionIDs()
+    billedTracker.setTracked(ids)
+    for (const id of ids) void billedTracker.ensureBaseline(id)
+  })
+
+  // Keep the billed totals fresh from message/part events. Each event only
+  // mutates small per-message accounting units; no full-history re-fetch.
+  const offBilledUpdated = props.api.event.on("message.updated", (event) => billedTracker.onEvent(event))
+  const offBilledRemoved = props.api.event.on("message.removed", (event) => billedTracker.onEvent(event))
+  const offBilledPartUpdated = props.api.event.on("message.part.updated", (event) => billedTracker.onEvent(event))
+  const offBilledPartDelta = props.api.event.on("message.part.delta", (event) => billedTracker.onEvent(event))
+  const offBilledPartRemoved = props.api.event.on("message.part.removed", (event) => billedTracker.onEvent(event))
+  onCleanup(offBilledUpdated)
+  onCleanup(offBilledRemoved)
+  onCleanup(offBilledPartUpdated)
+  onCleanup(offBilledPartDelta)
+  onCleanup(offBilledPartRemoved)
+  onCleanup(() => billedTracker.dispose())
+
+  createEffect(() => {
+    // Ensure all descendant session messages are synced for metrics. Use the
+    // windowed sync (not the plugin API's full-history sync) so the sidebar
+    // never forces an entire huge session into memory; metrics are computed
+    // from the loaded tail which the session route already fetched.
     for (const id of descendantSessions()) {
-      void props.api.state.session.sync(id)
+      void sync.session.sync(id)
     }
   })
 
   const usage = createMemo(() => {
     const rootSession = allSessions().find((s) => s.id === props.session_id)
     const rootMessages = props.api.state.session.messages(props.session_id)
+    const ids = [props.session_id, ...descendantSessions()]
+    const additions = ids.reduce(
+      (sum, id) => sum + props.api.state.session.diff(id).reduce((total, item) => total + item.additions, 0),
+      0,
+    )
+    const deletions = ids.reduce(
+      (sum, id) => sum + props.api.state.session.diff(id).reduce((total, item) => total + item.deletions, 0),
+      0,
+    )
 
-    const descendantSessionsList = descendantSessions().map((id) => ({
-      session: allSessions().find((s) => s.id === id),
-      messages: props.api.state.session.messages(id),
-      getParts: props.api.state.part,
-      additions: props.api.state.session.diff(id).reduce((sum, item) => sum + item.additions, 0),
-      deletions: props.api.state.session.diff(id).reduce((sum, item) => sum + item.deletions, 0),
-    }))
-
-    const sessions = [
-      {
-        session: rootSession,
-        messages: rootMessages,
-        getParts: props.api.state.part,
-        additions: props.api.state.session.diff(props.session_id).reduce((sum, item) => sum + item.additions, 0),
-        deletions: props.api.state.session.diff(props.session_id).reduce((sum, item) => sum + item.deletions, 0),
-      },
-      ...descendantSessionsList,
-    ]
-
-    const billed = summarizeUsage(sessions, props.api.state.provider, { respectRevert: false })
+    // Cumulative billed usage from the one-time full-history snapshot plus
+    // incremental message/part events. The live context figure below comes from
+    // the windowed store, which is accurate for the most recent assistant.
+    const billed = billedTracker.totals
     const context = summarizeUsage(
       [
         {
@@ -198,17 +233,24 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     )
     const btw = btwUsage.sum(trackedSessionIDs())
 
+    const billedTokens =
+      billed.input + billed.output + billed.reasoning + billed.cache_read + billed.cache_write
+    const btwTokens = btw.input + btw.output + btw.reasoning + btw.cache_read + btw.cache_write
+
     return {
-      ...billed,
       input: billed.input + btw.input,
       output: billed.output + btw.output,
       reasoning: billed.reasoning + btw.reasoning,
       cache_read: billed.cache_read + btw.cache_read,
       cache_write: billed.cache_write + btw.cache_write,
-      cached: billed.cached + btw.cache_read + btw.cache_write,
-      tokens: billed.tokens + btw.input + btw.output + btw.reasoning + btw.cache_read + btw.cache_write,
+      cached: billed.cache_read + billed.cache_write + btw.cache_read + btw.cache_write,
+      tokens: billedTokens + btwTokens,
       cost: billed.cost + btw.cost,
       tools: billed.tools + btw.tools,
+      compact: billed.compact,
+      avg_tokens_per_second: billedAvgTokensPerSecond(billed),
+      additions,
+      deletions,
       context_tokens_formatted: Locale.number(context.context_tokens),
       average_context_percent: context.average_context_percent,
     }
