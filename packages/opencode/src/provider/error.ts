@@ -121,8 +121,9 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
   if (!body) return
 
   const responseBody = JSON.stringify(body)
-  const m = typeof body.message === "string" ? body.message : (typeof body.error?.message === "string" ? body.error.message : "")
-  
+  const m =
+    typeof body.message === "string" ? body.message : typeof body.error?.message === "string" ? body.error.message : ""
+
   if (isOverflow(m) || body?.error?.code === "context_length_exceeded") {
     return {
       type: "context_overflow",

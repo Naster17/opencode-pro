@@ -27,7 +27,13 @@ function userMessage(input: { id: string }) {
   } as unknown as Message
 }
 
-function assistantMessage(input: { id: string; parentID: string; inputTokens: number; outputTokens: number; summary?: boolean }) {
+function assistantMessage(input: {
+  id: string
+  parentID: string
+  inputTokens: number
+  outputTokens: number
+  summary?: boolean
+}) {
   return {
     id: input.id,
     role: "assistant",

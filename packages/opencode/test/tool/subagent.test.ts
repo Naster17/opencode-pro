@@ -497,76 +497,68 @@ describe("tool.subagent", () => {
 })
 
 describe("tool.subagent gating", () => {
-  it.instance(
-    "exposes the model argument only to the boss agent",
-    () =>
-      Effect.gen(function* () {
-        const agent = yield* Agent.Service
-        const registry = yield* ToolRegistry.Service
+  it.instance("exposes the model argument only to the boss agent", () =>
+    Effect.gen(function* () {
+      const agent = yield* Agent.Service
+      const registry = yield* ToolRegistry.Service
 
-        const subagentSchema = Effect.fnUntraced(function* (input: { agent: Agent.Info }) {
-          const tool = (yield* registry.tools({ ...ref, agent: input.agent })).find(
-            (item) => item.id === SubagentTool.id,
-          )
-          if (!tool) throw new Error("subagent tool not found")
-          return toJsonSchema(tool.parameters)
-        })
+      const subagentSchema = Effect.fnUntraced(function* (input: { agent: Agent.Info }) {
+        const tool = (yield* registry.tools({ ...ref, agent: input.agent })).find((item) => item.id === SubagentTool.id)
+        if (!tool) throw new Error("subagent tool not found")
+        return toJsonSchema(tool.parameters)
+      })
 
-        const boss = yield* subagentSchema({ agent: yield* agent.get("boss") })
-        const build = yield* subagentSchema({ agent: yield* agent.get("build") })
+      const boss = yield* subagentSchema({ agent: yield* agent.get("boss") })
+      const build = yield* subagentSchema({ agent: yield* agent.get("build") })
 
-        expect("model" in (boss.properties ?? {})).toBe(true)
-        expect("model" in (build.properties ?? {})).toBe(false)
-      }),
+      expect("model" in (boss.properties ?? {})).toBe(true)
+      expect("model" in (build.properties ?? {})).toBe(false)
+    }),
   )
 
-  it.instance(
-    "exposes the subagent_models tool only to the boss agent",
-    () =>
-      Effect.gen(function* () {
-        const agent = yield* Agent.Service
-        const registry = yield* ToolRegistry.Service
-        const boss = yield* agent.get("boss")
-        const build = yield* agent.get("build")
+  it.instance("exposes the subagent_models tool only to the boss agent", () =>
+    Effect.gen(function* () {
+      const agent = yield* Agent.Service
+      const registry = yield* ToolRegistry.Service
+      const boss = yield* agent.get("boss")
+      const build = yield* agent.get("build")
 
-        const bossIds = (yield* registry.tools({ ...ref, agent: boss })).map((tool) => tool.id)
-        const buildIds = (yield* registry.tools({ ...ref, agent: build })).map((tool) => tool.id)
+      const bossIds = (yield* registry.tools({ ...ref, agent: boss })).map((tool) => tool.id)
+      const buildIds = (yield* registry.tools({ ...ref, agent: build })).map((tool) => tool.id)
 
-        expect(bossIds).toContain("subagent_models")
-        expect(buildIds).toContain("subagent")
-        expect(buildIds).not.toContain("subagent_models")
-      }),
+      expect(bossIds).toContain("subagent_models")
+      expect(buildIds).toContain("subagent")
+      expect(buildIds).not.toContain("subagent_models")
+    }),
   )
 
-  it.instance(
-    "execute falls back to the parent model when model is omitted",
-    () =>
-      Effect.gen(function* () {
-        const { chat, assistant } = yield* seed()
-        const tool = yield* SubagentTool
-        const def = yield* tool.init()
-        let seen: SessionPrompt.PromptInput | undefined
-        const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+  it.instance("execute falls back to the parent model when model is omitted", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* SubagentTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
 
-        yield* def.execute(
-          {
-            description: "inspect bug",
-            prompt: "look into the cache key path",
-            agent_type: "general",
-          },
-          {
-            sessionID: chat.id,
-            messageID: assistant.id,
-            agent: "build",
-            abort: new AbortController().signal,
-            extra: { promptOps },
-            messages: [],
-            metadata: () => Effect.void,
-            ask: () => Effect.void,
-          },
-        )
+      yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          agent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
 
-        expect(seen?.model).toEqual({ modelID: ref.modelID, providerID: ref.providerID })
-      }),
+      expect(seen?.model).toEqual({ modelID: ref.modelID, providerID: ref.providerID })
+    }),
   )
 })

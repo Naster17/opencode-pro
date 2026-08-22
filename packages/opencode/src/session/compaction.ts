@@ -391,7 +391,7 @@ export const layer: Layer.Layer<
       // Check if stable_prune is enabled to determine how to check for already-compacted parts
       const stablePrune = cfg.compaction?.stable_prune ?? true
       const alreadyCompacted = new Set<string>()
-      
+
       if (stablePrune) {
         // Load already compacted parts from storage
         const stored = yield* storage
@@ -417,14 +417,14 @@ export const layer: Layer.Layer<
           if (part.type !== "tool") continue
           if (part.state.status !== "completed") continue
           if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
-          
+
           // Check if already compacted (either in storage or in part itself)
           if (stablePrune) {
             if (alreadyCompacted.has(part.id)) break loop
           } else {
             if (part.state.time.compacted) break loop
           }
-          
+
           const estimate = Token.estimate(part.state.output)
           total += estimate
           if (total <= PRUNE_PROTECT) continue
@@ -438,12 +438,10 @@ export const layer: Layer.Layer<
         // Check if stable_prune is enabled (default: true)
         // When enabled, we store compacted metadata separately to avoid modifying old parts
         const stablePrune = cfg.compaction?.stable_prune ?? true
-        
+
         if (stablePrune) {
           const compactedAt = Date.now()
-          const compactedPartIDs = toPrune.flatMap((part) =>
-            part.state.status === "completed" ? [part.id] : [],
-          )
+          const compactedPartIDs = toPrune.flatMap((part) => (part.state.status === "completed" ? [part.id] : []))
 
           // NEW BEHAVIOR (default): Store compacted metadata separately
           // This prevents cache invalidation by not modifying old tool parts

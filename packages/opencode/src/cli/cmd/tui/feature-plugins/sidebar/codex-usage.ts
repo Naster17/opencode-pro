@@ -160,7 +160,8 @@ function callCodexAppServer(url: string, auth: CodexAppServerAuth) {
       const fail = (error: unknown) => {
         if (settled) return
         settled = true
-        for (const request of pending.values()) request.reject(error instanceof Error ? error : new Error(String(error)))
+        for (const request of pending.values())
+          request.reject(error instanceof Error ? error : new Error(String(error)))
         pending.clear()
         ws.close()
         reject(error instanceof Error ? error : new Error(String(error)))
@@ -316,7 +317,7 @@ export async function getCodexUsage(force = false): Promise<CodexUsageSnapshot> 
       cached = { time: Date.now(), value }
       return value
     })
-    .catch(() => ({ configured: true } satisfies CodexUsageSnapshot))
+    .catch(() => ({ configured: true }) satisfies CodexUsageSnapshot)
     .finally(() => {
       inflight = undefined
     })

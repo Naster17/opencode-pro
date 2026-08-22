@@ -113,7 +113,9 @@ describe("tool.webfetch", () => {
         await WithInstance.provide({
           directory: projectRoot,
           fn: async () => {
-            await expect(exec({ url: url.toString(), format: "text", timeout: 5 })).rejects.toThrow("Too many redirects")
+            await expect(exec({ url: url.toString(), format: "text", timeout: 5 })).rejects.toThrow(
+              "Too many redirects",
+            )
             expect(calls).toBe(31)
           },
         })

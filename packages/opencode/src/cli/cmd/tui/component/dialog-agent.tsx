@@ -98,12 +98,7 @@ function isValidAgentName(name: string) {
   return true
 }
 
-function serializeAgentFile(input: {
-  item?: Agent
-  prompt: string
-  config?: Record<string, unknown>
-  color?: string
-}) {
+function serializeAgentFile(input: { item?: Agent; prompt: string; config?: Record<string, unknown>; color?: string }) {
   const prompt = input.prompt.trimEnd()
   const frontmatter = input.config
     ? {
@@ -129,11 +124,7 @@ function serializeAgentFile(input: {
   return matter.stringify(prompt ? `${prompt}\n` : "", frontmatter)
 }
 
-function nextAgentColor(input: {
-  sync: ReturnType<typeof useSync>
-  used?: Set<string>
-  exclude?: string
-}) {
+function nextAgentColor(input: { sync: ReturnType<typeof useSync>; used?: Set<string>; exclude?: string }) {
   const used = input.used ?? new Set<string>()
   for (const item of input.sync.data.agent) {
     if (item.mode === "subagent") continue
@@ -156,10 +147,7 @@ async function reloadAgents(input: { sdk: ReturnType<typeof useSDK>; sync: Retur
   await input.sync.bootstrap({ fatal: false })
 }
 
-async function removeLegacyConfigAgents(input: {
-  project: ReturnType<typeof useProject>
-  names: string[]
-}) {
+async function removeLegacyConfigAgents(input: { project: ReturnType<typeof useProject>; names: string[] }) {
   const file = legacyConfigPath(input.project)
   const config = await Filesystem.readJson<{ [key: string]: unknown; agent?: Record<string, Record<string, unknown>> }>(
     file,
@@ -212,10 +200,7 @@ async function existingAgentScope(input: {
   return undefined
 }
 
-async function agentSource(input: {
-  project: ReturnType<typeof useProject>
-  item: Agent
-}): Promise<AgentSource> {
+async function agentSource(input: { project: ReturnType<typeof useProject>; item: Agent }): Promise<AgentSource> {
   const scope = await existingAgentScope({
     project: input.project,
     name: input.item.name,
@@ -230,7 +215,9 @@ async function migrateLegacyAgents(input: {
   sync: ReturnType<typeof useSync>
 }) {
   const file = legacyConfigPath(input.project)
-  const config = await Filesystem.readJson<{ agent?: Record<string, Record<string, unknown>> }>(file).catch(() => undefined)
+  const config = await Filesystem.readJson<{ agent?: Record<string, Record<string, unknown>> }>(file).catch(
+    () => undefined,
+  )
   const usedColors = new Set<string>()
   const migratedNames = new Set<string>()
   let changed = false
@@ -284,11 +271,7 @@ async function migrateLegacyAgents(input: {
   await reloadAgents({ sdk: input.sdk, sync: input.sync })
 }
 
-function agentPrompt(input: {
-  item?: Agent
-  local: ReturnType<typeof useLocal>
-  sync: ReturnType<typeof useSync>
-}) {
+function agentPrompt(input: { item?: Agent; local: ReturnType<typeof useLocal>; sync: ReturnType<typeof useSync> }) {
   if (!input.item) return ""
   if (input.item.prompt) return input.item.prompt
   if (input.item.name === "plan") return PROMPT_PLAN
@@ -311,7 +294,8 @@ function agentPrompt(input: {
     ? input.sync.data.provider.find((item) => item.id === selected.providerID)
     : input.sync.data.provider[0]
   if (!provider) return ""
-  const modelID = selected?.modelID || input.sync.data.provider_default[provider.id] || Object.values(provider.models)[0]?.id
+  const modelID =
+    selected?.modelID || input.sync.data.provider_default[provider.id] || Object.values(provider.models)[0]?.id
   if (!modelID) return ""
   const model = provider.models[modelID]
   if (!model) return ""
@@ -715,8 +699,7 @@ export function DialogAgent(props: { selected?: string }) {
 
   const options = createMemo(() => {
     const items = local.agent.list()
-    const favorites = local
-      .agent
+    const favorites = local.agent
       .favoriteNames()
       .map((name) => items.find((item) => item.name === name))
       .filter((item) => item !== undefined)
@@ -727,15 +710,12 @@ export function DialogAgent(props: { selected?: string }) {
         value: item.name,
         title: isDeleting ? `Press ${Keybind.toString(deleteKey)} again to confirm` : item.name,
         description: undefined,
-        footer: item.native ? "builtin" : sources()[item.name] ?? "global",
+        footer: item.native ? "builtin" : (sources()[item.name] ?? "global"),
         category,
         bg: isDeleting ? theme.error : undefined,
       }
     }
-    return [
-      ...favorites.map((item) => option(item, "Favorites")),
-      ...others.map((item) => option(item, "Agents")),
-    ]
+    return [...favorites.map((item) => option(item, "Favorites")), ...others.map((item) => option(item, "Agents"))]
   })
 
   async function refresh(selection?: string) {
@@ -777,10 +757,7 @@ export function DialogAgent(props: { selected?: string }) {
     if (!agent) return
     const visible = options()
     const index = visible.findIndex((item) => item.value === name)
-    const fallback =
-      visible[index + 1]?.value ??
-      visible[index - 1]?.value ??
-      local.agent.current()?.name
+    const fallback = visible[index + 1]?.value ?? visible[index - 1]?.value ?? local.agent.current()?.name
     if (local.agent.list().length <= 1) {
       toast.show({
         variant: "warning",

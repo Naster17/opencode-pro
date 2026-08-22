@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { formatResetDuration, resolveCodexUsage } from "../../../../../../src/cli/cmd/tui/feature-plugins/sidebar/codex-usage"
+import {
+  formatResetDuration,
+  resolveCodexUsage,
+} from "../../../../../../src/cli/cmd/tui/feature-plugins/sidebar/codex-usage"
 
 describe("codex usage sidebar", () => {
   test("formats reset countdown in days hours minutes", () => {

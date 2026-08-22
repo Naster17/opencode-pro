@@ -82,7 +82,10 @@ export const layer = Layer.effect(
     const bus = yield* Bus.Service
     const config = yield* Config.Service
 
-    const normalizeDiffs = Effect.fn("SessionSummary.normalizeDiffs")(function* (key: string[], diffs: Snapshot.FileDiff[]) {
+    const normalizeDiffs = Effect.fn("SessionSummary.normalizeDiffs")(function* (
+      key: string[],
+      diffs: Snapshot.FileDiff[],
+    ) {
       const next = diffs.map((item) => {
         const file = unquoteGitPath(item.file)
         if (file === item.file) return item
@@ -96,9 +99,10 @@ export const layer = Layer.effect(
 
     const readDiffs = Effect.fn("SessionSummary.readDiffs")(function* (keys: string[][]) {
       for (const key of keys) {
-        const diffs = yield* storage
-          .read<Snapshot.FileDiff[]>(key)
-          .pipe(Effect.map((diffs) => ({ diffs, key })), Effect.catch(() => Effect.succeed(undefined)))
+        const diffs = yield* storage.read<Snapshot.FileDiff[]>(key).pipe(
+          Effect.map((diffs) => ({ diffs, key })),
+          Effect.catch(() => Effect.succeed(undefined)),
+        )
         if (!diffs) continue
         return yield* normalizeDiffs(diffs.key, diffs.diffs)
       }
@@ -150,12 +154,12 @@ export const layer = Layer.effect(
       const target = messages.find((m) => m.info.id === input.messageID)
       if (!target || target.info.role !== "user") return
       const msgDiffs = yield* computeDiff({ messages })
-      
+
       // Check if stable_history is enabled (default: true)
       // When enabled, we don't modify old user messages to maintain cache stability
       const cfg = yield* config.get()
       const stableHistory = cfg.caching?.stable_history ?? true
-      
+
       if (stableHistory) {
         // Store diffs separately without modifying the user message
         // This prevents cache invalidation caused by updating old messages

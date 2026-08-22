@@ -40,7 +40,7 @@ const storageLayer = (partIDs: string[]) =>
       update: () => Effect.die("unexpected storage.update"),
       write: () => Effect.die("unexpected storage.write"),
       list: () => Effect.succeed([]),
-      read: <T,>(key: string[]) => {
+      read: <T>(key: string[]) => {
         if (key[0] === "compacted_tool_session") {
           return Effect.succeed({ partIDs } as T)
         }
@@ -56,7 +56,7 @@ const memoryStorageLayer = () => {
     Storage.Service,
     Storage.Service.of({
       remove: (input) => Effect.sync(() => store.delete(key(input))).pipe(Effect.asVoid),
-      update: <T,>(input: string[], fn: (draft: T) => void) =>
+      update: <T>(input: string[], fn: (draft: T) => void) =>
         Effect.sync(() => {
           const value = structuredClone(store.get(key(input))) as T
           fn(value)
@@ -65,7 +65,7 @@ const memoryStorageLayer = () => {
         }),
       write: (input, content) => Effect.sync(() => store.set(key(input), structuredClone(content))).pipe(Effect.asVoid),
       list: () => Effect.succeed([]),
-      read: <T,>(input: string[]) => {
+      read: <T>(input: string[]) => {
         if (!store.has(key(input)))
           return Effect.fail(new Storage.NotFoundError({ message: `missing storage key: ${key(input)}` }))
         return Effect.succeed(structuredClone(store.get(key(input))) as T)
@@ -282,10 +282,7 @@ describe("Instruction.loaded", () => {
         const agents = path.join(dir, "subdir", "AGENTS.md")
         const paths = yield* Instruction.loaded(loaded(agents))
         expect(paths.has(agents)).toBe(false)
-      }).pipe(
-        Effect.provide(configLayer),
-        Effect.provide(storageLayer(["part-loaded-1"])),
-      ),
+      }).pipe(Effect.provide(configLayer), Effect.provide(storageLayer(["part-loaded-1"]))),
     ),
   )
 })

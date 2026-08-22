@@ -78,7 +78,8 @@ export const LspCommand = effectCmd({
       if (entry.status === "installed") color = UI.Style.TEXT_INFO
 
       const label = `${entry.title.padEnd(20)} ${color}${entry.status.toUpperCase()}${UI.Style.TEXT_NORMAL}`
-      const hint = entry.title === entry.id ? entry.extensions.join(", ") : `${entry.id} • ${entry.extensions.join(", ")}`
+      const hint =
+        entry.title === entry.id ? entry.extensions.join(", ") : `${entry.id} • ${entry.extensions.join(", ")}`
 
       return {
         label,
@@ -87,13 +88,12 @@ export const LspCommand = effectCmd({
       }
     })
 
-    const selected = yield* Effect.promise(() => prompts.select({
-      message: "LSP Servers (Select to see details)",
-      options: [
-        { label: "Search...", value: "SEARCH_ACTION" },
-        ...options
-      ]
-    }))
+    const selected = yield* Effect.promise(() =>
+      prompts.select({
+        message: "LSP Servers (Select to see details)",
+        options: [{ label: "Search...", value: "SEARCH_ACTION" }, ...options],
+      }),
+    )
 
     if (prompts.isCancel(selected)) {
       prompts.outro("Done")
@@ -101,9 +101,11 @@ export const LspCommand = effectCmd({
     }
 
     if (selected === "SEARCH_ACTION") {
-      const query = yield* Effect.promise(() => prompts.text({
-        message: "Enter search query",
-      }))
+      const query = yield* Effect.promise(() =>
+        prompts.text({
+          message: "Enter search query",
+        }),
+      )
       if (prompts.isCancel(query)) {
         prompts.outro("Done")
         return

@@ -767,7 +767,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   const compactedParts = new Set<string>()
   const cfg = config._tag === "Some" ? yield* config.value.get() : undefined
   const stablePrune = cfg?.compaction?.stable_prune ?? true
-  
+
   if (options?.compactToolOutput && storage._tag === "Some") {
     if (stablePrune) {
       const sessionID = input[0]?.info.sessionID
@@ -785,21 +785,19 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           yield* Effect.forEach(
             toolPartIds,
             (partId) =>
-              storage.value
-                .read<{ compacted: number }>(["compacted_tool", partId])
-                .pipe(
-                  Effect.map(() => {
-                    compactedParts.add(partId)
-                  }),
-                  Effect.catch(() => Effect.void),
-                ),
+              storage.value.read<{ compacted: number }>(["compacted_tool", partId]).pipe(
+                Effect.map(() => {
+                  compactedParts.add(partId)
+                }),
+                Effect.catch(() => Effect.void),
+              ),
             { concurrency: "unbounded" },
           )
         }
       }
     }
   }
-  
+
   // Helper to check if a tool part is compacted
   const isCompacted = (part: ToolPart): boolean => {
     if (!options?.compactToolOutput) return false
@@ -807,11 +805,11 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     if (part.state.status === "completed" && part.state.time.compacted) {
       return true
     }
-    
+
     // Check stable_prune storage (new behavior, when stable_prune is enabled)
     return compactedParts.has(part.id)
   }
-  
+
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
   // Track media from tool results that need to be injected as user messages
@@ -986,7 +984,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               input: part.state.input,
               output,
               ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-              ...(differentModel || options?.stripProviderMetadata ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+              ...(differentModel || options?.stripProviderMetadata
+                ? {}
+                : { callProviderMetadata: providerMeta(part.metadata) }),
             })
           }
           if (part.state.status === "error") {
@@ -999,7 +999,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
                 input: part.state.input,
                 output,
                 ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-                ...(differentModel || options?.stripProviderMetadata ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+                ...(differentModel || options?.stripProviderMetadata
+                  ? {}
+                  : { callProviderMetadata: providerMeta(part.metadata) }),
               })
             } else {
               assistantMessage.parts.push({
@@ -1009,7 +1011,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
                 input: part.state.input,
                 errorText: part.state.error,
                 ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-                ...(differentModel || options?.stripProviderMetadata ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+                ...(differentModel || options?.stripProviderMetadata
+                  ? {}
+                  : { callProviderMetadata: providerMeta(part.metadata) }),
               })
             }
           }
@@ -1023,7 +1027,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               input: part.state.input,
               errorText: "[Tool execution was interrupted]",
               ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-              ...(differentModel || options?.stripProviderMetadata ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+              ...(differentModel || options?.stripProviderMetadata
+                ? {}
+                : { callProviderMetadata: providerMeta(part.metadata) }),
             })
         }
         if (part.type === "reasoning") {

@@ -20,7 +20,9 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       <box>
         <box flexDirection="row" gap={1} onMouseDown={() => setOpen((x) => !x)}>
           <text fg={theme().text}>
-            <b>Todo {completed()}/{list().length}</b>
+            <b>
+              Todo {completed()}/{list().length}
+            </b>
           </text>
           <text fg={theme().textMuted}>{open() ? "▼" : "▶"}</text>
         </box>

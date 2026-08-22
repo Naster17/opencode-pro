@@ -81,7 +81,7 @@ export function computeCacheBreakpoints(
 ): number[] {
   const config = options.config
   const cachingEnabled = config?.caching?.enabled ?? true
-  
+
   if (!cachingEnabled) {
     return []
   }
@@ -126,11 +126,7 @@ export function computeCacheBreakpoints(
 /**
  * Track cache statistics for a session
  */
-export function trackCacheStats(input: {
-  sessionID: string
-  messages: ModelMessage[]
-  breakpoints: number[]
-}): void {
+export function trackCacheStats(input: { sessionID: string; messages: ModelMessage[]; breakpoints: number[] }): void {
   const systemHash = hashSystemPrompt(input.messages)
   const conversationHash = hashConversationHistory(input.messages)
   const nonSystemCount = input.messages.filter((msg) => msg.role !== "system").length
@@ -234,7 +230,7 @@ export function estimateTokenSavings(input: {
  */
 export function normalizeSystemPrompt(content: string, config?: Config.Info): string {
   const normalizeDates = config?.caching?.normalize_dates ?? true
-  
+
   if (!normalizeDates) {
     return content
   }
@@ -303,9 +299,7 @@ export function shouldStripProviderMetadata(model: Provider.Model, config?: Conf
 export function shouldInlineReasoning(model: Provider.Model, config?: Config.Info): boolean {
   return (
     config?.caching?.inline_reasoning ??
-    (model.providerID === "llama.cpp" &&
-      model.api.npm === "@ai-sdk/openai-compatible" &&
-      model.capabilities.reasoning)
+    (model.providerID === "llama.cpp" && model.api.npm === "@ai-sdk/openai-compatible" && model.capabilities.reasoning)
   )
 }
 
@@ -320,7 +314,7 @@ export function logCacheMetrics(input: {
   config?: Config.Info
 }): void {
   const logMetrics = input.config?.caching?.log_metrics ?? false
-  
+
   if (!logMetrics || !supportsCaching(input.model)) {
     return
   }

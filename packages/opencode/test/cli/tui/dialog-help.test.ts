@@ -3,7 +3,14 @@ import { helpCommandSearchTerms, helpSearchTerms, matchesHelpQuery } from "../..
 
 describe("dialog help search terms", () => {
   test("expands keybind punctuation for fuzzy help search", () => {
-    expect(helpSearchTerms("alt+r, shift+tab")).toEqual(["alt+r", "alt-r", "alt r", "shift+tab", "shift-tab", "shift tab"])
+    expect(helpSearchTerms("alt+r, shift+tab")).toEqual([
+      "alt+r",
+      "alt-r",
+      "alt r",
+      "shift+tab",
+      "shift-tab",
+      "shift tab",
+    ])
   })
 
   test("includes slash names, aliases, and keybind variants for commands", () => {

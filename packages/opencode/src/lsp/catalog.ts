@@ -69,8 +69,18 @@ const metadata: Record<string, Metadata> = {
     npm: { pkg: "biome", bin: "biome" },
   },
   clangd: { title: "clangd", binaries: ["clangd"] },
-  "clojure-lsp": { title: "Clojure", label: "clojure", manager: "clojure-lsp", binaries: ["clojure-lsp", "clojure-lsp.exe"] },
-  csharp: { title: "C#", label: "roslyn", manager: "roslyn-language-server", binaries: ["roslyn-language-server", "dotnet"] },
+  "clojure-lsp": {
+    title: "Clojure",
+    label: "clojure",
+    manager: "clojure-lsp",
+    binaries: ["clojure-lsp", "clojure-lsp.exe"],
+  },
+  csharp: {
+    title: "C#",
+    label: "roslyn",
+    manager: "roslyn-language-server",
+    binaries: ["roslyn-language-server", "dotnet"],
+  },
   dart: { title: "Dart", binaries: ["dart"] },
   deno: { title: "Deno", binaries: ["deno"] },
   dockerfile: {
@@ -112,7 +122,12 @@ const metadata: Record<string, Metadata> = {
     binaries: ["pyright-langserver", "pyright"],
     npm: { pkg: "pyright", bin: "pyright-langserver" },
   },
-  razor: { title: "Razor", label: "roslyn", manager: "roslyn-language-server", binaries: ["roslyn-language-server", "dotnet"] },
+  razor: {
+    title: "Razor",
+    label: "roslyn",
+    manager: "roslyn-language-server",
+    binaries: ["roslyn-language-server", "dotnet"],
+  },
   rust: { title: "Rust", label: "rust", manager: "rust-analyzer", binaries: ["rust-analyzer"] },
   "ruby-lsp": {
     title: "Ruby",
@@ -158,7 +173,9 @@ const metadata: Record<string, Metadata> = {
 }
 
 const builtin = Object.values(LSPServer)
-  .filter((item): item is LSPServer.Info => isRecord(item) && typeof item.id === "string" && Array.isArray(item.extensions))
+  .filter(
+    (item): item is LSPServer.Info => isRecord(item) && typeof item.id === "string" && Array.isArray(item.extensions),
+  )
   .map<Builtin>((server) => ({
     kind: "builtin",
     id: server.id,
@@ -277,7 +294,8 @@ function npmBinCandidates(pkg: string, bin: string) {
     if (fs.existsSync(pkgJsonPath)) {
       const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8"))
       if (pkgJson.bin) {
-        const binPath = typeof pkgJson.bin === "string" ? pkgJson.bin : pkgJson.bin[bin] || Object.values(pkgJson.bin)[0]
+        const binPath =
+          typeof pkgJson.bin === "string" ? pkgJson.bin : pkgJson.bin[bin] || Object.values(pkgJson.bin)[0]
         if (binPath) {
           candidates.push(path.resolve(path.join(dir, "node_modules", pkg), binPath))
         }

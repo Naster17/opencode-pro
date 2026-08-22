@@ -120,30 +120,30 @@ const live: Layer.Layer<
       )
 
       const header = system[0]
-      
+
       // Store original header for cache stability check
       const originalHeader = header
-      
+
       yield* plugin.trigger(
         "experimental.chat.system.transform",
         { sessionID: input.sessionID, model: input.model },
         { system },
       )
-      
+
       // rejoin to maintain 2-part structure for caching if header unchanged
       if (system.length > 2 && system[0] === header) {
         const rest = system.slice(1)
         system.length = 0
         system.push(header, rest.join("\n"))
       }
-      
+
       // Normalize system prompts for cache stability
       if (CacheOptimizer.supportsCaching(input.model)) {
         system[0] = CacheOptimizer.normalizeSystemPrompt(system[0], cfg)
         if (system.length > 1) {
           system[1] = CacheOptimizer.normalizeSystemPrompt(system[1], cfg)
         }
-        
+
         // Log if plugins modified the header (potential cache invalidation)
         if (system[0] !== originalHeader && originalHeader) {
           l.debug("system prompt modified by plugins", {

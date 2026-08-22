@@ -55,16 +55,12 @@ export const SubagentTool = Tool.define(
     ) {
       if (requested) {
         const parsed = Provider.parseModel(requested)
-        const requestedHit = yield* providers
-          .getModel(parsed.providerID, parsed.modelID)
-          .pipe(Effect.exit)
+        const requestedHit = yield* providers.getModel(parsed.providerID, parsed.modelID).pipe(Effect.exit)
         if (Exit.isSuccess(requestedHit)) return parsed
       }
 
       if (next.model) {
-        const agentHit = yield* providers
-          .getModel(next.model.providerID, next.model.modelID)
-          .pipe(Effect.exit)
+        const agentHit = yield* providers.getModel(next.model.providerID, next.model.modelID).pipe(Effect.exit)
         if (Exit.isSuccess(agentHit)) return next.model
       }
 
@@ -155,7 +151,9 @@ export const SubagentTool = Tool.define(
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
       const assistant = msg.info as MessageV2.Assistant
 
-      const model = session ? { modelID: assistant.modelID, providerID: assistant.providerID } : yield* resolveModel(params.model, next, assistant)
+      const model = session
+        ? { modelID: assistant.modelID, providerID: assistant.providerID }
+        : yield* resolveModel(params.model, next, assistant)
       const variant = next.variant ?? assistant.variant
 
       yield* ctx.metadata({

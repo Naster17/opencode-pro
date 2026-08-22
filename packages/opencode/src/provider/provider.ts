@@ -496,7 +496,9 @@ async function openAICompatibleDiscoveredModels(provider: Info): Promise<Discove
   const headers = new Headers(
     isRecord(provider.options.headers)
       ? Object.fromEntries(
-          Object.entries(provider.options.headers).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+          Object.entries(provider.options.headers).filter(
+            (entry): entry is [string, string] => typeof entry[1] === "string",
+          ),
         )
       : {},
   )
@@ -568,7 +570,9 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             if (!available.scope) return { mode: "replace", models: freeModels(input.models) }
             return {
               mode: "replace",
-              models: Object.fromEntries(Object.entries(input.models).filter(([modelID]) => available.models.has(modelID))),
+              models: Object.fromEntries(
+                Object.entries(input.models).filter(([modelID]) => available.models.has(modelID)),
+              ),
             }
           } catch (error) {
             log.warn("opencode model discovery failed", { error })

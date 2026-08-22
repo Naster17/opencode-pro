@@ -2274,7 +2274,8 @@ function managedPaths(id: string) {
         .map((entry) => path.join(Global.Path.bin, entry.name)),
     ]
   }
-  if (id === "elixir-ls") return [path.join(Global.Path.bin, "elixir-ls-master"), path.join(Global.Path.bin, "elixir-ls")]
+  if (id === "elixir-ls")
+    return [path.join(Global.Path.bin, "elixir-ls-master"), path.join(Global.Path.bin, "elixir-ls")]
   if (id === "fsharp") return [path.join(Global.Path.bin, "fsautocomplete" + ext)]
   if (id === "gopls") return [path.join(Global.Path.bin, "gopls" + ext)]
   if (id === "jdtls") return [path.join(Global.Path.bin, "jdtls")]

@@ -199,7 +199,9 @@ describe("plugin.codex", () => {
           }),
         )
 
-        expect(await loadCockpitCodexSelection(path.join(tmp.path, ".codex", ".cockpit_codex_auth.json"))).toMatchObject({
+        expect(
+          await loadCockpitCodexSelection(path.join(tmp.path, ".codex", ".cockpit_codex_auth.json")),
+        ).toMatchObject({
           account_id: "codex-internal-account-id",
           email: "new@example.com",
         })

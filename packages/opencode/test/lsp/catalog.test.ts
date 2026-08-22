@@ -21,7 +21,10 @@ describe("LSPCatalog", () => {
 
   test("exposes every builtin server exactly once", () => {
     const expected = Object.values(LSPServer)
-      .filter((item): item is LSPServer.Info => isRecord(item) && typeof item.id === "string" && Array.isArray(item.extensions))
+      .filter(
+        (item): item is LSPServer.Info =>
+          isRecord(item) && typeof item.id === "string" && Array.isArray(item.extensions),
+      )
       .map((item) => item.id)
       .toSorted()
     const actual = LSPCatalog.listBuiltin()
@@ -74,7 +77,13 @@ describe("LSPCatalog", () => {
   })
 
   test("reports managed npm binaries even when they are not on PATH", async () => {
-    const dir = path.join(Global.Path.cache, "packages", sanitizeNpmPackage("bash-language-server"), "node_modules", ".bin")
+    const dir = path.join(
+      Global.Path.cache,
+      "packages",
+      sanitizeNpmPackage("bash-language-server"),
+      "node_modules",
+      ".bin",
+    )
     await fs.mkdir(dir, { recursive: true })
     await fs.writeFile(path.join(dir, "bash-language-server"), "")
 

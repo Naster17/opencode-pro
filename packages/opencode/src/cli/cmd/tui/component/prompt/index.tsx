@@ -1281,17 +1281,15 @@ export function Prompt(props: PromptProps) {
       if (defer) {
         props.onDeferHold?.({ messageID, sessionID, cycles: 1, optimisticMessage, optimisticParts, asyncArgs })
       } else {
-        sdk.client.session
-          .promptAsync(asyncArgs)
-          .catch(() => {
-            sync.set(
-              produce((draft) => {
-                draft.message[sessionID] = (draft.message[sessionID] ?? []).filter((item) => item.id !== messageID)
-                delete draft.part[messageID]
-                draft.session_status[sessionID] = { type: "idle" }
-              }),
-            )
-          })
+        sdk.client.session.promptAsync(asyncArgs).catch(() => {
+          sync.set(
+            produce((draft) => {
+              draft.message[sessionID] = (draft.message[sessionID] ?? []).filter((item) => item.id !== messageID)
+              delete draft.part[messageID]
+              draft.session_status[sessionID] = { type: "idle" }
+            }),
+          )
+        })
       }
       if (editorParts.length > 0) editor.markSelectionSent()
     }

@@ -71,7 +71,8 @@ export const Model = Schema.Struct({
 export const Info = Schema.Struct({
   api: Schema.optional(Schema.String),
   auto: Schema.optional(Schema.Boolean).annotate({
-    description: "Automatically discover models for providers that support model listing, such as OpenAI-compatible APIs",
+    description:
+      "Automatically discover models for providers that support model listing, such as OpenAI-compatible APIs",
   }),
   name: Schema.optional(Schema.String),
   env: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),

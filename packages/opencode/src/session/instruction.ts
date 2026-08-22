@@ -174,9 +174,7 @@ export const layer: Layer.Layer<
       const storage = yield* Effect.serviceOption(Storage.Service)
       const key = ["session_instruction", sessionID]
       if (storage._tag === "Some") {
-        const stored = yield* storage.value
-          .read<string[]>(key)
-          .pipe(Effect.catch(() => Effect.succeed(undefined)))
+        const stored = yield* storage.value.read<string[]>(key).pipe(Effect.catch(() => Effect.succeed(undefined)))
         if (stored) {
           s.system.set(sessionID, stored)
           return [...stored]
@@ -271,10 +269,10 @@ export const loaded = Effect.fn("Instruction.loaded")(function* (messages: Messa
   const storage = yield* Effect.serviceOption(Storage.Service)
   const cfg = yield* Effect.serviceOption(Config.Service)
   const compactedParts = new Set<string>()
-  
+
   // Load compacted part IDs from storage when stable_prune is enabled
-  const stablePrune = cfg._tag === "Some" ? (yield* cfg.value.get()).compaction?.stable_prune ?? true : true
-  
+  const stablePrune = cfg._tag === "Some" ? ((yield* cfg.value.get()).compaction?.stable_prune ?? true) : true
+
   if (stablePrune && storage._tag === "Some") {
     const sessionIDs = new Set(messages.map((m) => m.info.sessionID).filter(Boolean))
     for (const sid of sessionIDs) {
@@ -286,7 +284,7 @@ export const loaded = Effect.fn("Instruction.loaded")(function* (messages: Messa
       }
     }
   }
-  
+
   return extract(messages, compactedParts.size > 0 ? compactedParts : undefined)
 })
 

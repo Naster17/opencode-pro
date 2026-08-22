@@ -32,10 +32,12 @@ Workflow:
    - `bun run test:ci` from `packages/opencode`
    - if the batch touches SDK generation inputs or SDK package code, also run `./packages/sdk/js/script/build.ts` from repo root
 10. If verification fails, stop immediately. Do not push. Do not silently revert. Report:
-   - which commits were applied
-   - where it failed
-   - the key error output
-   - what likely needs manual intervention
+
+- which commits were applied
+- where it failed
+- the key error output
+- what likely needs manual intervention
+
 11. If verification passes, summarize exactly what landed, which conflicts were resolved, and which upstream commits should be considered next.
 
 Execution rules:

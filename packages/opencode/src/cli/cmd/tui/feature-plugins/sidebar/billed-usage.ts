@@ -213,7 +213,11 @@ export class BilledUsageTracker {
     }
     if (part.type === "reasoning") entry.reasoningByPart.set(part.id, part.text.length)
     if (part.type === "step-finish") entry.finishes.set(part.id, { tokens: part.tokens, cost: part.cost })
-    if ((part.type === "text" || part.type === "reasoning") && part.time?.start && entry.generationStart === undefined) {
+    if (
+      (part.type === "text" || part.type === "reasoning") &&
+      part.time?.start &&
+      entry.generationStart === undefined
+    ) {
       entry.generationStart = part.time.start
     }
   }

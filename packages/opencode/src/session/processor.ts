@@ -71,27 +71,37 @@ function rawStreamMetrics(raw: unknown) {
   const messageUsage = usageTokens(isRecord(raw.message) ? raw.message.usage : undefined)
   const metadataUsage = usageTokens(raw.usageMetadata)
   const metaTokens = usageTokens(isRecord(raw.meta) ? raw.meta.tokens : undefined)
-  if (!timings && !progress && !usage.promptTokens && !usage.outputTokens && !messageUsage.promptTokens && !messageUsage.outputTokens && !metadataUsage.promptTokens && !metadataUsage.outputTokens && !metaTokens.promptTokens && !metaTokens.outputTokens) return
+  if (
+    !timings &&
+    !progress &&
+    !usage.promptTokens &&
+    !usage.outputTokens &&
+    !messageUsage.promptTokens &&
+    !messageUsage.outputTokens &&
+    !metadataUsage.promptTokens &&
+    !metadataUsage.outputTokens &&
+    !metaTokens.promptTokens &&
+    !metaTokens.outputTokens
+  )
+    return
 
   const progressProcessed = nonNegativeInteger(progress?.processed)
   const progressMs = positiveNumber(progress?.time_ms)
-  const promptTokens =
-    progress
-      ? (progressProcessed ?? 0)
-      : (nonNegativeInteger(timings?.prompt_n) ??
-        usage.promptTokens ??
-        messageUsage.promptTokens ??
-        metadataUsage.promptTokens ??
-        metaTokens.promptTokens)
+  const promptTokens = progress
+    ? (progressProcessed ?? 0)
+    : (nonNegativeInteger(timings?.prompt_n) ??
+      usage.promptTokens ??
+      messageUsage.promptTokens ??
+      metadataUsage.promptTokens ??
+      metaTokens.promptTokens)
   const promptMs = positiveNumber(timings?.prompt_ms)
-  const outputTokens =
-    progress
-      ? undefined
-      : (nonNegativeInteger(timings?.predicted_n) ??
-        usage.outputTokens ??
-        messageUsage.outputTokens ??
-        metadataUsage.outputTokens ??
-        metaTokens.outputTokens)
+  const outputTokens = progress
+    ? undefined
+    : (nonNegativeInteger(timings?.predicted_n) ??
+      usage.outputTokens ??
+      messageUsage.outputTokens ??
+      metadataUsage.outputTokens ??
+      metaTokens.outputTokens)
   const outputMs = positiveNumber(timings?.predicted_ms)
   const promptTokensPerSecond = progress
     ? progressProcessed && progressMs
@@ -100,11 +110,12 @@ function rawStreamMetrics(raw: unknown) {
     : promptTokens && promptMs
       ? (promptTokens / promptMs) * 1000
       : positiveNumber(timings?.prompt_per_second)
-  const outputTokensPerSecond = !progress && outputTokens
-    ? outputMs
-      ? (outputTokens / outputMs) * 1000
-      : positiveNumber(timings?.predicted_per_second)
-    : undefined
+  const outputTokensPerSecond =
+    !progress && outputTokens
+      ? outputMs
+        ? (outputTokens / outputMs) * 1000
+        : positiveNumber(timings?.predicted_per_second)
+      : undefined
   const promptProgress = progress
     ? {
         total: nonNegativeInteger(progress.total) ?? 0,
@@ -161,8 +172,7 @@ function plainTextToolCallAttempt(text: string) {
   const compact = text.replace(/\s+/g, " ").trim()
   if (!compact) return
   const tool =
-    compact.match(/to=functions\.([A-Za-z0-9_-]+)/)?.[1] ??
-    compact.match(/<\|channel\|>[^<]*to=([A-Za-z0-9_-]+)/)?.[1]
+    compact.match(/to=functions\.([A-Za-z0-9_-]+)/)?.[1] ?? compact.match(/<\|channel\|>[^<]*to=([A-Za-z0-9_-]+)/)?.[1]
   if (!tool) return
   if (!/(<\|start\|>|<\|channel\|>|<\|message\|>|<\|call\|>)/.test(compact)) return
   return { tool, text: compact }
@@ -665,7 +675,9 @@ export const layer: Layer.Layer<
         } satisfies MessageV2.ToolPart)
       })
 
-      const recoverInvalidToolCallFailure = Effect.fn("SessionProcessor.recoverInvalidToolCallFailure")(function* (error: unknown) {
+      const recoverInvalidToolCallFailure = Effect.fn("SessionProcessor.recoverInvalidToolCallFailure")(function* (
+        error: unknown,
+      ) {
         const detail = invalidToolCallFailure(error)
         if (!detail) return false
         yield* appendInvalidToolCall({
@@ -676,27 +688,29 @@ export const layer: Layer.Layer<
         return true
       })
 
-      const recoverPlainTextToolCallAttempt = Effect.fn("SessionProcessor.recoverPlainTextToolCallAttempt")(function* () {
-        const text =
-          ctx.currentText ??
-          parts(ctx.assistantMessage.id)
-            .slice()
-            .reverse()
-            .find((part) => part.type === "text" || part.type === "reasoning")
-        if (!text) return false
-        const attempt = plainTextToolCallAttempt(text.text)
-        if (!attempt) return false
-        text.text = ""
-        text.time = { start: text.time?.start ?? Date.now(), end: Date.now() }
-        yield* updatePart(text)
-        yield* appendInvalidToolCall({
-          tool: attempt.tool,
-          location: `assistant ${text.type} part ${text.id}`,
-          raw: attempt.text,
-          error: `Invalid ${attempt.tool} call at assistant ${text.type} part ${text.id}: the model printed tool-call markup as plain text instead of making a structured tool call. Use the actual tool call channel/protocol with valid JSON arguments; do not print raw tokens like <|start|>, <|channel|>, <|message|>, or <|call|>.`,
-        })
-        return true
-      })
+      const recoverPlainTextToolCallAttempt = Effect.fn("SessionProcessor.recoverPlainTextToolCallAttempt")(
+        function* () {
+          const text =
+            ctx.currentText ??
+            parts(ctx.assistantMessage.id)
+              .slice()
+              .reverse()
+              .find((part) => part.type === "text" || part.type === "reasoning")
+          if (!text) return false
+          const attempt = plainTextToolCallAttempt(text.text)
+          if (!attempt) return false
+          text.text = ""
+          text.time = { start: text.time?.start ?? Date.now(), end: Date.now() }
+          yield* updatePart(text)
+          yield* appendInvalidToolCall({
+            tool: attempt.tool,
+            location: `assistant ${text.type} part ${text.id}`,
+            raw: attempt.text,
+            error: `Invalid ${attempt.tool} call at assistant ${text.type} part ${text.id}: the model printed tool-call markup as plain text instead of making a structured tool call. Use the actual tool call channel/protocol with valid JSON arguments; do not print raw tokens like <|start|>, <|channel|>, <|message|>, or <|call|>.`,
+          })
+          return true
+        },
+      )
 
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
         switch (value.type) {
@@ -1139,10 +1153,7 @@ export const layer: Layer.Layer<
             ctx.assistantMessage.error = error
             return
           }
-          if (
-            (yield* config.get()).compaction?.auto === false ||
-            (yield* limits.get(ctx.assistantMessage.sessionID))
-          ) {
+          if ((yield* config.get()).compaction?.auto === false || (yield* limits.get(ctx.assistantMessage.sessionID))) {
             ctx.assistantMessage.error = error
             yield* bus.publish(Session.Event.Error, { sessionID: ctx.assistantMessage.sessionID, error })
             yield* status.set(ctx.sessionID, { type: "idle" })
