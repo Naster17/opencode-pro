@@ -21,6 +21,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { McpOAuthProvider } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
+import { McpState } from "./state"
 import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
@@ -242,6 +243,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const auth = yield* McpAuth.Service
+    const mcpState = yield* McpState.Service
     const bus = yield* Bus.Service
 
     type Transport = StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport
@@ -488,6 +490,7 @@ export const layer = Layer.effect(
         const cfg = yield* cfgSvc.get()
         const bridge = yield* EffectBridge.make()
         const config = cfg.mcp ?? {}
+        const overrides = yield* mcpState.all()
         const s: State = {
           status: {},
           clients: {},
@@ -503,7 +506,8 @@ export const layer = Layer.effect(
                 return
               }
 
-              if (mcp.enabled === false) {
+              const enabled = key in overrides ? overrides[key] : mcp.enabled !== false
+              if (!enabled) {
                 s.status[key] = { status: "disabled" }
                 return
               }
@@ -617,11 +621,13 @@ export const layer = Layer.effect(
         log.error("MCP config not found or invalid", { name })
         return
       }
+      yield* mcpState.set(name, true)
       yield* createAndStore(name, { ...mcp, enabled: true })
     })
 
     const disconnect = Effect.fn("MCP.disconnect")(function* (name: string) {
       const s = yield* InstanceState.get(state)
+      yield* mcpState.set(name, false)
       yield* closeClient(s, name)
       delete s.clients[name]
       s.status[name] = { status: "disabled" }
@@ -922,6 +928,7 @@ export type AuthStatus = "authenticated" | "expired" | "not_authenticated"
 
 export const defaultLayer = layer.pipe(
   Layer.provide(McpAuth.layer),
+  Layer.provide(McpState.layer),
   Layer.provide(Bus.layer),
   Layer.provide(Config.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
