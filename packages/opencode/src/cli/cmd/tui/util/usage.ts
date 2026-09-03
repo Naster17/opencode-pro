@@ -116,32 +116,64 @@ function modelLabel(providers: readonly Provider[], providerID: string, modelID:
   return providers.find((item) => item.id === providerID)?.models[modelID]?.name ?? modelID
 }
 
-function estimateTokens(input: string) {
-  return Math.max(0, Math.round(input.length / CHARS_PER_TOKEN))
+function estimateTokensLength(chars: number) {
+  return Math.max(0, Math.round(chars / CHARS_PER_TOKEN))
 }
 
+// Placeholder the server substitutes for pruned tool outputs on the wire;
+// counting it instead of the full output keeps the estimate in sync.
+const PRUNED_OUTPUT_PLACEHOLDER = "[Old tool result content cleared]"
+
+// Estimates the token count of the visible context. Sums string lengths
+// directly instead of JSON.stringify-ing the whole history: with huge sessions
+// (hundreds of MB of tool output) building a giant serialized snapshot per call
+// caused multi-second GC pauses. String .length is O(1), so this is O(parts).
 function estimateCurrentContextTokens(messages: readonly Message[], getParts: (messageID: string) => readonly Part[]) {
-  return estimateTokens(
-    JSON.stringify(
-      messages.map((message) => ({
-        role: message.role,
-        agent: message.agent,
-        model: message.role === "user" ? message.model : `${message.providerID}/${message.modelID}`,
-        system: message.role === "user" ? message.system : undefined,
-        parts: getParts(message.id).flatMap((part) => {
-          if (part.type === "text") return part.ignored ? [] : [part.text]
-          if (part.type === "reasoning") return [part.text]
-          if (part.type === "subtask") return [part.agent, part.description, part.prompt]
-          if (part.type === "file") return [part.source?.text.value ?? `[Attached ${part.mime}: ${part.filename ?? "file"}]`]
-          if (part.type === "tool") {
-            const output = part.state.status === "completed" ? part.state.output : part.state.status === "error" ? part.state.error : ""
-            return [part.tool, JSON.stringify(part.state.input), output]
-          }
-          return []
-        }),
-      })),
-    ),
-  )
+  // Pruned outputs ship as a placeholder, not in full. Markers record the
+  // compressed part IDs (stable mode); legacy mode flags the parts directly.
+  // Only markers in the visible (revert-filtered) list apply, matching how
+  // revert clears server-side marks for hidden markers.
+  const compacted = new Set<string>()
+  for (const message of messages) {
+    for (const part of getParts(message.id)) {
+      if (part.type === "prune") {
+        for (const id of part.partIDs) compacted.add(id)
+      }
+    }
+  }
+  let chars = 0
+  for (const message of messages) {
+    chars += message.role.length + (message.agent?.length ?? 0) + 64
+    if (message.role === "user") {
+      chars += (message.system?.length ?? 0) + (message.model.providerID.length + message.model.modelID.length + 1)
+    } else {
+      chars += message.providerID.length + message.modelID.length + 1
+    }
+    for (const part of getParts(message.id)) {
+      if (part.type === "text") {
+        if (!part.ignored) chars += part.text.length
+      } else if (part.type === "reasoning") {
+        chars += part.text.length
+      } else if (part.type === "subtask") {
+        chars += part.agent.length + part.description.length + part.prompt.length
+      } else if (part.type === "file") {
+        chars += part.source?.text.value.length ?? `[Attached ${part.mime}: ${part.filename ?? "file"}]`.length
+      } else if (part.type === "tool") {
+        const cleared =
+          compacted.has(part.id) ||
+          (part.state.status === "completed" && part.state.time.compacted != null)
+        const output = cleared
+          ? PRUNED_OUTPUT_PLACEHOLDER
+          : part.state.status === "completed"
+            ? part.state.output
+            : part.state.status === "error"
+              ? part.state.error
+              : ""
+        chars += part.tool.length + (part.state.input ? JSON.stringify(part.state.input).length : 0) + output.length
+      }
+    }
+  }
+  return estimateTokensLength(chars)
 }
 
 function zeroTokens(): AssistantMessage["tokens"] {
@@ -188,8 +220,21 @@ function filterCompactedMessages(messages: readonly Message[], getParts: (messag
     if (!completed.has(message.id)) return false
     return getParts(message.id).some((part) => part.type === "compaction")
   })
-  if (latest < 0) return messages
-  return messages.slice(latest)
+  const latestTruncate = messages.findLastIndex((message) => {
+    if (message.role !== "user") return false
+    return getParts(message.id).some((part) => part.type === "compaction" && part.truncated === true)
+  })
+  const truncateSlice = (() => {
+    if (latestTruncate < 0) return undefined
+    const marker = getParts(messages[latestTruncate]!.id).find((part) => part.type === "compaction")
+    if (marker?.type !== "compaction" || !marker.tail_start_id) return messages.slice(latestTruncate)
+    const tailIndex = messages.findIndex((message) => message.id >= marker.tail_start_id!)
+    if (tailIndex < 0 || tailIndex > latestTruncate) return messages.slice(latestTruncate)
+    return messages.slice(tailIndex)
+  })()
+  if (latest < 0) return truncateSlice ?? messages
+  if (!truncateSlice) return messages.slice(latest)
+  return latestTruncate > latest ? truncateSlice : messages.slice(latest)
 }
 
 function currentContextUsage(

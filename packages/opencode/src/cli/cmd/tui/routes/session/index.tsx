@@ -1191,6 +1191,35 @@ export function Session() {
   }
 
   const command = useCommandDialog()
+  const runTruncate = async (dialog: DialogContext, opts?: { keepMessages?: number; ratio?: number }) => {
+    const status = sync.data.session_status?.[route.sessionID]
+    if (status?.type === "busy") {
+      toast.show({
+        variant: "warning",
+        message: "Cannot truncate while the session is running",
+        duration: 3000,
+      })
+      return
+    }
+    const result = await sdk.client.session
+      .truncate({ sessionID: route.sessionID, ...opts })
+      .then((r) => r.data)
+      .catch(() => undefined)
+    if (!result || result.messages === 0) {
+      toast.show({
+        variant: "info",
+        message: "Nothing to truncate",
+        duration: 3000,
+      })
+      return
+    }
+    toast.show({
+      variant: "warning",
+      message: `Truncated ${result.messages} messages (~${formatCompactTokens(result.tokens)} tokens freed) · context now ~${formatCompactTokens(result.kept)} tokens across ${result.keptMessages} messages`,
+      duration: 6000,
+    })
+    dialog.clear()
+  }
   command.register(() => [
     {
       title: session()?.share?.url ? "Copy share link" : "Share session",
@@ -1318,9 +1347,54 @@ export function Session() {
       },
     },
     {
+      title: "Truncate session history",
+      value: "session.truncate",
+      category: "Session",
+      description: "/truncate keeps ~25% of recent context, /truncate <n|n%> keeps n messages or n% of tokens",
+      slash: {
+        name: "truncate",
+        aliases: ["cut"],
+      },
+      onSelect: async (dialog) => {
+        await runTruncate(dialog)
+      },
+      onCommandArgs: async (args, dialog) => {
+        const raw = args.trim().toLowerCase()
+        if (!raw) {
+          await runTruncate(dialog)
+          return
+        }
+        const percent = raw.match(/^(\d+(?:\.\d+)?)%$/)
+        if (percent) {
+          const ratio = Number(percent[1]) / 100
+          if (!Number.isFinite(ratio) || ratio <= 0 || ratio >= 1) {
+            toast.show({
+              variant: "warning",
+              message: "Usage: /truncate [count|percent] — e.g. /truncate 80 or /truncate 20%",
+              duration: 5000,
+            })
+            return
+          }
+          await runTruncate(dialog, { ratio })
+          return
+        }
+        const count = Number(raw)
+        if (!Number.isInteger(count) || count <= 0) {
+          toast.show({
+            variant: "warning",
+            message: "Usage: /truncate [count|percent] — e.g. /truncate 80 or /truncate 20%",
+            duration: 5000,
+          })
+          return
+        }
+        await runTruncate(dialog, { keepMessages: count })
+      },
+    },
+    {
       title: noCompact() ? "Re-enable auto-compact & context limits" : "Disable auto-compact & context limits",
       value: "session.nocompact",
       category: "Session",
+      description: "/nocompact toggles, /nocompact <tokens|off> sets a threshold, e.g. /nocompact 400k",
       slash: {
         name: "nocompact",
         aliases: ["no-compact", "autocompact"],
@@ -1348,6 +1422,110 @@ export function Session() {
               message: "Failed to update auto-compact for this session",
             }),
           )
+      },
+      onCommandArgs: (args, dialog) => {
+        dialog.clear()
+        const raw = args.trim().toLowerCase()
+        const parseTokens = (value: string) => {
+          const match = value.match(/^(\d+(?:\.\d+)?)([km])?$/)
+          if (!match) return undefined
+          const base = Number(match[1])
+          if (!Number.isFinite(base) || base <= 0) return undefined
+          const scale = match[2] === "k" ? 1_000 : match[2] === "m" ? 1_000_000 : 1
+          return Math.round(base * scale)
+        }
+
+        if (["off", "on", "reset", "clear", "0"].includes(raw)) {
+          setNoCompact(false)
+          void sdk.client.session
+            .nocompact({ sessionID: route.sessionID, enabled: false })
+            .then(() =>
+              toast.show({
+                variant: "success",
+                message: "Auto-compact thresholds cleared for this session",
+              }),
+            )
+            .catch(() =>
+              toast.show({
+                variant: "error",
+                message: "Failed to update auto-compact for this session",
+              }),
+            )
+          return
+        }
+
+        const tokens = parseTokens(raw)
+        if (tokens === undefined) {
+          toast.show({
+            variant: "warning",
+            message: "Usage: /nocompact <tokens|off> — e.g. /nocompact 400000 or /nocompact 400k",
+            duration: 5000,
+          })
+          return
+        }
+        setNoCompact(false)
+        void sdk.client.session
+          .nocompact({ sessionID: route.sessionID, threshold: tokens })
+          .then(() =>
+            toast.show({
+              variant: "success",
+              message: `Auto-compact suppressed until ~${formatCompactTokens(tokens)} tokens for this session`,
+            }),
+          )
+          .catch(() =>
+            toast.show({
+              variant: "error",
+              message: "Failed to update auto-compact for this session",
+            }),
+          )
+      },
+    },
+    {
+      title: "Prune tool outputs",
+      value: "session.prune",
+      category: "Session",
+      description: "Compress old tool call outputs to free context space",
+      slash: {
+        name: "prune",
+        aliases: ["trim"],
+      },
+      onSelect: async (dialog) => {
+        const status = sync.data.session_status?.[route.sessionID]
+        if (status?.type === "busy") {
+          toast.show({
+            variant: "warning",
+            message: "Cannot prune while the session is running",
+            duration: 3000,
+          })
+          return
+        }
+        dialog.clear()
+        // No preview dialog: run immediately (forced, since a manual call is
+        // explicit intent) and report the outcome with a toast.
+        const result = await sdk.client.session
+          .prune({ sessionID: route.sessionID, force: true })
+          .then((r) => r.data)
+          .catch(() => undefined)
+        if (!result || result.pruned === 0) {
+          const scanned = result?.scanned ?? 0
+          const message =
+            scanned === 0
+              ? "Nothing to prune — no tool outputs in context"
+              : result?.alreadyCleared
+                ? `Nothing new to prune — older outputs already cleared (newest ~${formatCompactTokens(result?.protectedTokens ?? 0)} protected)`
+                : `Nothing to prune — newest ~${formatCompactTokens(result?.protectedTokens ?? 0)} of outputs protected`
+          toast.show({
+            variant: "info",
+            message,
+            duration: 5000,
+          })
+          return
+        }
+        toast.show({
+          variant: "success",
+          message: `Pruned ${result.pruned} tool outputs (~${formatCompactTokens(result.tokens)} tokens freed)`,
+          duration: 3000,
+        })
       },
     },
     {
@@ -2277,7 +2455,7 @@ export function Session() {
                           parts={sync.data.part[message.id] ?? []}
                         />
                       </Match>
-                      <Match when={message.role === "assistant"}>
+                      <Match when={message.role === "assistant" && !isTruncateSummary(message as AssistantMessage, sync.data.part)}>
                         <AssistantMessage
                           last={lastAssistant()?.id === message.id}
                           message={message as AssistantMessage}
@@ -2407,8 +2585,15 @@ export function Session() {
   )
 }
 
-const MIME_BADGE: Record<string, string> = {
-  "text/plain": "txt",
+// The truncate "summary" is a synthetic notice for the model only: the stats
+// live in the marker bar and the toast, so the timeline skips it entirely.
+function isTruncateSummary(message: AssistantMessage, partsByID: Record<string, Part[]>) {
+  if (!message.summary) return false
+  const parent = partsByID[message.parentID]
+  return parent?.some((part) => part.type === "compaction" && part.truncated) ?? false
+}
+
+const MIME_BADGE: Record<string, string> = {  "text/plain": "txt",
   "image/png": "img",
   "image/jpeg": "img",
   "image/gif": "img",
@@ -2441,7 +2626,24 @@ function UserMessage(props: {
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(props.message.agent))
 
-  const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
+  const marker = createMemo(() => {
+    const part = props.parts.find((x) => x.type === "compaction" || x.type === "prune")
+    if (!part) return undefined
+    if (part.type === "prune") {
+      return {
+        title: ` Prune · ${part.count} outputs ~${formatCompactTokens(part.tokens)} tokens `,
+        color: theme.warning,
+      }
+    }
+    if (part.truncated) {
+      const stats =
+        part.removedMessages !== undefined
+          ? ` · ${part.removedMessages} messages ~${formatCompactTokens(part.removedTokens ?? 0)} tokens`
+          : ""
+      return { title: ` Truncate${stats} `, color: theme.accent }
+    }
+    return { title: " Compaction ", color: theme.borderActive }
+  })
 
   return (
     <>
@@ -2497,14 +2699,8 @@ function UserMessage(props: {
           </box>
         </box>
       </Show>
-      <Show when={compaction()}>
-        <box
-          marginTop={1}
-          border={["top"]}
-          title=" Compaction "
-          titleAlignment="center"
-          borderColor={theme.borderActive}
-        />
+      <Show when={marker()}>
+        <box marginTop={1} border={["top"]} title={marker()!.title} titleAlignment="center" borderColor={marker()!.color} />
       </Show>
     </>
   )

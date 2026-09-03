@@ -445,7 +445,20 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "session.status": {
+          const previous = store.session_status[event.properties.sessionID]
           setStore("session_status", event.properties.sessionID, event.properties.status)
+          // File edits only land in session_diff on explicit syncs, so the
+          // code +/- stats went stale after every turn (visible again only
+          // after a restart). Refresh the diff when a session goes idle.
+          if (previous?.type !== "idle" && event.properties.status.type === "idle") {
+            const sessionID = event.properties.sessionID
+            void sdk.client.session
+              .diff({ sessionID })
+              .then((result) => {
+                setStore("session_diff", sessionID, result.data ?? [])
+              })
+              .catch(() => {})
+          }
           break
         }
 

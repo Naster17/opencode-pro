@@ -1202,32 +1202,43 @@ export function Prompt(props: PromptProps) {
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
-        const firstLine = inputText.split("\n")[0]
-        const command = firstLine.split(" ")[0].slice(1)
-        return sync.data.command.some((x) => x.name === command)
+        const name = inputText.split("\n")[0].split(" ")[0].slice(1)
+        if (sync.data.command.some((x) => x.name === name)) return true
+        return command.list().some(
+          (x) => x.enabled !== false && x.slash && (x.slash.name === name || x.slash.aliases?.includes(name)),
+        )
       })
     ) {
       // Parse command from first line, preserve multi-line content in arguments
       const firstLineEnd = inputText.indexOf("\n")
       const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
-      const [command, ...firstLineArgs] = firstLine.split(" ")
+      const [slashCommand, ...firstLineArgs] = firstLine.split(" ")
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      void sdk.client.session.command({
-        sessionID,
-        command: command.slice(1),
-        arguments: args,
-        agent: agent.name,
-        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
-        messageID,
-        variant,
-        parts: requestParts
-          .filter((x) => x.type === "file")
-          .map((x) => ({
-            ...x,
-          })),
-      })
+      if (!sync.data.command.some((x) => x.name === slashCommand)) {
+        // TUI command invoked from the prompt; forward the remaining text as arguments
+        const name = slashCommand.slice(1)
+        const tui = command.list().find(
+          (x) => x.enabled !== false && x.slash && (x.slash.name === name || x.slash.aliases?.includes(name)),
+        )
+        if (tui) command.trigger(tui.value, args.trim() || undefined)
+      } else {
+        void sdk.client.session.command({
+          sessionID,
+          command: slashCommand.slice(1),
+          arguments: args,
+          agent: agent.name,
+          model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+          messageID,
+          variant,
+          parts: requestParts
+            .filter((x) => x.type === "file")
+            .map((x) => ({
+              ...x,
+            })),
+        })
+      }
     } else {
       // Held (deferred) submits are only deferred while the session is actually
       // running (busy or retrying); when idle they go out immediately, exactly

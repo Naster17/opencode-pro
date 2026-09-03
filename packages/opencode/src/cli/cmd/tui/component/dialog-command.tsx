@@ -1,4 +1,4 @@
-import { useDialog } from "@tui/ui/dialog"
+import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { DialogSelect, type DialogSelectOption, type DialogSelectRef } from "@tui/ui/dialog-select"
 import {
   createContext,
@@ -29,6 +29,11 @@ export type CommandOption = DialogSelectOption<string> & {
   hidden?: boolean
   hideFromPalette?: boolean
   enabled?: boolean
+  /**
+   * Called instead of onSelect when the command is invoked from the prompt input
+   * with arguments, e.g. "/nocompact 400000" receives args "400000".
+   */
+  onCommandArgs?: (args: string, dialog: DialogContext) => void | Promise<void>
 }
 
 function init() {
@@ -80,11 +85,12 @@ function init() {
     list() {
       return visibleOptions()
     },
-    trigger(name: string) {
+    trigger(name: string, args?: string) {
       for (const option of entries()) {
         if (option.value === name) {
           if (!isEnabled(option)) return
-          option.onSelect?.(dialog)
+          if (args !== undefined && option.onCommandArgs) void option.onCommandArgs(args, dialog)
+          else option.onSelect?.(dialog)
           return
         }
       }
