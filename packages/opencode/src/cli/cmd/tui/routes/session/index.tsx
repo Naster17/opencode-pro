@@ -1204,12 +1204,20 @@ export function Session() {
     const result = await sdk.client.session
       .truncate({ sessionID: route.sessionID, ...opts })
       .then((r) => r.data)
-      .catch(() => undefined)
-    if (!result || result.messages === 0) {
+      .catch((error) => {
+        toast.show({
+          variant: "error",
+          message: `Truncate failed: ${error instanceof Error ? error.message : "unknown error"}`,
+          duration: 5000,
+        })
+        return undefined
+      })
+    if (!result) return
+    if (result.messages === 0) {
       toast.show({
         variant: "info",
-        message: "Nothing to truncate",
-        duration: 3000,
+        message: `Nothing to truncate — context already ~${formatCompactTokens(result.kept)} across ${result.keptMessages} messages`,
+        duration: 5000,
       })
       return
     }
@@ -1505,8 +1513,16 @@ export function Session() {
         const result = await sdk.client.session
           .prune({ sessionID: route.sessionID, force: true })
           .then((r) => r.data)
-          .catch(() => undefined)
-        if (!result || result.pruned === 0) {
+          .catch((error) => {
+            toast.show({
+              variant: "error",
+              message: `Prune failed: ${error instanceof Error ? error.message : "unknown error"}`,
+              duration: 5000,
+            })
+            return undefined
+          })
+        if (!result) return
+        if (result.pruned === 0) {
           const scanned = result?.scanned ?? 0
           const message =
             scanned === 0

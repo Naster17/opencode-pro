@@ -1865,7 +1865,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           continue
         }
 
-        if ((yield* config.get()).compaction?.prune)
+        if ((yield* config.get()).compaction?.prune === true)
           yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
         return yield* lastAssistant(sessionID)
       },
