@@ -620,14 +620,19 @@ export const SessionRoutes = lazy(() =>
       describeRoute({
         summary: "Toggle no-compact mode",
         description:
-          "Per-session runtime flag that disables auto-compaction and context window limit enforcement for the session.",
+          "Per-session runtime flag that disables auto-compaction and context window limit enforcement for the session. Set threshold to only suppress auto-compaction until the session reaches that many tokens.",
         operationId: "session.nocompact",
         responses: {
           200: {
             description: "Updated",
             content: {
               "application/json": {
-                schema: resolver(z.boolean()),
+                schema: resolver(
+                  z.object({
+                    enabled: z.boolean(),
+                    threshold: z.number().optional(),
+                  }),
+                ),
               },
             },
           },
@@ -643,7 +648,8 @@ export const SessionRoutes = lazy(() =>
       validator(
         "json",
         z.object({
-          enabled: z.boolean(),
+          enabled: z.boolean().optional(),
+          threshold: z.number().int().positive().nullable().optional(),
         }),
       ),
       async (c) =>
@@ -652,8 +658,117 @@ export const SessionRoutes = lazy(() =>
           const session = yield* Session.Service
           yield* session.get(sessionID)
           const limits = yield* SessionLimits.Service
-          yield* limits.set(sessionID, c.req.valid("json").enabled)
-          return true
+          const body = c.req.valid("json")
+          return yield* limits.set({ sessionID, enabled: body.enabled, threshold: body.threshold })
+        }),
+    )
+    .post(
+      "/:sessionID/prune",
+      describeRoute({
+        summary: "Prune tool outputs",
+        description:
+          "Compress old tool call outputs to free context space. Set dryRun to only estimate savings, or force to prune even below the minimum token threshold.",
+        operationId: "session.prune",
+        responses: {
+          200: {
+            description: "Pruned tool outputs",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    pruned: z.number(),
+                    tokens: z.number(),
+                    scanned: z.number().optional(),
+                    protectedTokens: z.number().optional(),
+                    alreadyCleared: z.boolean().optional(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          dryRun: z.boolean().optional(),
+          force: z.boolean().optional(),
+        }),
+      ),
+      async (c) =>
+        jsonRequest("SessionRoutes.prune", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json")
+          const session = yield* Session.Service
+          yield* session.get(sessionID)
+          const compact = yield* SessionCompaction.Service
+          return yield* compact.prune({ sessionID, dryRun: body.dryRun, force: body.force })
+        }),
+    )
+    .post(
+      "/:sessionID/truncate",
+      describeRoute({
+        summary: "Truncate session history",
+        description:
+          "Cut older messages out of the model context without an LLM summary, keeping a recent token slice (default ~25% of visible tokens). Appends a truncate marker that undo/redo can revert.",
+        operationId: "session.truncate",
+        responses: {
+          200: {
+            description: "Truncated session history",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    messages: z.number(),
+                    tokens: z.number(),
+                    keptMessages: z.number(),
+                    kept: z.number(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          keepMessages: z.number().optional(),
+          ratio: z.number().optional(),
+        }),
+      ),
+      async (c) =>
+        jsonRequest("SessionRoutes.truncate", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json")
+          const session = yield* Session.Service
+          const msgs = yield* session.messages({ sessionID })
+          const lastUserMsg = msgs.findLast((msg) => msg.info.role === "user")
+          if (!lastUserMsg || lastUserMsg.info.role !== "user") {
+            return { messages: 0, tokens: 0, keptMessages: 0, kept: 0 }
+          }
+          const compact = yield* SessionCompaction.Service
+          return yield* compact.truncate({
+            sessionID,
+            agent: lastUserMsg.info.agent,
+            model: lastUserMsg.info.model,
+            keepMessages: body.keepMessages,
+            ratio: body.ratio,
+          })
         }),
     )
     .get(

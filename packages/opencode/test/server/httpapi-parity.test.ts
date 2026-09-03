@@ -125,3 +125,50 @@ describe("Error JSON shape parity", () => {
     expect(typeof body.data?.message).toBe("string")
   })
 })
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Reproducer 4: POST /session/{id}/prune should behave identically across the
+// legacy Hono routes and the Effect HttpApi implementation.
+// ──────────────────────────────────────────────────────────────────────────────
+describe("Prune route parity", () => {
+  test("dryRun returns identical estimate on both implementations", async () => {
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
+    const sessionID = await createSessionWithMessages(tmp.path, 3)
+    const headers = { "x-opencode-directory": tmp.path }
+
+    const hono = await app(false).request(`/session/${sessionID}/prune`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ dryRun: true }),
+    })
+    const httpapi = await app(true).request(`/session/${sessionID}/prune`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ dryRun: true }),
+    })
+
+    expect(hono.status).toBe(200)
+    expect(httpapi.status).toBe(hono.status)
+    expect(await httpapi.json()).toEqual(await hono.json())
+  })
+
+  test("missing session returns 404 on both implementations", async () => {
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
+    const headers = { "x-opencode-directory": tmp.path }
+
+    const hono = await app(false).request("/session/ses_does_not_exist/prune", {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({}),
+    })
+    const httpapi = await app(true).request("/session/ses_does_not_exist/prune", {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({}),
+    })
+
+    expect(httpapi.status).toBe(404)
+    expect(httpapi.status).toBe(hono.status)
+  })
+})
+

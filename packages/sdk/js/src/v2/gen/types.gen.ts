@@ -624,7 +624,20 @@ export type CompactionPart = {
   type: "compaction"
   auto: boolean
   overflow?: boolean
+  truncated?: boolean
   tail_start_id?: string
+  removedMessages?: number
+  removedTokens?: number
+}
+
+export type PrunePart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "prune"
+  count: number
+  tokens: number
+  partIDs: Array<string>
 }
 
 export type Part =
@@ -640,6 +653,7 @@ export type Part =
   | AgentPart
   | RetryPart
   | CompactionPart
+  | PrunePart
 
 export type Project = {
   id: string
@@ -5811,7 +5825,8 @@ export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSu
 
 export type SessionNocompactData = {
   body?: {
-    enabled: boolean
+    enabled?: boolean
+    threshold?: number
   }
   path: {
     sessionID: string
@@ -5840,10 +5855,198 @@ export type SessionNocompactResponses = {
   /**
    * Updated
    */
-  200: boolean
+  200: {
+    enabled: boolean
+    threshold?: number
+  }
 }
 
 export type SessionNocompactResponse = SessionNocompactResponses[keyof SessionNocompactResponses]
+
+export type SessionPruneData = {
+  body?: {
+    dryRun?: boolean
+    force?: boolean
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/prune"
+}
+
+export type SessionPruneErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionPruneError = SessionPruneErrors[keyof SessionPruneErrors]
+
+export type SessionPruneResponses = {
+  /**
+   * Pruned tool outputs
+   */
+  200: {
+    pruned: number
+    tokens: number
+    belowMinimum?: boolean
+    scanned?: number
+    protectedTokens?: number
+    alreadyCleared?: boolean
+  }
+}
+
+export type SessionPruneResponse = SessionPruneResponses[keyof SessionPruneResponses]
+
+export type SessionTruncateData = {
+  body?: {
+    keepMessages?: number
+    ratio?: number
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/truncate"
+}
+
+export type SessionTruncateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionTruncateError = SessionTruncateErrors[keyof SessionTruncateErrors]
+
+export type SessionTruncateResponses = {
+  /**
+   * Truncated session history
+   */
+  200: {
+    messages: number
+    tokens: number
+    keptMessages: number
+    kept: number
+  }
+}
+
+export type SessionTruncateResponse = SessionTruncateResponses[keyof SessionTruncateResponses]
+
+export type SessionShellThreadListData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/shell_thread"
+}
+
+export type SessionShellThreadListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionShellThreadListError = SessionShellThreadListErrors[keyof SessionShellThreadListErrors]
+
+export type SessionShellThreadListResponses = {
+  /**
+   * Shell thread details
+   */
+  200: Array<{
+    threadID: string
+    status: "running" | "exited" | "stopped" | "failed"
+    description: string
+    command: string
+    cwd: string
+    pid: number
+    startedAt: number
+    updatedAt: number
+    exitCode?: number
+    error?: string
+    cursor: number
+    bytes: number
+    outputTail: string
+  }>
+}
+
+export type SessionShellThreadListResponse = SessionShellThreadListResponses[keyof SessionShellThreadListResponses]
+
+export type SessionShellThreadStopData = {
+  body?: {
+    signal?: "SIGTERM" | "SIGKILL" | "SIGINT" | "SIGHUP"
+  }
+  path: {
+    sessionID: string
+    threadID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/shell_thread/{threadID}/stop"
+}
+
+export type SessionShellThreadStopErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionShellThreadStopError = SessionShellThreadStopErrors[keyof SessionShellThreadStopErrors]
+
+export type SessionShellThreadStopResponses = {
+  /**
+   * Stopped shell thread
+   */
+  200: {
+    threadID: string
+    status: "running" | "exited" | "stopped" | "failed"
+    description: string
+    command: string
+    cwd: string
+    pid: number
+    startedAt: number
+    updatedAt: number
+    exitCode?: number
+    error?: string
+    cursor: number
+    bytes: number
+    outputTail: string
+  }
+}
+
+export type SessionShellThreadStopResponse = SessionShellThreadStopResponses[keyof SessionShellThreadStopResponses]
 
 export type SessionPromptAsyncData = {
   body?: {

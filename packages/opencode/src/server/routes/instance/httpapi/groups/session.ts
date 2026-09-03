@@ -61,7 +61,44 @@ export const SummarizePayload = Schema.Struct({
   auto: Schema.optional(Schema.Boolean),
 })
 export const NoCompactPayload = Schema.Struct({
+  /** Fully disable auto-compaction and context limits for the session. */
+  enabled: Schema.optional(Schema.Boolean),
+  /**
+   * Suppress auto-compaction until the session reaches this many tokens.
+   * Pass null to clear a previously set threshold.
+   */
+  threshold: Schema.optional(Schema.NullOr(Schema.Finite)),
+})
+export const NoCompactResult = Schema.Struct({
   enabled: Schema.Boolean,
+  threshold: Schema.optional(Schema.Finite),
+})
+export const PrunePayload = Schema.Struct({
+  dryRun: Schema.optional(Schema.Boolean),
+  force: Schema.optional(Schema.Boolean),
+})
+export const PruneResult = Schema.Struct({
+  pruned: Schema.Finite,
+  tokens: Schema.Finite,
+  belowMinimum: Schema.optional(Schema.Boolean),
+  /** Visible completed tool outputs scanned in this pass. */
+  scanned: Schema.optional(Schema.Finite),
+  /** Output tokens deliberately kept inside the protect window. */
+  protectedTokens: Schema.optional(Schema.Finite),
+  /** True when the walk stopped at previously-pruned outputs. */
+  alreadyCleared: Schema.optional(Schema.Boolean),
+})
+export const TruncatePayload = Schema.Struct({
+  /** Keep exactly this many recent messages instead of the default token window. */
+  keepMessages: Schema.optional(Schema.Finite),
+  /** Keep this fraction (0-1) of visible context tokens instead of the default ~25%. */
+  ratio: Schema.optional(Schema.Finite),
+})
+export const TruncateResult = Schema.Struct({
+  messages: Schema.Finite,
+  tokens: Schema.Finite,
+  keptMessages: Schema.Finite,
+  kept: Schema.Finite,
 })
 export const PromptPayload = Schema.Struct(Struct.omit(SessionPrompt.PromptInput.fields, ["sessionID"]))
 export const BtwPayload = Schema.Struct(Struct.omit(SessionPrompt.BtwInput.fields, ["sessionID"]))
@@ -90,6 +127,8 @@ export const SessionPaths = {
   init: `${root}/:sessionID/init`,
   summarize: `${root}/:sessionID/summarize`,
   noCompact: `${root}/:sessionID/nocompact`,
+  prune: `${root}/:sessionID/prune`,
+  truncate: `${root}/:sessionID/truncate`,
   prompt: `${root}/:sessionID/message`,
   promptAsync: `${root}/:sessionID/prompt_async`,
   btw: `${root}/:sessionID/btw`,
@@ -301,14 +340,40 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.post("noCompact", SessionPaths.noCompact, {
           params: { sessionID: SessionID },
           payload: NoCompactPayload,
-          success: described(Schema.Boolean, "Updated"),
+          success: described(NoCompactResult, "Updated"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.nocompact",
             summary: "Toggle no-compact mode",
             description:
-              "Per-session runtime flag that disables auto-compaction and context window limit enforcement for the session.",
+              "Per-session runtime flag that disables auto-compaction and context window limit enforcement for the session. Set threshold to only suppress auto-compaction until the session reaches that many tokens.",
+          }),
+        ),
+        HttpApiEndpoint.post("prune", SessionPaths.prune, {
+          params: { sessionID: SessionID },
+          payload: PrunePayload,
+          success: described(PruneResult, "Pruned tool outputs"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.prune",
+            summary: "Prune tool outputs",
+            description:
+              "Compress old tool call outputs to free context space. Set dryRun to only estimate savings, or force to prune even below the minimum token threshold.",
+          }),
+        ),
+        HttpApiEndpoint.post("truncate", SessionPaths.truncate, {
+          params: { sessionID: SessionID },
+          payload: TruncatePayload,
+          success: described(TruncateResult, "Truncated session history"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.truncate",
+            summary: "Truncate session history",
+            description:
+              "Cut older messages out of the model context without an LLM summary, keeping a recent token slice (default ~25% of visible tokens). Appends a truncate marker that undo/redo can revert.",
           }),
         ),
         HttpApiEndpoint.post("prompt", SessionPaths.prompt, {

@@ -34,9 +34,11 @@ import {
   NoCompactPayload,
   PermissionResponsePayload,
   PromptPayload,
+  PrunePayload,
   RevertPayload,
   ShellPayload,
   SummarizePayload,
+  TruncatePayload,
   UpdatePayload,
 } from "../groups/session"
 import * as SessionError from "./session-errors"
@@ -252,8 +254,39 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof NoCompactPayload.Type
     }) {
       yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
-      yield* limitsSvc.set(ctx.params.sessionID, ctx.payload.enabled)
-      return true
+      return yield* limitsSvc.set({
+        sessionID: ctx.params.sessionID,
+        enabled: ctx.payload.enabled,
+        threshold: ctx.payload.threshold,
+      })
+    })
+
+    const prune = Effect.fn("SessionHttpApi.prune")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof PrunePayload.Type
+    }) {
+      yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
+      return yield* compactSvc.prune({
+        sessionID: ctx.params.sessionID,
+        dryRun: ctx.payload.dryRun,
+        force: ctx.payload.force,
+      })
+    })
+
+    const truncate = Effect.fn("SessionHttpApi.truncate")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof TruncatePayload.Type
+    }) {
+      const msgs = yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID }))
+      const lastUserMsg = msgs.findLast((msg) => msg.info.role === "user")
+      if (!lastUserMsg || lastUserMsg.info.role !== "user") return { messages: 0, tokens: 0, keptMessages: 0, kept: 0 }
+      return yield* compactSvc.truncate({
+        sessionID: ctx.params.sessionID,
+        agent: lastUserMsg.info.agent,
+        model: lastUserMsg.info.model,
+        keepMessages: ctx.payload.keepMessages,
+        ratio: ctx.payload.ratio,
+      })
     })
 
     const prompt = Effect.fn("SessionHttpApi.prompt")(function* (ctx: {
@@ -387,6 +420,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("unshare", unshare)
       .handle("summarize", summarize)
       .handle("noCompact", noCompact)
+      .handle("prune", prune)
+      .handle("truncate", truncate)
       .handle("prompt", prompt)
       .handle("promptAsync", promptAsync)
       .handle("btw", btw)

@@ -152,18 +152,26 @@ import type {
   SessionPromptAsyncResponses,
   SessionPromptErrors,
   SessionPromptResponses,
+  SessionPruneErrors,
+  SessionPruneResponses,
   SessionRevertErrors,
   SessionRevertResponses,
   SessionShareErrors,
   SessionShareResponses,
   SessionShellErrors,
   SessionShellResponses,
+  SessionShellThreadListErrors,
+  SessionShellThreadListResponses,
+  SessionShellThreadStopErrors,
+  SessionShellThreadStopResponses,
   SessionStatusErrors,
   SessionStatusResponses,
   SessionSummarizeErrors,
   SessionSummarizeResponses,
   SessionTodoErrors,
   SessionTodoResponses,
+  SessionTruncateErrors,
+  SessionTruncateResponses,
   SessionUnrevertErrors,
   SessionUnrevertResponses,
   SessionUnshareErrors,
@@ -3598,7 +3606,7 @@ export class Session2 extends HeyApiClient {
   /**
    * Toggle no-compact mode
    *
-   * Per-session runtime flag that disables auto-compaction and context window limit enforcement for the session.
+   * Per-session runtime flag that disables auto-compaction and context window limit enforcement for the session. Set threshold to only suppress auto-compaction until the session reaches that many tokens.
    */
   public nocompact<ThrowOnError extends boolean = false>(
     parameters: {
@@ -3606,6 +3614,7 @@ export class Session2 extends HeyApiClient {
       directory?: string
       workspace?: string
       enabled?: boolean
+      threshold?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3618,12 +3627,176 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "enabled" },
+            { in: "body", key: "threshold" },
           ],
         },
       ],
     )
     return (options?.client ?? this.client).post<SessionNocompactResponses, SessionNocompactErrors, ThrowOnError>({
       url: "/session/{sessionID}/nocompact",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Prune tool outputs
+   *
+   * Compress old tool call outputs to free context space. Set dryRun to only estimate savings, or force to prune even below the minimum token threshold.
+   */
+  public prune<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      dryRun?: boolean
+      force?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "dryRun" },
+            { in: "body", key: "force" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionPruneResponses, SessionPruneErrors, ThrowOnError>({
+      url: "/session/{sessionID}/prune",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Truncate session history
+   *
+   * Cut older messages out of the model context without an LLM summary, keeping a recent token slice (default ~25% of visible tokens). Appends a truncate marker that undo/redo can revert.
+   */
+  public truncate<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      keepMessages?: number
+      ratio?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "keepMessages" },
+            { in: "body", key: "ratio" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionTruncateResponses, SessionTruncateErrors, ThrowOnError>({
+      url: "/session/{sessionID}/truncate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List shell threads
+   *
+   * Inspect the shell threads of a session, including command, working directory, pid, status and recent output.
+   */
+  public shellThreadList<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SessionShellThreadListResponses,
+      SessionShellThreadListErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/shell_thread",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Stop shell thread
+   *
+   * Stop a running shell thread. Defaults to SIGTERM; use SIGKILL to force kill.
+   */
+  public shellThreadStop<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      threadID: string
+      directory?: string
+      workspace?: string
+      signal?: "SIGTERM" | "SIGKILL" | "SIGINT" | "SIGHUP"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "threadID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "signal" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionShellThreadStopResponses,
+      SessionShellThreadStopErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/shell_thread/{threadID}/stop",
       ...options,
       ...params,
       headers: {
