@@ -219,11 +219,27 @@ export const CompactionPart = Schema.Struct({
   type: Schema.Literal("compaction"),
   auto: Schema.Boolean,
   overflow: Schema.optional(Schema.Boolean),
+  truncated: Schema.optional(Schema.Boolean),
   tail_start_id: Schema.optional(MessageID),
+  removedMessages: Schema.optional(NonNegativeInt),
+  removedTokens: Schema.optional(NonNegativeInt),
 })
   .annotate({ identifier: "CompactionPart" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type CompactionPart = Types.DeepMutable<Schema.Schema.Type<typeof CompactionPart>>
+
+// Marker appended after a prune pass records what was compressed so the
+// timeline can render a "Prune" separator and undo can restore the marks.
+export const PrunePart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("prune"),
+  count: NonNegativeInt,
+  tokens: NonNegativeInt,
+  partIDs: Schema.Array(Schema.String),
+})
+  .annotate({ identifier: "PrunePart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type PrunePart = Types.DeepMutable<Schema.Schema.Type<typeof PrunePart>>
 
 export const SubtaskPart = Schema.Struct({
   ...partBase,
@@ -420,6 +436,7 @@ const _Part = Schema.Union([
   AgentPart,
   RetryPart,
   CompactionPart,
+  PrunePart,
 ]).annotate({ discriminator: "type", identifier: "Part" })
 export const Part = Object.assign(_Part, {
   zod: zod(_Part) as unknown as z.ZodType<
@@ -435,6 +452,7 @@ export const Part = Object.assign(_Part, {
     | AgentPart
     | RetryPart
     | CompactionPart
+    | PrunePart
   >,
 })
 export type Part =
@@ -450,6 +468,7 @@ export type Part =
   | AgentPart
   | RetryPart
   | CompactionPart
+  | PrunePart
 
 // Zod discriminated union kept for the legacy Hono OpenAPI path.
 const AssistantErrorZod = z.discriminatedUnion("name", [
@@ -800,6 +819,25 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     }
   }
   
+  // Empty text parts persist in history when a turn ends with only tool calls
+  // (processor opens a text block that closes with no deltas) or is aborted.
+  // Replaying them as empty content blocks makes strict providers reject the
+  // whole request, permanently bricking the session since history replays
+  // from storage on every retry. Skip them at conversion so old sessions heal.
+  // Exception: messages with signed reasoning blocks (Anthropic adaptive
+  // thinking and friends) are position-sensitive, so an empty text there
+  // becomes a single space instead of being dropped.
+  const hasSignedReasoning = (parts: Part[]): boolean =>
+    parts.some((part) => {
+      if (part.type !== "reasoning") return false
+      const metadata = part.metadata as Record<string, Record<string, unknown> | undefined> | undefined
+      return (
+        metadata?.anthropic?.signature != null ||
+        metadata?.bedrock?.signature != null ||
+        metadata?.vertex?.signature != null
+      )
+    })
+
   // Helper to check if a tool part is compacted
   const isCompacted = (part: ToolPart): boolean => {
     if (!options?.compactToolOutput) return false
@@ -880,7 +918,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
       }
       result.push(userMessage)
       for (const part of msg.parts) {
-        if (part.type === "text" && !part.ignored)
+        if (part.type === "text" && !part.ignored && part.text.trim() !== "")
           userMessage.parts.push({
             type: "text",
             text: part.text,
@@ -947,8 +985,15 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           ...(differentModel || options?.stripProviderMetadata || !metadata ? {} : { providerMetadata: metadata }),
         })
       }
+      const signedReasoning = hasSignedReasoning(msg.parts)
       for (const part of msg.parts) {
-        if (part.type === "text") pushAssistantText(part.text, part.metadata)
+        if (part.type === "text") {
+          if (part.text.trim() === "") {
+            if (signedReasoning) pushAssistantText(" ", part.metadata)
+            continue
+          }
+          pushAssistantText(part.text, part.metadata)
+        }
         if (part.type === "step-start")
           assistantMessage.parts.push({
             type: "step-start",
@@ -1192,8 +1237,35 @@ export function filterCompacted(msgs: Iterable<WithParts>) {
       completed.has(msg.info.id) &&
       msg.parts.some((part): part is CompactionPart => part.type === "compaction"),
   )
-  if (latest < 0) return result
-  return result.slice(latest)
+  // Truncate markers are a hard cut without a summary pair: the tail that
+  // chronologically precedes the marker becomes the new history.
+  const latestTruncate = result.findLastIndex(
+    (msg) =>
+      msg.info.role === "user" &&
+      msg.parts.some((part): part is CompactionPart => part.type === "compaction" && part.truncated === true),
+  )
+  const truncateSlice = (() => {
+    if (latestTruncate < 0) return undefined
+    const markerPart = result[latestTruncate].parts.find(
+      (part): part is CompactionPart => part.type === "compaction",
+    )
+    if (!markerPart?.tail_start_id) return result.slice(latestTruncate)
+    const tailIndex = result.findIndex((msg) => msg.info.id >= markerPart.tail_start_id!)
+    if (tailIndex < 0 || tailIndex > latestTruncate) return result.slice(latestTruncate)
+    return result.slice(tailIndex)
+  })()
+  if (latest < 0) return truncateSlice ?? result
+  if (!truncateSlice) {
+    const markerPart = result[latest].parts.find((part): part is CompactionPart => part.type === "compaction")
+    if (markerPart?.truncated && markerPart.tail_start_id) {
+      const tailIndex = result.findIndex((msg) => msg.info.id >= markerPart.tail_start_id!)
+      if (tailIndex >= 0 && tailIndex < latest) {
+        return [...result.slice(tailIndex, latest), ...result.slice(latest)]
+      }
+    }
+    return result.slice(latest)
+  }
+  return latestTruncate > latest ? truncateSlice : result.slice(latest)
 }
 
 export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: SessionID) {

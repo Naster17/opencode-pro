@@ -571,8 +571,53 @@ describe("session.compaction.isOverflow", () => {
         const sessionID = SessionID.descending()
         const model = createModel({ context: 100_000, output: 32_000 })
         const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
-        yield* limits.set(sessionID, true)
+        yield* limits.set({ sessionID, enabled: true })
         expect(yield* compact.isOverflow({ tokens, model, sessionID })).toBe(false)
+      }),
+    ),
+  )
+
+  it.live(
+    "suppresses overflow below the runtime token threshold",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const limits = yield* SessionLimits.Service
+        const sessionID = SessionID.descending()
+        const model = createModel({ context: 200_000, output: 32_000 })
+        // 182_000 total tokens: above the usable limit, so overflow without a threshold.
+        const tokens = { input: 170_000, output: 12_000, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(yield* compact.isOverflow({ tokens, model, sessionID })).toBe(true)
+
+        const info = yield* limits.set({ sessionID, threshold: 300_000 })
+        expect(info.enabled).toBe(false)
+        expect(info.threshold).toBe(300_000)
+        expect(yield* compact.isOverflow({ tokens, model, sessionID })).toBe(false)
+
+        // At or above the threshold, normal overflow rules apply again.
+        yield* limits.set({ sessionID, threshold: 150_000 })
+        expect(yield* compact.isOverflow({ tokens, model, sessionID })).toBe(true)
+      }),
+    ),
+  )
+
+  it.live(
+    "clears the threshold and lets full disable win over it",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const limits = yield* SessionLimits.Service
+        const sessionID = SessionID.descending()
+        const model = createModel({ context: 200_000, output: 32_000 })
+        const tokens = { input: 170_000, output: 12_000, reasoning: 0, cache: { read: 0, write: 0 } }
+
+        yield* limits.set({ sessionID, threshold: 150_000 })
+        yield* limits.set({ sessionID, enabled: true })
+        expect(yield* compact.isOverflow({ tokens, model, sessionID })).toBe(false)
+
+        const cleared = yield* limits.set({ sessionID, threshold: null })
+        expect(cleared).toEqual({ enabled: false })
+        expect(yield* compact.isOverflow({ tokens, model, sessionID })).toBe(true)
       }),
     ),
   )
@@ -905,6 +950,769 @@ describe("session.compaction.prune", () => {
       }),
     ),
   )
+
+  const seedPruneFixture = (dir: string, sessionID: SessionID, opts?: { outputs?: number[]; tool?: string }) =>
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const first = yield* ssn.updateMessage({
+        id: MessageID.ascending(),
+        role: "user",
+        sessionID,
+        agent: "build",
+        model: ref,
+        time: { created: Date.now() },
+      })
+      yield* ssn.updatePart({
+        id: PartID.ascending(),
+        messageID: first.id,
+        sessionID,
+        type: "text",
+        text: "first",
+      })
+      const toolPartIDs: string[] = []
+      for (const chars of opts?.outputs ?? [200_000]) {
+        const b: MessageV2.Assistant = {
+          id: MessageID.ascending(),
+          role: "assistant",
+          sessionID,
+          mode: "build",
+          agent: "build",
+          path: { cwd: dir, root: dir },
+          cost: 0,
+          tokens: {
+            output: 0,
+            input: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          modelID: ref.modelID,
+          providerID: ref.providerID,
+          parentID: first.id,
+          time: { created: Date.now() },
+          finish: "end_turn",
+        }
+        yield* ssn.updateMessage(b)
+        const part = yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: b.id,
+          sessionID,
+          type: "tool",
+          callID: crypto.randomUUID(),
+          tool: opts?.tool ?? "bash",
+          state: {
+            status: "completed",
+            input: {},
+            output: "x".repeat(chars),
+            title: "done",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+        toolPartIDs.push(part.id)
+      }
+      for (const text of ["second", "third"]) {
+        const msg = yield* ssn.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID,
+          agent: "build",
+          model: ref,
+          time: { created: Date.now() },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: msg.id,
+          sessionID,
+          type: "text",
+          text,
+        })
+      }
+      return toolPartIDs
+    })
+
+  it.live(
+    "dryRun reports candidates without mutating anything",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const compact = yield* SessionCompaction.Service
+          const ssn = yield* SessionNs.Service
+          const storage = yield* Storage.Service
+          const info = yield* ssn.create({})
+          const toolPartIDs = yield* seedPruneFixture(dir, info.id)
+
+          const preview = yield* compact.prune({ sessionID: info.id, dryRun: true })
+          expect(preview.pruned).toBe(1)
+          expect(preview.tokens).toBeGreaterThan(0)
+          expect(preview.belowMinimum).toBe(false)
+
+          const msgs = yield* ssn.messages({ sessionID: info.id })
+          const part = msgs.flatMap((msg) => msg.parts).find((p) => p.id === toolPartIDs[0])
+          if (part?.type === "tool" && part.state.status === "completed") {
+            expect(part.state.time.compacted).toBeUndefined()
+          }
+          const compacted = yield* storage
+            .read<{ partIDs?: string[] }>(["compacted_tool_session", info.id])
+            .pipe(Effect.catch(() => Effect.succeed(undefined)))
+          expect(compacted?.partIDs).toBeUndefined()
+        }),
+      {
+        config: {
+          compaction: { prune: true },
+        },
+      },
+    ),
+  )
+
+  it.live(
+    "skips small sessions below the minimum threshold unless forced",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const compact = yield* SessionCompaction.Service
+          const ssn = yield* SessionNs.Service
+          const info = yield* ssn.create({})
+          // Chronological tool outputs: two old small ones that cross the protect
+          // window only barely (~2k tokens of candidates), then a large new one
+          // that stays inside the PRUNE_PROTECT window.
+          const toolPartIDs = yield* seedPruneFixture(dir, info.id, { outputs: [2_000, 6_000, 155_000] })
+          const storage = yield* Storage.Service
+
+          const preview = yield* compact.prune({ sessionID: info.id, dryRun: true })
+          expect(preview.belowMinimum).toBe(true)
+
+          const result = yield* compact.prune({ sessionID: info.id })
+          expect(result.pruned).toBe(0)
+
+          const compactedIDs = Effect.gen(function* () {
+            const stored = yield* storage
+              .read<{ partIDs?: string[] }>(["compacted_tool_session", info.id])
+              .pipe(Effect.catch(() => Effect.succeed(undefined)))
+            return new Set(stored?.partIDs ?? [])
+          })
+
+          expect((yield* compactedIDs).has(toolPartIDs[1]!)).toBe(false)
+          expect((yield* compactedIDs).has(toolPartIDs[2]!)).toBe(false)
+
+          const forced = yield* compact.prune({ sessionID: info.id, force: true })
+          expect(forced.pruned).toBe(2)
+          expect((yield* compactedIDs).has(toolPartIDs[0]!)).toBe(true)
+          expect((yield* compactedIDs).has(toolPartIDs[1]!)).toBe(true)
+          expect((yield* compactedIDs).has(toolPartIDs[2]!)).toBe(false)
+        }),
+      {
+        config: {
+          compaction: { prune: true },
+        },
+      },
+    ),
+  )
+
+  it.live(
+    "manual invocation bypasses the compaction.prune config gate",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const compact = yield* SessionCompaction.Service
+          const ssn = yield* SessionNs.Service
+          const info = yield* ssn.create({})
+          yield* seedPruneFixture(dir, info.id)
+
+          const result = yield* compact.prune({ sessionID: info.id })
+          expect(result.pruned).toBe(1)
+        }),
+      {
+        config: {
+          compaction: { prune: false },
+        },
+      },
+    ),
+  )
+
+  it.live(
+    "pruned outputs ship cleared on the main request path",
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const info = yield* ssn.create({})
+        yield* seedPruneFixture(dir, info.id)
+
+        const pruned = yield* compact.prune({ sessionID: info.id, force: true })
+        expect(pruned.pruned).toBe(1)
+
+        // Timeline marker (the ----- Prune ----- bar) is recorded alongside.
+        const model = createModel({ context: 200_000, output: 32_000 })
+        const msgs = yield* ssn.messages({ sessionID: info.id })
+        const marker = msgs.findLast(
+          (msg) => msg.info.role === "user" && msg.parts.some((part) => part.type === "prune"),
+        )
+        expect(marker).toBeDefined()
+        const markerPart = marker!.parts.find((part): part is MessageV2.PrunePart => part.type === "prune")
+        expect(markerPart?.count).toBe(1)
+        expect(markerPart?.partIDs.length).toBe(1)
+        const toolOutput = (converted: unknown) => {
+          const wire = converted as Array<{ role: string; content: Array<{ output?: { value?: unknown } }> }>
+          return wire.find((msg) => msg.role === "tool")?.content[0]?.output?.value
+        }
+
+        // Main loop options (modelMessageOptions): marks must apply.
+        const cleared = yield* MessageV2.toModelMessagesEffect(msgs, model, { compactToolOutput: true })
+        expect(toolOutput(cleared)).toBe("[Old tool result content cleared]")
+
+        // Without the flag the full output ships (documents the wiring contract).
+        const full = yield* MessageV2.toModelMessagesEffect(msgs, model, {})
+        expect(String(toolOutput(full)).length).toBeGreaterThan(100_000)
+      }),
+    ),
+  )
+
+  it.live(
+    "prunes older tool outputs within a single turn beyond the protect window",
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const storage = yield* Storage.Service
+        const info = yield* ssn.create({})
+        const user = yield* ssn.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: info.id,
+          agent: "build",
+          model: ref,
+          time: { created: Date.now() },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: user.id,
+          sessionID: info.id,
+          type: "text",
+          text: "explore",
+        })
+        const toolPartIDs: string[] = []
+        for (let i = 0; i < 10; i++) {
+          const assistant: MessageV2.Assistant = {
+            id: MessageID.ascending(),
+            role: "assistant",
+            sessionID: info.id,
+            mode: "build",
+            agent: "build",
+            path: { cwd: dir, root: dir },
+            cost: 0,
+            tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: ref.modelID,
+            providerID: ref.providerID,
+            parentID: user.id,
+            time: { created: Date.now(), completed: Date.now() },
+            finish: "end_turn",
+          }
+          yield* ssn.updateMessage(assistant)
+          const part = yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID: info.id,
+            type: "tool",
+            callID: crypto.randomUUID(),
+            tool: "read",
+            state: {
+              status: "completed",
+              input: {},
+              output: "x".repeat(20_000),
+              title: "done",
+              metadata: {},
+              time: { start: Date.now(), end: Date.now() },
+            },
+          })
+          toolPartIDs.push(part.id)
+        }
+
+        // 10 uniform 5k-token outputs: newest 40k stay intact, oldest ~10k prune.
+        const result = yield* compact.prune({ sessionID: info.id, force: true })
+        expect(result.pruned).toBe(2)
+
+        const stored = yield* storage
+          .read<{ partIDs?: string[] }>(["compacted_tool_session", info.id])
+          .pipe(Effect.catch(() => Effect.succeed(undefined)))
+        const compacted = new Set(stored?.partIDs ?? [])
+        expect(compacted.has(toolPartIDs[0]!)).toBe(true)
+        expect(compacted.has(toolPartIDs[1]!)).toBe(true)
+        expect(compacted.has(toolPartIDs[9]!)).toBe(false)
+      }),
+    ),
+  )
+
+  it.live(
+    "skips tool outputs hidden behind a completed compaction marker",
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const storage = yield* Storage.Service
+        const info = yield* ssn.create({})
+
+        const mkToolTurn = (text: string, output: string) =>
+          Effect.gen(function* () {
+            const user = yield* ssn.updateMessage({
+              id: MessageID.ascending(),
+              role: "user",
+              sessionID: info.id,
+              agent: "build",
+              model: ref,
+              time: { created: Date.now() },
+            })
+            yield* ssn.updatePart({
+              id: PartID.ascending(),
+              messageID: user.id,
+              sessionID: info.id,
+              type: "text",
+              text,
+            })
+            const assistant: MessageV2.Assistant = {
+              id: MessageID.ascending(),
+              role: "assistant",
+              sessionID: info.id,
+              mode: "build",
+              agent: "build",
+              path: { cwd: dir, root: dir },
+              cost: 0,
+              tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              modelID: ref.modelID,
+              providerID: ref.providerID,
+              parentID: user.id,
+              time: { created: Date.now(), completed: Date.now() },
+              finish: "stop",
+            }
+            yield* ssn.updateMessage(assistant)
+            return yield* ssn.updatePart({
+              id: PartID.ascending(),
+              messageID: assistant.id,
+              sessionID: info.id,
+              type: "tool",
+              callID: crypto.randomUUID(),
+              tool: "read",
+              state: {
+                status: "completed",
+                input: {},
+                output,
+                title: "done",
+                metadata: {},
+                time: { start: Date.now(), end: Date.now() },
+              },
+            })
+          })
+
+        // Old turn with a big output, then a completed compaction pair hiding it.
+        const hiddenPart = yield* mkToolTurn("old", "x".repeat(200_000))
+        const markerMsg = yield* ssn.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: info.id,
+          agent: "build",
+          model: ref,
+          time: { created: Date.now() },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: markerMsg.id,
+          sessionID: info.id,
+          type: "compaction",
+          auto: true,
+        })
+        yield* ssn.updateMessage({
+          id: MessageID.ascending(),
+          role: "assistant",
+          sessionID: info.id,
+          mode: "compaction",
+          agent: "compaction",
+          parentID: markerMsg.id,
+          summary: true,
+          path: { cwd: dir, root: dir },
+          cost: 0,
+          tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: ref.modelID,
+          providerID: ref.providerID,
+          time: { created: Date.now(), completed: Date.now() },
+          finish: "stop",
+        })
+
+        // New turn with an equally big output on the wire.
+        const visiblePart = yield* mkToolTurn("new", "y".repeat(200_000))
+
+        // Only the visible output prunes; the hidden one never reaches the
+        // wire so compressing it would only inflate the report.
+        const result = yield* compact.prune({ sessionID: info.id, force: true })
+        expect(result.pruned).toBe(1)
+
+        const stored = yield* storage
+          .read<{ partIDs?: string[] }>(["compacted_tool_session", info.id])
+          .pipe(Effect.catch(() => Effect.succeed(undefined)))
+        const compacted = new Set(stored?.partIDs ?? [])
+        expect(compacted.has(visiblePart.id)).toBe(true)
+        expect(compacted.has(hiddenPart.id)).toBe(false)
+      }),
+    ),
+  )
+})
+
+describe("session.compaction.truncate", () => {
+  it.live(
+    "cuts older messages, appends a marker, and keeps the tail in filterCompacted",
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const info = yield* ssn.create({})
+
+        const users: MessageV2.User[] = []
+        for (const text of ["first", "second", "third"]) {
+          const user = yield* ssn.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID: info.id,
+            agent: "build",
+            model: ref,
+            time: { created: Date.now() },
+          })
+          users.push(user)
+          yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: user.id,
+            sessionID: info.id,
+            type: "text",
+            text,
+          })
+          const assistant: MessageV2.Assistant = {
+            id: MessageID.ascending(),
+            role: "assistant",
+            sessionID: info.id,
+            mode: "build",
+            agent: "build",
+            path: { cwd: dir, root: dir },
+            cost: 0,
+            tokens: { output: 10, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: ref.modelID,
+            providerID: ref.providerID,
+            parentID: user.id,
+            time: { created: Date.now(), completed: Date.now() },
+            finish: "stop",
+          }
+          yield* ssn.updateMessage(assistant)
+          yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID: info.id,
+            type: "text",
+            text: `reply to ${text}`,
+          })
+        }
+
+        const result = yield* compact.truncate({
+          sessionID: info.id,
+          agent: "build",
+          model: ref,
+          keepMessages: 4,
+        })
+        // turn 1 (first + reply) removed; turns 2-3 kept
+        expect(result.messages).toBe(2)
+        expect(result.tokens).toBeGreaterThan(0)
+        expect(result.keptMessages).toBeGreaterThanOrEqual(3)
+
+        const msgs = yield* ssn.messages({ sessionID: info.id })
+        // filterCompacted consumes stream-order (newest-first) messages, same
+        // as the production prompt loop does.
+        const filtered = MessageV2.filterCompacted(msgs.slice().reverse())
+        // The kept tail survives in the model context; the removed head does not.
+        expect(filtered.some((msg) => msg.info.id === users[1]!.id)).toBe(true)
+        expect(filtered.some((msg) => msg.info.id === users[0]!.id)).toBe(false)
+
+        const marker = filtered.find(
+          (msg) => msg.info.role === "user" && msg.parts.some((part) => part.type === "compaction"),
+        )
+        expect(marker).toBeDefined()
+        const markerPart = marker!.parts.find((part): part is MessageV2.CompactionPart => part.type === "compaction")
+        expect(markerPart?.truncated).toBe(true)
+        expect(markerPart?.tail_start_id).toBe(users[1]!.id)
+        expect(markerPart?.removedMessages).toBe(2)
+        expect(markerPart?.removedTokens).toBeGreaterThan(0)
+        // No synthetic summary: the tail itself is the new history.
+        const summaryMsg = filtered.find(
+          (msg): msg is MessageV2.WithParts & { info: MessageV2.Assistant } =>
+            msg.info.role === "assistant" && msg.info.summary === true,
+        )
+        expect(summaryMsg).toBeUndefined()
+      }),
+    ),
+  )
+
+  it.live("returns zeros when there is nothing to cut", provideTmpdirInstance(() =>
+    Effect.gen(function* () {
+      const compact = yield* SessionCompaction.Service
+      const ssn = yield* SessionNs.Service
+      const info = yield* ssn.create({})
+      const user = yield* ssn.updateMessage({
+        id: MessageID.ascending(),
+        role: "user",
+        sessionID: info.id,
+        agent: "build",
+        model: ref,
+        time: { created: Date.now() },
+      })
+      yield* ssn.updatePart({
+        id: PartID.ascending(),
+        messageID: user.id,
+        sessionID: info.id,
+        type: "text",
+        text: "only turn",
+      })
+
+      const result = yield* compact.truncate({ sessionID: info.id, agent: "build", model: ref })
+      expect(result.messages).toBe(0)
+      expect(result.tokens).toBe(0)
+    }),
+  ))
+
+  it.live(
+    "cuts a token-heavy session to the default window even with few messages",
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const info = yield* ssn.create({})
+        const users: MessageV2.User[] = []
+        for (let i = 0; i < 10; i++) {
+          const tag = String(i).padStart(3, "0")
+          const user = yield* ssn.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID: info.id,
+            agent: "build",
+            model: ref,
+            time: { created: Date.now() },
+          })
+          users.push(user)
+          yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: user.id,
+            sessionID: info.id,
+            type: "text",
+            text: `turn ${tag} ${"x".repeat(8000)}`,
+          })
+          const assistant: MessageV2.Assistant = {
+            id: MessageID.ascending(),
+            role: "assistant",
+            sessionID: info.id,
+            mode: "build",
+            agent: "build",
+            path: { cwd: dir, root: dir },
+            cost: 0,
+            tokens: { output: 10, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: ref.modelID,
+            providerID: ref.providerID,
+            parentID: user.id,
+            time: { created: Date.now(), completed: Date.now() },
+            finish: "stop",
+          }
+          yield* ssn.updateMessage(assistant)
+          yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID: info.id,
+            type: "text",
+            text: `reply ${tag} ${"y".repeat(8000)}`,
+          })
+        }
+
+        // 20 messages (~20k tokens): above the minimum budget, so the default
+        // ~25% window cuts instead of reporting nothing.
+        const result = yield* compact.truncate({ sessionID: info.id, agent: "build", model: ref })
+        expect(result.messages).toBeGreaterThan(0)
+        expect(result.messages + result.keptMessages).toBe(20)
+
+        const msgs = yield* ssn.messages({ sessionID: info.id })
+        const filtered = MessageV2.filterCompacted(msgs.slice().reverse())
+        expect(filtered.some((msg) => msg.info.id === users[0]!.id)).toBe(false)
+        expect(filtered.some((msg) => msg.info.id === users[9]!.id)).toBe(true)
+        const marker = filtered.find(
+          (msg) => msg.info.role === "user" && msg.parts.some((part) => part.type === "compaction"),
+        )
+        const markerPart = marker!.parts.find((part): part is MessageV2.CompactionPart => part.type === "compaction")
+        expect(markerPart?.truncated).toBe(true)
+      }),
+    ),
+  )
+
+  it.live(
+    "honors an explicit ratio override",
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const info = yield* ssn.create({})
+        for (let i = 0; i < 30; i++) {
+          const tag = String(i).padStart(3, "0")
+          const user = yield* ssn.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID: info.id,
+            agent: "build",
+            model: ref,
+            time: { created: Date.now() },
+          })
+          yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: user.id,
+            sessionID: info.id,
+            type: "text",
+            text: `turn ${tag}`,
+          })
+          const assistant: MessageV2.Assistant = {
+            id: MessageID.ascending(),
+            role: "assistant",
+            sessionID: info.id,
+            mode: "build",
+            agent: "build",
+            path: { cwd: dir, root: dir },
+            cost: 0,
+            tokens: { output: 10, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: ref.modelID,
+            providerID: ref.providerID,
+            parentID: user.id,
+            time: { created: Date.now(), completed: Date.now() },
+            finish: "stop",
+          }
+          yield* ssn.updateMessage(assistant)
+          yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: assistant.id,
+            sessionID: info.id,
+            type: "text",
+            text: `reply ${tag}`,
+          })
+        }
+
+        // ratio is a token fraction: uniform messages keep about half.
+        const result = yield* compact.truncate({ sessionID: info.id, agent: "build", model: ref, ratio: 0.5 })
+        expect(result.messages).toBeGreaterThan(0)
+        expect(result.messages + result.keptMessages).toBe(60)
+        expect(result.keptMessages).toBeGreaterThanOrEqual(28)
+        expect(result.keptMessages).toBeLessThanOrEqual(32)
+      }),
+    ),
+  )
+
+  it.live("ignores tool outputs hidden behind a summary boundary", provideTmpdirInstance((dir) =>
+    Effect.gen(function* () {
+      const compact = yield* SessionCompaction.Service
+      const ssn = yield* SessionNs.Service
+      const info = yield* ssn.create({})
+
+      // Older turn with a big tool output…
+      const first = yield* ssn.updateMessage({
+        id: MessageID.ascending(),
+        role: "user",
+        sessionID: info.id,
+        agent: "build",
+        model: ref,
+        time: { created: Date.now() },
+      })
+      yield* ssn.updatePart({
+        id: PartID.ascending(),
+        messageID: first.id,
+        sessionID: info.id,
+        type: "text",
+        text: "first",
+      })
+      const toolMsg: MessageV2.Assistant = {
+        id: MessageID.ascending(),
+        role: "assistant",
+        sessionID: info.id,
+        mode: "build",
+        agent: "build",
+        path: { cwd: dir, root: dir },
+        cost: 0,
+        tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        parentID: first.id,
+        time: { created: Date.now() },
+        finish: "end_turn",
+      }
+      yield* ssn.updateMessage(toolMsg)
+      yield* ssn.updatePart({
+        id: PartID.ascending(),
+        messageID: toolMsg.id,
+        sessionID: info.id,
+        type: "tool",
+        callID: crypto.randomUUID(),
+        tool: "bash",
+        state: {
+          status: "completed",
+          input: {},
+          output: "x".repeat(200_000),
+          title: "done",
+          metadata: {},
+          time: { start: Date.now(), end: Date.now() },
+        },
+      })
+
+      // …then a completed compaction pair, then newer turns. The hidden tool
+      // output never reaches the wire, so prune must leave it alone.
+      const markerMsg = yield* ssn.updateMessage({
+        id: MessageID.ascending(),
+        role: "user",
+        sessionID: info.id,
+        agent: "build",
+        model: ref,
+        time: { created: Date.now() },
+      })
+      yield* ssn.updatePart({
+        id: PartID.ascending(),
+        messageID: markerMsg.id,
+        sessionID: info.id,
+        type: "compaction",
+        auto: true,
+      })
+      yield* ssn.updateMessage({
+        id: MessageID.ascending(),
+        role: "assistant",
+        sessionID: info.id,
+        mode: "compaction",
+        agent: "compaction",
+        parentID: markerMsg.id,
+        summary: true,
+        path: { cwd: dir, root: dir },
+        cost: 0,
+        tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: Date.now(), completed: Date.now() },
+        finish: "stop",
+      })
+
+      for (const text of ["second", "third"]) {
+        const msg = yield* ssn.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: info.id,
+          agent: "build",
+          model: ref,
+          time: { created: Date.now() },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: msg.id,
+          sessionID: info.id,
+          type: "text",
+          text,
+        })
+      }
+
+      const result = yield* compact.prune({ sessionID: info.id })
+      expect(result.pruned).toBe(0)
+      expect(result.tokens).toBe(0)
+    }),
+  ))
 })
 
 describe("session.compaction.process", () => {

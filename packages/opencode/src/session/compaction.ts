@@ -13,7 +13,7 @@ import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError, Storage } from "@/storage/storage"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { Effect, Layer, Context, Schema } from "effect"
+import { Effect, Layer, Context, Schema, Option } from "effect"
 import * as DateTime from "effect/DateTime"
 import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow, usable } from "./overflow"
@@ -40,8 +40,13 @@ export const PRUNE_PROTECT = 40_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const DEFAULT_TAIL_TURNS = 2
+export const TRUNCATE_KEEP_TOKEN_RATIO = 0.25
+export const TRUNCATE_KEEP_MIN_TOKENS = 20_000
+export const TRUNCATE_KEEP_MAX_TOKENS = 100_000
+export const TRUNCATE_KEEP_MIN_MESSAGES = 5
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
 const MAX_PRESERVE_RECENT_TOKENS = 8_000
+export const TRUNCATE_NOTICE = "[Earlier conversation truncated]"
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
 ## Goal
@@ -106,12 +111,47 @@ function filePlaceholder(part: MessageV2.FilePart): MessageV2.TextPart | undefin
   }
 }
 
+// Sums the character footprint of a model-message structure the way
+// JSON.stringify would serialize it, but without materializing a giant string.
+// On huge sessions (hundreds of MB of tool output) stringify per estimate call
+// caused multi-second pauses; string .length is O(1) so this is O(nodes).
+function estimateStructureChars(value: unknown): number {
+  if (value == null) return 0
+  if (typeof value === "string") return value.length
+  if (typeof value === "number" || typeof value === "boolean") return String(value).length
+  if (Array.isArray(value)) {
+    let sum = 2
+    for (const item of value) sum += estimateStructureChars(item) + 1
+    return sum
+  }
+  if (typeof value === "object") {
+    let sum = 2
+    for (const [key, item] of Object.entries(value)) {
+      if (item === undefined) continue
+      sum += key.length + 4 + estimateStructureChars(item)
+    }
+    return sum
+  }
+  return String(value).length
+}
+
+function estimateStructureTokens(value: unknown) {
+  return Math.max(0, Math.round(estimateStructureChars(value) / 4))
+}
+
 function compactionMessages(messages: MessageV2.WithParts[]) {
+  // Pass-through parts are shallow-copied so downstream plugin transforms can
+  // never mutate the original store objects. This replaces the previous full
+  // structuredClone of the entire visible history, which deep-copied every
+  // string and stalled giant sessions right at compaction time.
   return messages.flatMap((message): MessageV2.WithParts[] => {
     if (message.info.role === "user") {
       const parts = message.parts.flatMap((part): MessageV2.Part[] => {
-        if (part.type === "text" && !part.ignored && !part.synthetic && part.text.trim()) return [part]
-        if (part.type === "file") return filePlaceholder(part) ? [filePlaceholder(part)!] : []
+        if (part.type === "text" && !part.ignored && !part.synthetic && part.text.trim()) return [{ ...part }]
+        if (part.type === "file") {
+          const placeholder = filePlaceholder(part)
+          return placeholder ? [placeholder] : []
+        }
         return []
       })
       if (!parts.length) return []
@@ -130,7 +170,7 @@ function compactionMessages(messages: MessageV2.WithParts[]) {
     }
 
     const parts = message.parts.flatMap((part): MessageV2.Part[] => {
-      if (part.type === "text" && part.text.trim()) return [part]
+      if (part.type === "text" && part.text.trim()) return [{ ...part }]
       if (part.type === "tool") {
         const status = part.state.status
         const result = status === "completed" ? "success" : status === "error" ? "error" : status
@@ -187,7 +227,11 @@ function completedCompactions(messages: MessageV2.WithParts[]) {
     if (!msg.info.summary || !msg.info.finish || msg.info.error) return []
     const userIndex = users.get(msg.info.parentID)
     if (userIndex === undefined) return []
-    return [{ userIndex, assistantIndex, summary: summaryText(msg) }]
+    const summary = summaryText(msg)
+    // Truncate notices are not real summaries; a later /compact anchors on
+    // the last real summary (or starts fresh) instead of merging with them.
+    if (summary?.startsWith(TRUNCATE_NOTICE)) return []
+    return [{ userIndex, assistantIndex, summary }]
   })
 }
 
@@ -216,7 +260,7 @@ function turns(messages: MessageV2.WithParts[]) {
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i]
     if (msg.info.role !== "user") continue
-    if (msg.parts.some((part) => part.type === "compaction")) continue
+    if (msg.parts.some((part) => part.type === "compaction" || part.type === "prune")) continue
     result.push({
       start: i,
       end: messages.length,
@@ -229,6 +273,44 @@ function turns(messages: MessageV2.WithParts[]) {
   return result
 }
 
+// Resolves the cut index (oldest-first) for a truncate pass, or 0 when there
+// is nothing worth cutting. Explicit keepMessages counts messages; otherwise
+// the window is token-based so sessions bloated by a few giant tool outputs
+// still cut: keep the newest messages covering `ratio` of total tokens
+// (default 25%, clamped to 20k-100k tokens, at least a few messages for
+// coherence), snapped to a turn boundary by the caller.
+function truncateCandidate(input: {
+  count: number
+  estimates: number[]
+  totalTokens: number
+  keepMessages?: number
+  ratio?: number
+}): number {
+  if (input.keepMessages !== undefined && Number.isFinite(input.keepMessages)) {
+    const keep = Math.min(Math.max(1, Math.floor(input.keepMessages)), input.count)
+    if (input.count <= keep) return 0
+    return input.count - keep
+  }
+  const explicit = input.ratio !== undefined && Number.isFinite(input.ratio) && input.ratio > 0
+  const ratio = explicit ? input.ratio! : TRUNCATE_KEEP_TOKEN_RATIO
+  if (ratio >= 1) return 0
+  const budget = explicit
+    ? input.totalTokens * ratio
+    : Math.min(Math.max(input.totalTokens * ratio, TRUNCATE_KEEP_MIN_TOKENS), TRUNCATE_KEEP_MAX_TOKENS)
+  if (input.totalTokens <= budget || input.count <= 1) return 0
+  const minKeep = Math.min(input.count, TRUNCATE_KEEP_MIN_MESSAGES)
+  let acc = 0
+  let kept = 0
+  for (let i = input.count - 1; i >= 0; i--) {
+    acc += input.estimates[i]!
+    kept++
+    // i === 0 would cut nothing; fall back to dropping the first message when
+    // a single giant old message holds the whole budget hostage.
+    if (acc >= budget && kept >= minKeep) return Math.max(i, 1)
+  }
+  return 0
+}
+
 function splitTurn(input: {
   messages: MessageV2.WithParts[]
   turn: Turn
@@ -239,11 +321,20 @@ function splitTurn(input: {
   return Effect.gen(function* () {
     if (input.budget <= 0) return undefined
     if (input.turn.end - input.turn.start <= 1) return undefined
+    // Estimate each message once and walk suffix sums. Re-estimating a growing
+    // slice per start position converted the message conversion into an
+    // O(turns x session bytes) workload on giant sessions.
+    const sizes = yield* Effect.forEach(
+      input.messages.slice(input.turn.start, input.turn.end),
+      (msg) => input.estimate({ messages: [msg], model: input.model }),
+      { concurrency: 1 },
+    )
+    const suffix = new Array<number>(sizes.length + 1).fill(0)
+    for (let i = sizes.length - 1; i >= 0; i--) {
+      suffix[i] = suffix[i + 1]! + sizes[i]!
+    }
     for (let start = input.turn.start + 1; start < input.turn.end; start++) {
-      const size = yield* input.estimate({
-        messages: input.messages.slice(start, input.turn.end),
-        model: input.model,
-      })
+      const size = suffix[start - input.turn.start]!
       if (size > input.budget) continue
       return {
         start,
@@ -260,7 +351,26 @@ export interface Interface {
     model: Provider.Model
     sessionID: SessionID
   }) => Effect.Effect<boolean>
-  readonly prune: (input: { sessionID: SessionID }) => Effect.Effect<void>
+  readonly prune: (input: {
+    sessionID: SessionID
+    force?: boolean
+    dryRun?: boolean
+  }) => Effect.Effect<{
+    pruned: number
+    tokens: number
+    belowMinimum?: boolean
+    scanned: number
+    protectedTokens: number
+    alreadyCleared: boolean
+  }>
+  readonly truncate: (input: {
+    sessionID: SessionID
+    agent: string
+    model: { providerID: ProviderID; modelID: ModelID }
+    keepMessages?: number
+    ratio?: number
+    keepTurns?: number
+  }) => Effect.Effect<{ messages: number; tokens: number; keptMessages: number; kept: number }>
   readonly process: (input: {
     parentID: MessageID
     messages: MessageV2.WithParts[]
@@ -309,11 +419,13 @@ export const layer: Layer.Layer<
       model: Provider.Model
       sessionID: SessionID
     }) {
+      const limit = yield* limits.get(input.sessionID)
       return overflow({
         cfg: yield* config.get(),
         tokens: input.tokens,
         model: input.model,
-        noCompact: yield* limits.get(input.sessionID),
+        noCompact: limit.enabled,
+        threshold: limit.threshold,
       })
     })
 
@@ -322,7 +434,7 @@ export const layer: Layer.Layer<
       model: Provider.Model
     }) {
       const msgs = yield* MessageV2.toModelMessagesEffect(input.messages, input.model)
-      return Token.estimate(JSON.stringify(msgs))
+      return estimateStructureTokens(msgs)
     })
 
     const select = Effect.fn("SessionCompaction.select")(function* (input: {
@@ -376,22 +488,33 @@ export const layer: Layer.Layer<
       }
     })
 
-    // goes backwards through parts until there are PRUNE_PROTECT tokens worth of tool
-    // calls, then erases output of older tool calls to free context space
-    const prune = Effect.fn("SessionCompaction.prune")(function* (input: { sessionID: SessionID }) {
-      const cfg = yield* config.get()
-      if (!cfg.compaction?.prune) return
-      log.info("pruning")
+    // Walks newest-first and keeps the most recent PRUNE_PROTECT tokens worth
+    // of tool outputs intact, then erases the output of older tool calls to
+    // free context space. Protection is token-based (not turn-based) so
+    // single-turn sessions bloated by dozens of tool calls still prune. Only
+    // wire-visible history is walked: outputs hidden behind a completed
+    // compaction/truncate marker are already out of context, pruning them
+    // would only inflate the report.
+    // Manual invocations (via the API) bypass the compaction.prune config gate;
+    // the auto call site in session/prompt.ts applies that gate itself.
+    const prune = Effect.fn("SessionCompaction.prune")(function* (input: {
+      sessionID: SessionID
+      force?: boolean
+      dryRun?: boolean
+    }) {
+      log.info("pruning", { force: input.force, dryRun: input.dryRun })
 
-      const msgs = yield* session
-        .messages({ sessionID: input.sessionID })
+      const cfg = yield* config.get()
+      const stablePrune = cfg.compaction?.stable_prune ?? true
+
+      const existing = yield* session
+        .get(input.sessionID)
         .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
-      if (!msgs) return
+      if (!existing) return { pruned: 0, tokens: 0, scanned: 0, protectedTokens: 0, alreadyCleared: false }
 
       // Check if stable_prune is enabled to determine how to check for already-compacted parts
-      const stablePrune = cfg.compaction?.stable_prune ?? true
       const alreadyCompacted = new Set<string>()
-      
+
       if (stablePrune) {
         // Load already compacted parts from storage
         const stored = yield* storage
@@ -404,27 +527,52 @@ export const layer: Layer.Layer<
 
       let total = 0
       let pruned = 0
+      let scanned = 0
+      let alreadyCleared = false
       const toPrune: MessageV2.ToolPart[] = []
-      let turns = 0
+      const completed = new Set<string>()
+      let cutoff: string | undefined
 
-      loop: for (let msgIndex = msgs.length - 1; msgIndex >= 0; msgIndex--) {
-        const msg = msgs[msgIndex]
-        if (msg.info.role === "user") turns++
-        if (turns < 2) continue
-        if (msg.info.role === "assistant" && msg.info.summary) break loop
+      // Walk newest-first through a lazy paged stream instead of materializing
+      // the entire session; the loop almost always stops at the first compacted
+      // boundary near the tail, so giant sessions never leave the first pages.
+      // Messages hidden behind a completed compaction/truncate marker never
+      // reach the wire, so pruning them only inflates the report: mirror
+      // filterCompacted() and stop at the newest marker's cut.
+      loop: for (const msg of MessageV2.stream(input.sessionID)) {
+        if (cutoff && msg.info.id < cutoff) break loop
+        if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish && !msg.info.error) {
+          completed.add(msg.info.parentID)
+          continue
+        }
+        if (msg.info.role === "user") {
+          const markerPart = msg.parts.find((part): part is MessageV2.CompactionPart => part.type === "compaction")
+          if (markerPart) {
+            if (markerPart.truncated) cutoff = markerPart.tail_start_id ?? msg.info.id
+            else if (completed.has(msg.info.id)) cutoff = msg.info.id
+            continue
+          }
+        }
         for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
           const part = msg.parts[partIndex]
           if (part.type !== "tool") continue
           if (part.state.status !== "completed") continue
           if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
-          
+
           // Check if already compacted (either in storage or in part itself)
           if (stablePrune) {
-            if (alreadyCompacted.has(part.id)) break loop
+            if (alreadyCompacted.has(part.id)) {
+              alreadyCleared = true
+              break loop
+            }
           } else {
-            if (part.state.time.compacted) break loop
+            if (part.state.time.compacted) {
+              alreadyCleared = true
+              break loop
+            }
           }
-          
+
+          scanned++
           const estimate = Token.estimate(part.state.output)
           total += estimate
           if (total <= PRUNE_PROTECT) continue
@@ -434,32 +582,40 @@ export const layer: Layer.Layer<
       }
 
       log.info("found", { pruned, total })
-      if (pruned > PRUNE_MINIMUM) {
-        // Check if stable_prune is enabled (default: true)
-        // When enabled, we store compacted metadata separately to avoid modifying old parts
-        const stablePrune = cfg.compaction?.stable_prune ?? true
-        
+      const protectedTokens = Math.max(0, total - pruned)
+
+      if (input.dryRun)
+        return {
+          pruned: toPrune.length,
+          tokens: pruned,
+          belowMinimum: !input.force && pruned <= PRUNE_MINIMUM,
+          scanned,
+          protectedTokens,
+          alreadyCleared,
+        }
+
+      if (!input.force && pruned <= PRUNE_MINIMUM)
+        return { pruned: 0, tokens: 0, scanned, protectedTokens, alreadyCleared }
+
+      if (toPrune.length > 0) {
+        const compactedAt = Date.now()
+        const appliedIDs = toPrune.map((part) => part.id)
+
         if (stablePrune) {
-          const compactedAt = Date.now()
+          // Store compacted metadata separately to avoid modifying old parts.
+          // This prevents cache invalidation. The compacted status is checked in toModelMessagesEffect.
           const compactedPartIDs = toPrune.flatMap((part) =>
             part.state.status === "completed" ? [part.id] : [],
           )
-
-          // NEW BEHAVIOR (default): Store compacted metadata separately
-          // This prevents cache invalidation by not modifying old tool parts
-          if (compactedPartIDs.length > 0) {
-            const existing = yield* storage
-              .read<{ compacted: number; partIDs?: string[] }>(["compacted_tool_session", input.sessionID])
-              .pipe(Effect.catch(() => Effect.succeed({ compacted: compactedAt, partIDs: [] })))
-            yield* storage
-              .write(["compacted_tool_session", input.sessionID], {
-                compacted: compactedAt,
-                partIDs: Array.from(new Set([...(existing.partIDs ?? []), ...compactedPartIDs])),
-              })
-              .pipe(Effect.ignore)
-          }
-          // DO NOT modify parts - this would break cache!
-          // The compacted status is stored separately and checked in toModelMessagesEffect
+          const existing = yield* storage
+            .read<{ compacted: number; partIDs?: string[] }>(["compacted_tool_session", input.sessionID])
+            .pipe(Effect.catch(() => Effect.succeed({ compacted: compactedAt, partIDs: [] })))
+          yield* storage
+            .write(["compacted_tool_session", input.sessionID], {
+              compacted: compactedAt,
+              partIDs: Array.from(new Set([...(existing.partIDs ?? []), ...compactedPartIDs])),
+            })
+            .pipe(Effect.ignore)
           log.info("pruned (stable)", { count: toPrune.length, partIDs: compactedPartIDs.length })
         } else {
           // LEGACY BEHAVIOR: Modify tool parts directly (breaks cache)
@@ -471,7 +627,104 @@ export const layer: Layer.Layer<
           }
           log.info("pruned (legacy)", { count: toPrune.length })
         }
+
+        // Timeline marker: renders a "Prune" separator and lets undo (revert)
+        // restore the compressed tool outputs via the recorded partIDs.
+        let lastUser: MessageV2.User | undefined
+        for (const msg of MessageV2.stream(input.sessionID)) {
+          if (msg.info.role !== "user") continue
+          lastUser = msg.info
+          break
+        }
+        if (lastUser) {
+          const markerMsg = yield* session.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
+            model: lastUser.model,
+            sessionID: input.sessionID,
+            agent: lastUser.agent,
+            time: { created: Date.now() },
+          })
+          yield* session.updatePart({
+            id: PartID.ascending(),
+            messageID: markerMsg.id,
+            sessionID: input.sessionID,
+            type: "prune",
+            count: toPrune.length,
+            tokens: pruned,
+            partIDs: appliedIDs,
+          })
+        }
       }
+
+      return { pruned: toPrune.length, tokens: pruned, scanned, protectedTokens, alreadyCleared }
+    })
+
+    // Truncation is a hard cut without an LLM summary (Cline-style): keep the
+    // most recent slice verbatim as the new history, drop everything older
+    // from the model context. By default the kept window is token-based
+    // (~25% of visible tokens, 20k-100k) so sessions bloated by a few giant
+    // tool outputs still cut, and it snaps to a turn boundary so tool pairs
+    // stay intact. A single marker records the cut so filterCompacted()
+    // slices the history and undo/redo can revert it; the full history stays
+    // on disk.
+    const truncate = Effect.fn("SessionCompaction.truncate")(function* (input: {
+      sessionID: SessionID
+      agent: string
+      model: { providerID: ProviderID; modelID: ModelID }
+      keepMessages?: number
+      ratio?: number
+      keepTurns?: number
+    }) {
+      const all = yield* MessageV2.filterCompactedEffect(input.sessionID)
+      const estimateMsg = (msg: MessageV2.WithParts) =>
+        Token.estimate(JSON.stringify({ role: msg.info.role, parts: msg.parts }))
+      const estimates = all.map(estimateMsg)
+      const totalTokens = estimates.reduce((sum, est) => sum + est, 0)
+      const candidate = truncateCandidate({
+        count: all.length,
+        estimates,
+        totalTokens,
+        keepMessages: input.keepMessages,
+        ratio: input.ratio,
+      })
+      const turnStarts = turns(all).map((t) => t.start)
+      const snapped = turnStarts.find((start) => start >= candidate)
+      const cutIndex = candidate <= 0 ? 0 : (snapped ?? candidate)
+      if (cutIndex <= 0) {
+        return { messages: 0, tokens: 0, keptMessages: all.length, kept: 0 }
+      }
+
+      const keptMsgs = all.slice(cutIndex)
+      const keptTokens = keptMsgs.reduce((sum, msg) => sum + estimateMsg(msg), 0)
+
+      const removed = all.slice(0, cutIndex)
+      const removedTokens = removed.reduce((sum, msg) => sum + estimateMsg(msg), 0)
+
+      const markerMsg = yield* session.updateMessage({
+        id: MessageID.ascending(),
+        role: "user",
+        model: input.model,
+        sessionID: input.sessionID,
+        agent: input.agent,
+        time: { created: Date.now() },
+      })
+      yield* session.updatePart({
+        id: PartID.ascending(),
+        messageID: markerMsg.id,
+        sessionID: input.sessionID,
+        type: "compaction",
+        auto: false,
+        truncated: true,
+        tail_start_id: all[cutIndex]?.info.id,
+        removedMessages: removed.length,
+        removedTokens,
+      })
+
+      yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+      log.info("truncated", { removed: removed.length, removedTokens, keptTokens })
+
+      return { messages: removed.length, tokens: removedTokens, keptMessages: keptMsgs.length, kept: keptTokens }
     })
 
     const processCompaction = Effect.fn("SessionCompaction.process")(function* (input: {
@@ -534,7 +787,7 @@ export const layer: Layer.Layer<
         { context: [], prompt: undefined },
       )
       const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
-      const msgs = structuredClone(compactionMessages(visible))
+      const msgs = compactionMessages(visible)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {
         stripMedia: true,
@@ -693,11 +946,16 @@ export const layer: Layer.Layer<
 
       if (processor.message.error) return "stop"
       if (result === "continue") {
+        // The summary message was just written; a lazy newest-first lookup
+        // avoids materializing the whole session to find it.
+        const found = yield* session.findMessage(input.sessionID, (item) => item.info.id === msg.id)
         const summary = summaryText(
-          (yield* session.messages({ sessionID: input.sessionID })).find((item) => item.info.id === msg.id) ?? {
-            info: msg,
-            parts: [],
-          },
+          Option.isSome(found)
+            ? found.value
+            : {
+                info: msg,
+                parts: [],
+              },
         )
         EventV2.run(SessionEvent.Compaction.Ended.Sync, {
           sessionID: input.sessionID,
@@ -743,6 +1001,7 @@ export const layer: Layer.Layer<
     return Service.of({
       isOverflow,
       prune,
+      truncate,
       process: processCompaction,
       create,
     })

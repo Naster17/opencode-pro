@@ -982,6 +982,7 @@ export const layer: Layer.Layer<
                 })
                 .pipe(Effect.ignore, Effect.forkIn(scope))
             }
+            const limit = yield* limits.get(ctx.sessionID)
             if (
               !input.ephemeral &&
               !ctx.assistantMessage.summary &&
@@ -989,7 +990,8 @@ export const layer: Layer.Layer<
                 cfg: yield* config.get(),
                 tokens: usage.tokens,
                 model: ctx.model,
-                noCompact: yield* limits.get(ctx.sessionID),
+                noCompact: limit.enabled,
+                threshold: limit.threshold,
               })
             ) {
               ctx.needsCompaction = true
@@ -1141,7 +1143,7 @@ export const layer: Layer.Layer<
           }
           if (
             (yield* config.get()).compaction?.auto === false ||
-            (yield* limits.get(ctx.assistantMessage.sessionID))
+            (yield* limits.get(ctx.assistantMessage.sessionID)).enabled
           ) {
             ctx.assistantMessage.error = error
             yield* bus.publish(Session.Event.Error, { sessionID: ctx.assistantMessage.sessionID, error })

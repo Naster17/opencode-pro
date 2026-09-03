@@ -40,6 +40,36 @@ export const layer = Layer.effect(
     const state = yield* SessionRunState.Service
     const sync = yield* SyncEvent.Service
 
+    // Applies (or clears) the compacted-tool marking for the given tool part
+    // IDs, in both stable (storage set) and legacy (part flag) modes.
+    const applyPruneMarks = Effect.fn("SessionRevert.applyPruneMarks")(function* (
+      sessionID: SessionID,
+      partIDs: string[],
+      marked: boolean,
+    ) {
+      const stored = yield* storage
+        .read<{ compacted: number; partIDs?: string[] }>(["compacted_tool_session", sessionID])
+        .pipe(Effect.catch(() => Effect.succeed(undefined)))
+      if (stored) {
+        const next = marked
+          ? Array.from(new Set([...(stored.partIDs ?? []), ...partIDs]))
+          : (stored.partIDs ?? []).filter((id) => !partIDs.includes(id))
+        yield* storage
+          .write(["compacted_tool_session", sessionID], { compacted: stored.compacted, partIDs: next })
+          .pipe(Effect.ignore)
+      }
+      const msgs = yield* sessions.messages({ sessionID })
+      for (const msg of msgs) {
+        for (const part of msg.parts) {
+          if (part.type !== "tool" || part.state.status !== "completed") continue
+          if (!partIDs.includes(part.id)) continue
+          if (marked === !!part.state.time.compacted) continue
+          part.state.time.compacted = marked ? Date.now() : undefined
+          yield* sessions.updatePart(part)
+        }
+      }
+    })
+
     const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
       yield* state.assertNotBusy(input.sessionID)
       const all = yield* sessions.messages({ sessionID: input.sessionID })
@@ -72,6 +102,14 @@ export const layer = Layer.effect(
 
       if (!rev) return session
 
+      // Undoing a revert range that contains prune markers must also restore
+      // the tool outputs those markers compressed, otherwise the context stays
+      // truncated even though the marker is hidden.
+      const unmarkIDs = all
+        .filter((msg) => msg.info.id >= rev.messageID)
+        .flatMap((msg) => msg.parts.flatMap((part) => (part.type === "prune" ? part.partIDs : [])))
+      if (unmarkIDs.length) yield* applyPruneMarks(input.sessionID, unmarkIDs, false)
+
       rev.snapshot = session.revert?.snapshot ?? (yield* snap.track())
       if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
       yield* snap.revert(patches)
@@ -96,8 +134,16 @@ export const layer = Layer.effect(
       log.info("unreverting", input)
       yield* state.assertNotBusy(input.sessionID)
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
-      if (!session.revert) return session
-      if (session.revert.snapshot) yield* snap.restore(session.revert.snapshot)
+      const revertState = session.revert
+      if (!revertState) return session
+      if (revertState.snapshot) yield* snap.restore(revertState.snapshot)
+      // Re-apply prune marks that revert() cleared for markers in the
+      // previously hidden range.
+      const msgs = yield* sessions.messages({ sessionID: input.sessionID })
+      const remarkIDs = msgs
+        .filter((msg) => msg.info.id >= revertState.messageID)
+        .flatMap((msg) => msg.parts.flatMap((part) => (part.type === "prune" ? part.partIDs : [])))
+      if (remarkIDs.length) yield* applyPruneMarks(input.sessionID, remarkIDs, true)
       yield* sessions.clearRevert(input.sessionID)
       return yield* sessions.get(input.sessionID).pipe(Effect.orDie)
     })

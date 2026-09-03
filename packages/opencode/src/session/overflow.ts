@@ -19,6 +19,8 @@ export function isOverflow(input: {
   tokens: MessageV2.Assistant["tokens"]
   model: Provider.Model
   noCompact?: boolean
+  /** Suppress overflow detection until the token count reaches this value. */
+  threshold?: number
 }) {
   if (input.cfg.compaction?.auto === false || input.noCompact) return false
   if (input.model.limit.context === 0) return false
@@ -30,5 +32,6 @@ export function isOverflow(input: {
       input.tokens.reasoning +
       input.tokens.cache.read +
       input.tokens.cache.write
+  if (input.threshold !== undefined && count < input.threshold) return false
   return count >= usable(input)
 }

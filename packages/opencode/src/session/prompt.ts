@@ -399,6 +399,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       return {
         stripProviderMetadata: CacheOptimizer.shouldStripProviderMetadata(model, cfg),
         inlineReasoning: CacheOptimizer.shouldInlineReasoning(model, cfg),
+        // Prune marks (stable storage or legacy part flags) only take effect
+        // on the wire when the caller opts in; without this every request
+        // ships full tool outputs no matter how much was pruned.
+        compactToolOutput: true,
       }
     })
 
@@ -1651,7 +1655,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info
             if (!lastFinished && msg.info.role === "assistant" && msg.info.finish) lastFinished = msg.info
             if (lastUser && lastFinished) break
-            const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
+            const task = msg.parts.filter(
+              (part): part is MessageV2.CompactionPart | MessageV2.SubtaskPart =>
+                part.type === "subtask" ||
+                (part.type === "compaction" && (part as MessageV2.CompactionPart).truncated !== true),
+            )
             if (task && !lastFinished) tasks.push(...task)
           }
 
@@ -1857,7 +1865,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           continue
         }
 
-        yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
+        if ((yield* config.get()).compaction?.prune)
+          yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
         return yield* lastAssistant(sessionID)
       },
     )
