@@ -15,6 +15,7 @@ import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { SessionLimits } from "@/session/limits"
 import { Todo } from "@/session/todo"
+import { ShellThread } from "@/tool/shell_thread"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { NotFoundError } from "@/storage/storage"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -23,6 +24,7 @@ import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
+import { ApiNotFoundError, notFound } from "../errors"
 import {
   BtwPayload,
   CommandPayload,
@@ -37,6 +39,7 @@ import {
   PrunePayload,
   RevertPayload,
   ShellPayload,
+  ShellThreadStopPayload,
   SummarizePayload,
   TruncatePayload,
   UpdatePayload,
@@ -57,6 +60,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const summary = yield* SessionSummary.Service
     const limitsSvc = yield* SessionLimits.Service
     const bus = yield* Bus.Service
+    const threadSvc = yield* ShellThread.Service
     const scope = yield* Scope.Scope
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
@@ -289,6 +293,32 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       })
     })
 
+    const shellThreadList = Effect.fn("SessionHttpApi.shellThreadList")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
+      return yield* threadSvc.inspect({ sessionID: ctx.params.sessionID })
+    })
+
+    const shellThreadStop = Effect.fn("SessionHttpApi.shellThreadStop")(function* (ctx: {
+      params: { sessionID: SessionID; threadID: string }
+      payload: typeof ShellThreadStopPayload.Type
+    }) {
+      yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
+      const stopped = yield* threadSvc
+        .stop({
+          sessionID: ctx.params.sessionID,
+          threadID: ctx.params.threadID,
+          signal: ctx.payload.signal,
+        })
+        .pipe(Effect.catch(() => Effect.succeed(undefined)))
+      if (!stopped) return yield* notFound(`Shell thread not found: ${ctx.params.threadID}`)
+      const threads = yield* threadSvc.inspect({ sessionID: ctx.params.sessionID })
+      const detail = threads.find((thread) => thread.threadID === ctx.params.threadID)
+      if (!detail) return yield* notFound(`Shell thread not found: ${ctx.params.threadID}`)
+      return detail
+    })
+
     const prompt = Effect.fn("SessionHttpApi.prompt")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof PromptPayload.Type
@@ -422,6 +452,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("noCompact", noCompact)
       .handle("prune", prune)
       .handle("truncate", truncate)
+      .handle("shellThreadList", shellThreadList)
+      .handle("shellThreadStop", shellThreadStop)
       .handle("prompt", prompt)
       .handle("promptAsync", promptAsync)
       .handle("btw", btw)

@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Show } from "solid-js"
+import { createMemo, createSignal, Show, untrack } from "solid-js"
 import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
@@ -31,26 +31,32 @@ export function SubagentFooter() {
     return { label, index: index + 1, total: siblings.length }
   })
 
+  // Recompute off the sync store's throttled data version instead of
+  // deep-tracking every part, which re-ran a full history pass on each
+  // streamed delta.
   const usage = createMemo(() => {
-    const summary = summarizeUsage(
-      [
-        {
-          session: session(),
-          messages: messages(),
-          getParts: (messageID) => sync.data.part[messageID] ?? [],
-        },
-      ],
-      sync.data.provider,
-    )
-    if (summary.context_tokens <= 0) return
+    sync.dataVersion()
+    return untrack(() => {
+      const summary = summarizeUsage(
+        [
+          {
+            session: session(),
+            messages: messages(),
+            getParts: (messageID: string) => sync.data.part[messageID] ?? [],
+          },
+        ],
+        sync.data.provider,
+      )
+      if (summary.context_tokens <= 0) return
 
-    const pct = summary.average_context_percent !== null ? `${summary.average_context_percent}%` : undefined
+      const pct = summary.average_context_percent !== null ? `${summary.average_context_percent}%` : undefined
 
-    return {
-      context: pct ? `${Locale.number(summary.context_tokens)} (${pct})` : Locale.number(summary.context_tokens),
-      total: `total ${Locale.number(summary.tokens)}`,
-      cost: money(summary.cost),
-    }
+      return {
+        context: pct ? `${Locale.number(summary.context_tokens)} (${pct})` : Locale.number(summary.context_tokens),
+        total: `total ${Locale.number(summary.tokens)}`,
+        cost: money(summary.cost),
+      }
+    })
   })
 
   const { theme } = useTheme()

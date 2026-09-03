@@ -172,3 +172,23 @@ describe("Prune route parity", () => {
   })
 })
 
+describe("Shell thread route parity", () => {
+  test("list returns empty arrays and missing session 404s on both implementations", async () => {
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
+    const sessionID = await createSessionWithMessages(tmp.path, 1)
+    const headers = { "x-opencode-directory": tmp.path }
+
+    const hono = await app(false).request(`/session/${sessionID}/shell_thread`, { headers })
+    const httpapi = await app(true).request(`/session/${sessionID}/shell_thread`, { headers })
+
+    expect(hono.status).toBe(200)
+    expect(httpapi.status).toBe(hono.status)
+    expect(await httpapi.json()).toEqual(await hono.json())
+
+    const honoMissing = await app(false).request("/session/ses_does_not_exist/shell_thread", { headers })
+    const httpapiMissing = await app(true).request("/session/ses_does_not_exist/shell_thread", { headers })
+
+    expect(httpapiMissing.status).toBe(404)
+    expect(httpapiMissing.status).toBe(honoMissing.status)
+  })
+})

@@ -1508,6 +1508,24 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
+// models.dev lags behind provider APIs; backfill known-missing models.
+// Each entry clones an existing sibling so api url/npm stay correct.
+// Skipped automatically once upstream includes the model.
+export function backfillMissingModels(database: Record<string, Info>) {
+  const clinePass = database["cline-pass"]
+  if (!clinePass || clinePass.models["cline-pass/glm-5.3-flash"]) return
+  const sibling = clinePass.models["cline-pass/glm-5.3"]
+  if (!sibling) return
+  clinePass.models["cline-pass/glm-5.3-flash"] = {
+    ...sibling,
+    id: ModelID.make("cline-pass/glm-5.3-flash"),
+    name: "GLM-5.3-Flash",
+    release_date: "2026-08-26",
+    api: { ...sibling.api, id: "cline-pass/glm-5.3-flash" },
+    cost: { input: 0.075, output: 0.25, cache: { read: 0.015, write: 0 } },
+  }
+}
+
 const layer: Layer.Layer<
   Service,
   never,
@@ -1529,6 +1547,7 @@ const layer: Layer.Layer<
         const cfg = yield* config.get()
         const modelsDev = yield* modelsDevSvc.get()
         const database = mapValues(modelsDev, fromModelsDevProvider)
+        backfillMissingModels(database)
 
         const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
         const languages = new Map<string, LanguageModelV3>()

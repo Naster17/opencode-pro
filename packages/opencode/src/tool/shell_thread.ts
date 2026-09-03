@@ -30,6 +30,25 @@ export const ThreadSnapshot = Schema.Struct({
   updatedAt: Schema.Number,
 })
 export type ThreadSnapshot = Schema.Schema.Type<typeof ThreadSnapshot>
+
+const DETAIL_TAIL_CHARS = 16_000
+
+export const ThreadDetail = Schema.Struct({
+  threadID: Schema.String,
+  status: Schema.Literals(["running", "exited", "stopped", "failed"]),
+  description: Schema.String,
+  command: Schema.String,
+  cwd: Schema.String,
+  pid: Schema.Finite,
+  startedAt: Schema.Finite,
+  updatedAt: Schema.Finite,
+  exitCode: Schema.optional(Schema.NullOr(Schema.Finite)),
+  error: Schema.optional(Schema.String),
+  cursor: Schema.Finite,
+  bytes: Schema.Finite,
+  outputTail: Schema.String,
+})
+export type ThreadDetail = Schema.Schema.Type<typeof ThreadDetail>
 export const Event = {
   Updated: BusEvent.define(
     "shell_thread.updated",
@@ -142,6 +161,7 @@ export interface Interface {
   }) => Effect.Effect<Thread, unknown>
   readonly get: (input: { sessionID: SessionID; threadID: string }) => Effect.Effect<Thread>
   readonly list: (sessionID: SessionID) => Effect.Effect<Thread[]>
+  readonly inspect: (input: { sessionID: SessionID; tail?: number }) => Effect.Effect<ThreadDetail[]>
   readonly stop: (input: {
     sessionID: SessionID
     threadID: string
@@ -196,6 +216,28 @@ export const layer: Layer.Layer<Service, never, ChildProcessSpawner> = Layer.eff
     const list = Effect.fn("ShellThread.list")(function* (sessionID: string) {
       return Array.from((yield* InstanceState.get(state)).threads.values()).filter(
         (thread) => thread.sessionID === sessionID,
+      )
+    })
+
+    const inspect = Effect.fn("ShellThread.inspect")(function* (input: { sessionID: SessionID; tail?: number }) {
+      const items = yield* list(input.sessionID)
+      const tail = input.tail ?? DETAIL_TAIL_CHARS
+      return items.map(
+        (thread): ThreadDetail => ({
+          threadID: thread.id,
+          status: thread.status,
+          description: thread.description,
+          command: thread.command,
+          cwd: thread.cwd,
+          pid: thread.pid,
+          startedAt: thread.startedAt,
+          updatedAt: thread.updatedAt,
+          ...(thread.exitCode !== undefined ? { exitCode: thread.exitCode } : {}),
+          ...(thread.error ? { error: thread.error } : {}),
+          cursor: thread.cursor,
+          bytes: thread.bytes,
+          outputTail: output(thread).slice(-tail),
+        }),
       )
     })
 
@@ -286,7 +328,7 @@ export const layer: Layer.Layer<Service, never, ChildProcessSpawner> = Layer.eff
       return thread
     })
 
-    return { start, get, list, stop } satisfies Interface
+    return { start, get, list, inspect, stop } satisfies Interface
   }),
 )
 

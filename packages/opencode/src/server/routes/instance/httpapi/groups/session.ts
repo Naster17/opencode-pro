@@ -10,6 +10,7 @@ import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Snapshot } from "@/snapshot"
+import { ThreadDetail } from "@/tool/shell_thread"
 import { Schema, SchemaGetter, Struct } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
@@ -88,6 +89,9 @@ export const PruneResult = Schema.Struct({
   /** True when the walk stopped at previously-pruned outputs. */
   alreadyCleared: Schema.optional(Schema.Boolean),
 })
+export const ShellThreadStopPayload = Schema.Struct({
+  signal: Schema.optional(Schema.Literals(["SIGTERM", "SIGKILL", "SIGINT", "SIGHUP"])),
+})
 export const TruncatePayload = Schema.Struct({
   /** Keep exactly this many recent messages instead of the default token window. */
   keepMessages: Schema.optional(Schema.Finite),
@@ -129,6 +133,8 @@ export const SessionPaths = {
   noCompact: `${root}/:sessionID/nocompact`,
   prune: `${root}/:sessionID/prune`,
   truncate: `${root}/:sessionID/truncate`,
+  shellThreadList: `${root}/:sessionID/shell_thread`,
+  shellThreadStop: `${root}/:sessionID/shell_thread/:threadID/stop`,
   prompt: `${root}/:sessionID/message`,
   promptAsync: `${root}/:sessionID/prompt_async`,
   btw: `${root}/:sessionID/btw`,
@@ -374,6 +380,30 @@ export const SessionApi = HttpApi.make("session")
             summary: "Truncate session history",
             description:
               "Cut older messages out of the model context without an LLM summary, keeping a recent token slice (default ~25% of visible tokens). Appends a truncate marker that undo/redo can revert.",
+          }),
+        ),
+        HttpApiEndpoint.get("shellThreadList", SessionPaths.shellThreadList, {
+          params: { sessionID: SessionID },
+          success: described(Schema.Array(ThreadDetail), "Shell thread details"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.shell_thread_list",
+            summary: "List shell threads",
+            description:
+              "Inspect the shell threads of a session, including command, working directory, pid, status and recent output.",
+          }),
+        ),
+        HttpApiEndpoint.post("shellThreadStop", SessionPaths.shellThreadStop, {
+          params: { sessionID: SessionID, threadID: Schema.String },
+          payload: ShellThreadStopPayload,
+          success: described(ThreadDetail, "Stopped shell thread"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.shell_thread_stop",
+            summary: "Stop shell thread",
+            description: "Stop a running shell thread. Defaults to SIGTERM; use SIGKILL to force kill.",
           }),
         ),
         HttpApiEndpoint.post("prompt", SessionPaths.prompt, {

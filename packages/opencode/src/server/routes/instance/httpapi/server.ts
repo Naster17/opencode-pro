@@ -42,6 +42,7 @@ import { Skill } from "@/skill"
 import { Snapshot } from "@/snapshot"
 import { SyncEvent } from "@/sync"
 import { ToolRegistry } from "@/tool/registry"
+import { ShellThread } from "@/tool/shell_thread"
 import { lazy } from "@/util/lazy"
 import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
@@ -185,6 +186,7 @@ export function createRoutes(corsOptions?: CorsOptions) {
       Skill.defaultLayer,
       Todo.defaultLayer,
       ToolRegistry.defaultLayer,
+      ShellThread.defaultLayer,
       Vcs.defaultLayer,
       Workspace.defaultLayer,
       Worktree.appLayer,

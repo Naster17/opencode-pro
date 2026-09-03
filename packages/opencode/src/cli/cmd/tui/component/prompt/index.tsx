@@ -1,5 +1,5 @@
 import { BoxRenderable, RGBA, TextareaRenderable, MouseEvent, PasteEvent, decodePasteBytes } from "@opentui/core"
-import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, untrack } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -474,40 +474,41 @@ export function Prompt(props: PromptProps) {
     return messages.findLast((m): m is UserMessage => m.role === "user")
   })
 
+  // Usage totals only change when message/part data changes, not on every
+  // streamed text delta. Deep-tracking all parts here made the footer rescan
+  // the whole loaded history on each 16ms event flush, which stalled huge
+  // sessions; instead recompute off the sync store's throttled data version
+  // (fires on SSE events and REST history loads, bounded to ~2x/sec) and read
+  // the store untracked. Exact ctx tokens come from the last assistant
+  // message, so a short delay is invisible in practice.
   const usage = createMemo(() => {
     if (!props.sessionID) return
-    const messages = sync.data.message[props.sessionID] ?? []
-    if (messages.length === 0) return
+    sync.dataVersion()
+    const sessionID = props.sessionID
+    return untrack(() => {
+      const messages = sync.data.message[sessionID] ?? []
+      if (messages.length === 0) return
 
-    const context = summarizeUsage(
-      [
-        {
-          session: sync.session.get(props.sessionID),
-          messages,
-          getParts: (messageID) => sync.data.part[messageID] ?? [],
-        },
-      ],
-      sync.data.provider,
-    )
-    const billed = summarizeUsage(
-      [
-        {
-          session: sync.session.get(props.sessionID),
-          messages,
-          getParts: (messageID) => sync.data.part[messageID] ?? [],
-        },
-      ],
-      sync.data.provider,
-      { respectRevert: false },
-    )
+      const input = {
+        session: sync.session.get(sessionID),
+        messages,
+        getParts: (messageID: string) => sync.data.part[messageID] ?? [],
+      }
+      // The two summaries only differ when a revert is active; otherwise one
+      // full pass over the history is enough.
+      const context = summarizeUsage([input], sync.data.provider)
+      const billed = input.session?.revert?.messageID
+        ? summarizeUsage([input], sync.data.provider, { respectRevert: false })
+        : context
 
-    if (context.context_tokens <= 0) return
+      if (context.context_tokens <= 0) return
 
-    const pct = context.average_context_percent !== null ? `${context.average_context_percent}%` : undefined
-    return {
-      context: pct ? `${Locale.number(context.context_tokens)} (${pct})` : Locale.number(context.context_tokens),
-      cost: billed.cost > 0 ? money.format(billed.cost) : undefined,
-    }
+      const pct = context.average_context_percent !== null ? `${context.average_context_percent}%` : undefined
+      return {
+        context: pct ? `${Locale.number(context.context_tokens)} (${pct})` : Locale.number(context.context_tokens),
+        cost: billed.cost > 0 ? money.format(billed.cost) : undefined,
+      }
+    })
   })
 
   const [store, setStore] = createStore<{

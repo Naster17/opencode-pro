@@ -1,6 +1,6 @@
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import path from "path"
-import { createEffect, createMemo, createResource, createSignal, on, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, on, onCleanup, Show, untrack } from "solid-js"
 import type { JSX } from "@opentui/solid"
 import { useSync } from "@tui/context/sync"
 import { Global } from "@opencode-ai/core/global"
@@ -204,9 +204,13 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     }
   })
 
+  // The live-context summary walks the loaded history; deep-tracking every
+  // part re-ran it on each streamed delta. Recompute on the sync store's
+  // throttled data version instead — it fires on the same code paths that
+  // mutate the store (SSE events and REST history loads), bounded to ~2x/sec.
   const usage = createMemo(() => {
+    sync.dataVersion()
     const rootSession = allSessions().find((s) => s.id === props.session_id)
-    const rootMessages = props.api.state.session.messages(props.session_id)
     const ids = [props.session_id, ...descendantSessions()]
     const additions = ids.reduce(
       (sum, id) => sum + props.api.state.session.diff(id).reduce((total, item) => total + item.additions, 0),
@@ -221,15 +225,17 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     // incremental message/part events. The live context figure below comes from
     // the windowed store, which is accurate for the most recent assistant.
     const billed = billedTracker.totals
-    const context = summarizeUsage(
-      [
-        {
-          session: rootSession,
-          messages: rootMessages,
-          getParts: props.api.state.part,
-        },
-      ],
-      props.api.state.provider,
+    const context = untrack(() =>
+      summarizeUsage(
+        [
+          {
+            session: rootSession,
+            messages: props.api.state.session.messages(props.session_id),
+            getParts: props.api.state.part,
+          },
+        ],
+        props.api.state.provider,
+      ),
     )
     const btw = btwUsage.sum(trackedSessionIDs())
 

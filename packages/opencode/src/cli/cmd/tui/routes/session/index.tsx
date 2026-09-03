@@ -114,6 +114,7 @@ const STREAM_RATE_UPDATE_INTERVAL = 250
 const STREAM_RATE_MIN_WINDOW = 1200
 const STREAM_RATE_SMOOTHING = 0.18
 const PROMPT_RATE_MIN_WINDOW = 1500
+const DERIVED_MEMO_PRUNE_THRESHOLD = 512
 
 type AssistantDerivedMetrics = {
   estimatedOutputTokens: number
@@ -826,6 +827,35 @@ export function Session() {
     )
   })
 
+  // Text deltas arrive at token rate; buffering them and flushing on the same
+  // cadence as the rate timer keeps the live signal (and every metric memo
+  // reading it) from churning hundreds of times per second on huge streams.
+  const pendingStreamSamples: { time: number; tokens: number }[] = []
+  let pendingStreamFlush: ReturnType<typeof setTimeout> | undefined
+  const flushPendingStreamSamples = () => {
+    pendingStreamFlush = undefined
+    const assistant = lastAssistant()
+    if (!assistant || pendingStreamSamples.length === 0) {
+      pendingStreamSamples.length = 0
+      return
+    }
+    const samples = pendingStreamSamples.splice(0)
+    const now = samples[samples.length - 1].time
+    const tokens = samples.reduce((sum, sample) => sum + sample.tokens, 0)
+    setLiveAssistant((current) => {
+      if (current.messageID !== assistant.id) return current
+      return {
+        ...current,
+        now,
+        responseStartedAt: current.responseStartedAt ?? samples[0].time,
+        textStartedAt: current.textStartedAt ?? samples[0].time,
+        firstTokenAt: current.firstTokenAt ?? samples[0].time,
+        outputTokens: (current.outputTokens ?? 0) + tokens,
+        streamSamples: [...current.streamSamples, ...samples].slice(-STREAM_RATE_MAX_SAMPLES),
+      }
+    })
+  }
+
   event.on("message.part.delta", (evt) => {
     const assistant = lastAssistant()
     if (!assistant) return
@@ -834,29 +864,25 @@ export function Session() {
     const now = Date.now()
     const tokens = estimateStreamTokens(evt.properties.delta)
     setLiveAssistant((current) =>
-      current.messageID !== assistant.id
-        ? {
+      current.messageID === assistant.id
+        ? current
+        : {
             messageID: assistant.id,
             now,
             responseStartedAt: now,
             textStartedAt: now,
             firstTokenAt: now,
-            outputTokens: tokens,
-            streamSamples: [{ time: now, tokens }],
-          }
-        : {
-            ...current,
-            now,
-            responseStartedAt: current.responseStartedAt ?? now,
-            textStartedAt: current.textStartedAt ?? now,
-            firstTokenAt: current.firstTokenAt ?? now,
-            outputTokens: (current.outputTokens ?? 0) + tokens,
-            streamSamples: [
-              ...current.streamSamples.filter((sample) => now - sample.time <= STREAM_RATE_WINDOW),
-              { time: now, tokens },
-            ].slice(-STREAM_RATE_MAX_SAMPLES),
+            outputTokens: 0,
+            streamSamples: [],
           },
     )
+    pendingStreamSamples.push({ time: now, tokens })
+    if (pendingStreamFlush) return
+    pendingStreamFlush = setTimeout(flushPendingStreamSamples, STREAM_RATE_UPDATE_INTERVAL)
+  })
+
+  onCleanup(() => {
+    if (pendingStreamFlush) clearTimeout(pendingStreamFlush)
   })
 
   event.on("message.stream.metrics", (evt) => {
@@ -2186,14 +2212,47 @@ export function Session() {
     return sessionBtwTurns().filter((turn) => !first || turn.id < first.id)
   })
 
+  // Per-message derived values are memoized individually so a streaming delta
+  // only recomputes the one message it touched. The aggregates below then do a
+  // cheap O(messages) numeric merge instead of re-scanning every part of the
+  // whole history on each 16ms event flush (critical for huge sessions).
+  const messageCodeStatsMemos = new Map<string, () => CodeStats>()
+  const codeStatsFor = (messageID: string) => {
+    let memo = messageCodeStatsMemos.get(messageID)
+    if (!memo) {
+      memo = createMemo(() => messageCodeStats(sync.data.part[messageID] ?? []))
+      messageCodeStatsMemos.set(messageID, memo)
+    }
+    return memo()
+  }
+
+  const promptTokensMemos = new Map<string, () => number>()
+  const promptTokensFor = (messageID: string) => {
+    let memo = promptTokensMemos.get(messageID)
+    if (!memo) {
+      memo = createMemo(() =>
+        (sync.data.part[messageID] ?? []).reduce((sum, part) => sum + estimatePromptPartTokens(part), 0),
+      )
+      promptTokensMemos.set(messageID, memo)
+    }
+    return memo()
+  }
+
+  const pruneDerivedMemos = (ids: Set<string>) => {
+    if (messageCodeStatsMemos.size <= DERIVED_MEMO_PRUNE_THRESHOLD && promptTokensMemos.size <= DERIVED_MEMO_PRUNE_THRESHOLD)
+      return
+    for (const key of messageCodeStatsMemos.keys())
+      if (!ids.has(key)) messageCodeStatsMemos.delete(key)
+    for (const key of promptTokensMemos.keys())
+      if (!ids.has(key)) promptTokensMemos.delete(key)
+  }
+
   const messageMetrics = createMemo(() => {
     const result = new Map<string, MessageMetrics>()
     let startedAt: number | undefined
     let turnCodeStats = emptyCodeStats()
 
     for (const message of messages()) {
-      const parts = sync.data.part[message.id] ?? []
-
       if (message.role === "user") {
         startedAt = message.time.created
         turnCodeStats = emptyCodeStats()
@@ -2202,12 +2261,13 @@ export function Session() {
       }
 
       if (message.role === "assistant") {
-        turnCodeStats = mergeCodeStats(turnCodeStats, messageCodeStats(parts))
+        turnCodeStats = mergeCodeStats(turnCodeStats, codeStatsFor(message.id))
         result.set(message.id, { startedAt, codeStats: turnCodeStats })
         continue
       }
     }
 
+    pruneDerivedMemos(new Set(result.keys()))
     return result
   })
 
@@ -2215,11 +2275,10 @@ export function Session() {
     const assistant = lastAssistant()
     if (!assistant) return 0
     if (assistant.time.completed) return 0
-    const sessionMessages = messages()
     let promptTokens = 0
     let parent: UserMessage | undefined
-    for (const message of sessionMessages) {
-      promptTokens += (sync.data.part[message.id] ?? []).reduce((sum, part) => sum + estimatePromptPartTokens(part), 0)
+    for (const message of messages()) {
+      promptTokens += promptTokensFor(message.id)
       if (message.id !== assistant.parentID) continue
       if (message.role === "user") parent = message
       break
@@ -2245,12 +2304,7 @@ export function Session() {
     ]
     const sessionPromptTokens = messages()
       .filter((message) => message.id < turn.id)
-      .reduce(
-        (sum, message) =>
-          sum +
-          (sync.data.part[message.id] ?? []).reduce((partSum, part) => partSum + estimatePromptPartTokens(part), 0),
-        0,
-      )
+      .reduce((sum, message) => sum + promptTokensFor(message.id), 0)
     return (
       sessionPromptTokens +
       Token.estimate(
@@ -3784,6 +3838,7 @@ function InlineTool(props: {
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const complete = createMemo(() => props.part.state.status === "error" || !!props.complete)
+  let renderScan: { parent: unknown; count: number } | undefined
 
   const permission = createMemo(() => {
     const callID = sync.data.permission[ctx.sessionID]?.at(0)?.tool?.callID
@@ -3820,25 +3875,25 @@ function InlineTool(props: {
         props.onClick?.()
       }}
       renderBefore={function () {
+        // Runs on every renderer frame for every inline tool. With thousands of
+        // tool blocks a full parent scan per tool per frame is O(N^2), so only
+        // rescan when the parent's children list actually changed.
         const el = this as BoxRenderable
         const parent = el.parent
         if (!parent) return
         const children = parent.getChildren()
+        if (renderScan && renderScan.parent === parent && renderScan.count === children.length) return
         const index = children.indexOf(el)
         const previous = children[index - 1]
-        if (!previous) {
-          setMargin(0)
-          return
-        }
-        if (
-          previous.id.startsWith("msg_") ||
-          previous.id.startsWith("text-") ||
-          previous.id.startsWith("tool-block-")
-        ) {
-          setMargin(1)
-          return
-        }
-        setMargin(0)
+        renderScan = { parent, count: children.length }
+        setMargin(
+          previous &&
+            (previous.id.startsWith("msg_") ||
+              previous.id.startsWith("text-") ||
+              previous.id.startsWith("tool-block-"))
+            ? 1
+            : 0,
+        )
       }}
     >
       <box paddingLeft={3}>

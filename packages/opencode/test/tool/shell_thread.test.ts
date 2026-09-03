@@ -119,6 +119,46 @@ describe("tool.shell_thread", () => {
     })
   })
 
+  test("inspect returns command, pid, status, and output tail", async () => {
+    if (process.platform === "win32") return
+
+    await WithInstance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const tool = await init()
+        const start = await Effect.runPromise(
+          tool.execute(
+            {
+              action: "start",
+              command: "echo inspect-me; sleep 5",
+              description: "Inspect target",
+            },
+            ctx(),
+          ),
+        )
+        const threadID = String(start.metadata.threadID)
+
+        await wait(300)
+        const details = await runtime.runPromise(
+          ShellThread.Service.use((service) =>
+            service.inspect({ sessionID: SessionID.make("ses_shell_thread") }),
+          ),
+        )
+        const detail = details.find((item) => item.threadID === threadID)
+        expect(detail).toBeDefined()
+        expect(detail!.status).toBe("running")
+        expect(detail!.command).toBe("echo inspect-me; sleep 5")
+        expect(detail!.description).toBe("Inspect target")
+        expect(detail!.pid).toBeNumber()
+        expect(detail!.outputTail).toContain("inspect-me")
+
+        await Effect.runPromise(
+          tool.execute({ action: "stop", threadID, signal: "SIGKILL" }, ctx()),
+        )
+      },
+    })
+  })
+
   test("start requests normal shell permission", async () => {
     if (process.platform === "win32") return
 

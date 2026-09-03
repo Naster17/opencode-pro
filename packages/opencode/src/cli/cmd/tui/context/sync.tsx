@@ -27,7 +27,7 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onCleanup, onMount } from "solid-js"
+import { batch, createSignal, onCleanup, onMount } from "solid-js"
 import * as Log from "@opencode-ai/core/util/log"
 import { emptyConsoleState, type ConsoleState } from "@/config/console-state"
 import path from "path"
@@ -60,8 +60,23 @@ function mergePart(current: Part | undefined, next: Part): Part {
   if (!isTextPart(current) || !isTextPart(next)) return next
   if (next.time?.end) return next
   if (current.text.length <= next.text.length) return next
-  if (!current.text.includes(next.text)) return next
+  // Server snapshots lag behind locally-applied deltas, so the local text is
+  // the server text plus appended deltas. A prefix check is equivalent to the
+  // previous substring scan but fails fast instead of scanning megabytes of
+  // accumulated text on every part update of a huge session.
+  if (!current.text.startsWith(next.text)) return next
   return { ...next, text: current.text } as Part
+}
+
+// Merges a fetched page of parts into whatever is already stored for a message.
+// Uses Map/Set lookups so re-syncing a message with many parts stays O(P)
+// instead of degrading to O(P^2) find/some scans.
+function mergeStoredParts(existing: readonly Part[], incoming: readonly Part[]) {
+  const current = new Map(existing.map((part) => [part.id, part]))
+  const merged = incoming.map((part) => mergePart(current.get(part.id), part))
+  const mergedIDs = new Set(merged.map((part) => part.id))
+  const kept = existing.filter((part) => isLivePart(part) && !mergedIDs.has(part.id))
+  return [...merged, ...kept].toSorted((a, b) => a.id.localeCompare(b.id))
 }
 
 type QueuedPartDelta = {
@@ -84,19 +99,20 @@ function partDeltaKey(input: QueuedPartDelta) {
 }
 
 function partIncludesDelta(part: Part, event: QueuedPartDelta) {
+  // Deltas are appends, so an already-applied delta is always a suffix of the
+  // accumulated text. endsWith avoids an O(n) substring scan over large parts.
   if (event.field === "raw" && part.type === "tool" && part.state.status === "pending") {
-    return part.state.raw.includes(event.delta)
+    return part.state.raw.endsWith(event.delta)
   }
   if (event.field !== "text") return false
   if (part.type !== "text" && part.type !== "reasoning") return false
-  return part.text.includes(event.delta)
+  return part.text.endsWith(event.delta)
 }
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
-    const PART_EVENT_FLUSH_MS = 16
-    // History is loaded lazily in a sliding window at the tail of the session.
+    const PART_EVENT_FLUSH_MS = 16    // History is loaded lazily in a sliding window at the tail of the session.
     // Opening a session only fetches the most recent HISTORY_TAIL_LIMIT
     // messages; older pages (HISTORY_EARLIER_LIMIT each) are fetched on demand
     // when the user scrolls past the top of the loaded window. HISTORY_MESSAGE_CAP
@@ -184,6 +200,33 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const sdk = useSDK()
     const kv = useKV()
 
+    // Monotonic version bumped (throttled) whenever message/part data enters
+    // the store — from SSE events and from REST history loads alike. Consumers
+    // with expensive derived summaries (usage metrics) read this instead of
+    // deep-tracking every part, so a streamed delta no longer rescans the whole
+    // loaded history, while updates stay guaranteed: this fires on the exact
+    // code paths that mutate the store.
+    const [dataVersion, setDataVersion] = createSignal(0)
+    let dataVersionTimer: ReturnType<typeof setTimeout> | undefined
+    const bumpDataVersion = (immediate = false) => {
+      if (immediate) {
+        if (dataVersionTimer) {
+          clearTimeout(dataVersionTimer)
+          dataVersionTimer = undefined
+        }
+        setDataVersion((value) => value + 1)
+        return
+      }
+      if (dataVersionTimer) return
+      dataVersionTimer = setTimeout(() => {
+        dataVersionTimer = undefined
+        setDataVersion((value) => value + 1)
+      }, 500)
+    }
+    onCleanup(() => {
+      if (dataVersionTimer) clearTimeout(dataVersionTimer)
+    })
+
     const fullSyncedSessions = new Set<string>()
     const fullHistorySyncedSessions = new Set<string>()
     // Lazy history windowing state: the next `before` cursor for older messages
@@ -221,12 +264,16 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
 
           const applyPendingDeltas = (part: Part) => {
-            for (const pending of [...pendingPartDeltas.values()]) {
+            const retry: QueuedPartDelta[] = []
+            for (const pending of pendingPartDeltas.values()) {
               if (pending.messageID !== part.messageID || pending.partID !== part.id) continue
               pendingPartDeltas.delete(partDeltaKey(pending))
               if (partIncludesDelta(part, pending)) continue
-              if (!applyDelta(pending)) pendingPartDeltas.set(partDeltaKey(pending), pending)
+              if (!applyDelta(pending)) retry.push(pending)
             }
+            // Re-insert failures after the loop: re-setting during iteration
+            // would move entries to the end and revisit them forever.
+            for (const pending of retry) pendingPartDeltas.set(partDeltaKey(pending), pending)
           }
 
           for (const event of events) {
@@ -264,18 +311,20 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     }
 
     async function fetchSessionMessages(sessionID: string) {
-      const all = []
+      // Pages arrive newest-first; collect and reverse once at the end instead
+      // of unshifting each page into the accumulator (O(N^2) copying).
+      const pages: Awaited<ReturnType<typeof fetchMessagePage>>["messages"][] = []
       let before: string | undefined
 
       while (true) {
         const result = await sdk.client.session.messages({ sessionID, limit: 200, before })
-        all.unshift(...(result.data ?? []))
+        pages.push(result.data ?? [])
         const next = result.response.headers.get("x-next-cursor") ?? undefined
         if (!next) break
         before = next
       }
 
-      return all.flat()
+      return pages.reverse().flat()
     }
 
     // Fetch a single page of messages for a session. Without `before` this is
@@ -456,6 +505,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               .diff({ sessionID })
               .then((result) => {
                 setStore("session_diff", sessionID, result.data ?? [])
+                bumpDataVersion(true)
               })
               .catch(() => {})
           }
@@ -463,6 +513,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "message.updated": {
+          bumpDataVersion()
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {
             setStore("message", event.properties.info.sessionID, [event.properties.info])
@@ -506,6 +557,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
         case "message.removed": {
+          bumpDataVersion()
           const messages = store.message[event.properties.sessionID]
           const result = Binary.search(messages, event.properties.messageID, (m) => m.id)
           if (result.found) {
@@ -520,6 +572,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
         case "message.part.updated": {
+          bumpDataVersion()
           queuedPartEvents.push({
             type: "update",
             part: event.properties.part,
@@ -529,6 +582,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "message.part.delta": {
+          bumpDataVersion()
           const previous = queuedPartEvents.at(-1)
           if (
             previous?.type === "delta" &&
@@ -552,6 +606,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "message.part.removed": {
+          bumpDataVersion()
           const parts = store.part[event.properties.messageID]
           const result = Binary.search(parts, event.properties.partID, (p) => p.id)
           if (result.found)
@@ -701,6 +756,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const result = {
       data: store,
       set: setStore,
+      // Throttled counter of message/part store mutations (SSE + REST loads).
+      // Read this instead of deep-tracking parts when deriving expensive
+      // summaries from the loaded history.
+      dataVersion,
       get status() {
         return store.status
       },
@@ -765,19 +824,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               draft.todo[sessionID] = todo.data ?? []
               draft.message[sessionID] = messages.map((x) => x.info)
               for (const message of messages) {
-                const existing = draft.part[message.info.id] ?? []
-                const merged = message.parts.map((part) => {
-                  const current = existing.find((item) => item.id === part.id)
-                  return mergePart(current, part)
-                })
-                draft.part[message.info.id] = [
-                  ...merged,
-                  ...existing.filter((part) => isLivePart(part) && !merged.some((item) => item.id === part.id)),
-                ].toSorted((a, b) => a.id.localeCompare(b.id))
+                draft.part[message.info.id] = mergeStoredParts(draft.part[message.info.id] ?? [], message.parts)
               }
               draft.session_diff[sessionID] = diff.data ?? []
             }),
           )
+          bumpDataVersion(true)
           fullSyncedSessions.add(sessionID)
           if (fullHistory) {
             fullHistorySyncedSessions.add(sessionID)
@@ -814,18 +866,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 if (fresh.length === 0) return
                 draft.message[sessionID] = [...fresh.map((message) => message.info), ...existing]
                 for (const message of fresh) {
-                  const current = draft.part[message.info.id] ?? []
-                  const merged = message.parts.map((part) => {
-                    const existingPart = current.find((item) => item.id === part.id)
-                    return mergePart(existingPart, part)
-                  })
-                  draft.part[message.info.id] = [
-                    ...merged,
-                    ...current.filter((part) => isLivePart(part) && !merged.some((item) => item.id === part.id)),
-                  ].toSorted((a, b) => a.id.localeCompare(b.id))
+                  draft.part[message.info.id] = mergeStoredParts(draft.part[message.info.id] ?? [], message.parts)
                 }
               }),
             )
+            bumpDataVersion(true)
             if (next) earlierCursor.set(sessionID, next)
             else earlierCursor.delete(sessionID)
             if (next) hasMoreOlderSessions.set(sessionID, true)

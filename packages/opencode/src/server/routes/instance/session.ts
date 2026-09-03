@@ -13,6 +13,7 @@ import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { SessionLimits } from "@/session/limits"
 import { Todo } from "@/session/todo"
+import { ShellThread, ThreadDetail } from "@/tool/shell_thread"
 import { Effect } from "effect"
 import { Agent } from "@/agent/agent"
 import { Snapshot } from "@/snapshot"
@@ -26,9 +27,12 @@ import { lazy } from "@/util/lazy"
 import { zodObject } from "@/util/effect-zod"
 import { Bus } from "@/bus"
 import { NamedError } from "@opencode-ai/core/util/error"
+import { NotFoundError } from "@/storage/storage"
 import { jsonRequest, runRequest } from "./trace"
 
 const log = Log.create({ service: "server" })
+
+const shellThreadDetailZod = zodObject(ThreadDetail)
 
 const QueryBoolean = z.union([
   z.preprocess((value) => (value === "true" ? true : value === "false" ? false : value), z.boolean()),
@@ -660,6 +664,85 @@ export const SessionRoutes = lazy(() =>
           const limits = yield* SessionLimits.Service
           const body = c.req.valid("json")
           return yield* limits.set({ sessionID, enabled: body.enabled, threshold: body.threshold })
+        }),
+    )
+    .get(
+      "/:sessionID/shell_thread",
+      describeRoute({
+        summary: "List shell threads",
+        description:
+          "Inspect the shell threads of a session, including command, working directory, pid, status and recent output.",
+        operationId: "session.shell_thread_list",
+        responses: {
+          200: {
+            description: "Shell thread details",
+            content: {
+              "application/json": {
+                schema: resolver(shellThreadDetailZod.array()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) =>
+        jsonRequest("SessionRoutes.shellThreadList", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const session = yield* Session.Service
+          yield* session.get(sessionID)
+          const threads = yield* ShellThread.Service
+          return yield* threads.inspect({ sessionID })
+        }),
+    )
+    .post(
+      "/:sessionID/shell_thread/:threadID/stop",
+      describeRoute({
+        summary: "Stop shell thread",
+        description: "Stop a running shell thread. Defaults to SIGTERM; use SIGKILL to force kill.",
+        operationId: "session.shell_thread_stop",
+        responses: {
+          200: {
+            description: "Stopped shell thread",
+            content: {
+              "application/json": {
+                schema: resolver(shellThreadDetailZod),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+          threadID: z.string(),
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          signal: z.enum(["SIGTERM", "SIGKILL", "SIGINT", "SIGHUP"]).optional(),
+        }),
+      ),
+      async (c) =>
+        jsonRequest("SessionRoutes.shellThreadStop", c, function* () {
+          const { sessionID, threadID } = c.req.valid("param")
+          const session = yield* Session.Service
+          yield* session.get(sessionID)
+          const threads = yield* ShellThread.Service
+          const stopped = yield* threads
+            .stop({ sessionID, threadID, signal: c.req.valid("json").signal })
+            .pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (!stopped) throw new NotFoundError({ message: `Shell thread not found: ${threadID}` })
+          const details = yield* threads.inspect({ sessionID })
+          return details.find((detail) => detail.threadID === threadID)
         }),
     )
     .post(

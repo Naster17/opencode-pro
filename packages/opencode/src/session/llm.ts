@@ -34,6 +34,38 @@ type Result = Awaited<ReturnType<typeof streamText>>
 const mergeOptions = (target: Record<string, any>, source: Record<string, any> | undefined): Record<string, any> =>
   mergeDeep(target, source ?? {}) as Record<string, any>
 
+// Cline API expects its own client identity; send Cline CLI headers for
+// cline-pass so requests look like they come from Cline itself.
+// Versions mirror cline/apps/cli (3.0.61) and cline/sdk/packages/core (0.0.82).
+const ClineHeaders = {
+  "HTTP-Referer": "https://cline.bot",
+  "X-Title": "Cline",
+  "X-IS-MULTIROOT": "false",
+  "X-CLIENT-TYPE": "cline-cli",
+  "X-CLIENT-VERSION": "3.0.61",
+  "X-PLATFORM": "cli",
+  "X-PLATFORM-VERSION": "3.0.61",
+  "X-CORE-VERSION": "0.0.82",
+  "User-Agent": "Cline/3.0.61",
+} as const
+
+function baseHeaders(input: StreamRequest, opencodeProjectID?: string) {
+  if (input.model.providerID === "cline-pass") return { ...ClineHeaders, "X-Task-ID": input.sessionID }
+  if (input.model.providerID.startsWith("opencode"))
+    return {
+      "x-opencode-project": opencodeProjectID,
+      "x-opencode-session": input.sessionID,
+      "x-opencode-request": input.user.id,
+      "x-opencode-client": Flag.OPENCODE_CLIENT,
+      "User-Agent": `opencode/${InstallationVersion}`,
+    }
+  return {
+    "x-session-affinity": input.sessionID,
+    ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
+    "User-Agent": `opencode/${InstallationVersion}`,
+  }
+}
+
 export type StreamInput = {
   user: MessageV2.User
   sessionID: string
@@ -417,19 +449,7 @@ const live: Layer.Layer<
         includeRawChunks: true,
         abortSignal: input.abort,
         headers: {
-          ...(input.model.providerID.startsWith("opencode")
-            ? {
-                "x-opencode-project": opencodeProjectID,
-                "x-opencode-session": input.sessionID,
-                "x-opencode-request": input.user.id,
-                "x-opencode-client": Flag.OPENCODE_CLIENT,
-                "User-Agent": `opencode/${InstallationVersion}`,
-              }
-            : {
-                "x-session-affinity": input.sessionID,
-                ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
-                "User-Agent": `opencode/${InstallationVersion}`,
-              }),
+          ...baseHeaders(input, opencodeProjectID),
           ...input.model.headers,
           ...headers,
         },

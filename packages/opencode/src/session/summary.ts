@@ -1,4 +1,4 @@
-import { Effect, Layer, Context, Schema } from "effect"
+import { Effect, Layer, Context, Schema, Option } from "effect"
 import { Bus } from "@/bus"
 import { Snapshot } from "@/snapshot"
 import { Storage } from "@/storage/storage"
@@ -129,10 +129,26 @@ export const layer = Layer.effect(
       sessionID: SessionID
       messageID: MessageID
     }) {
-      const all = yield* sessions.messages({ sessionID: input.sessionID })
-      if (!all.length) return
-
-      const diffs = yield* computeDiff({ messages: all })
+      // Compute the session-wide diff bounds from a lazy paged stream instead
+      // of materializing every message and part of the session in memory. The
+      // stream walks newest-first, so the first step-finish seen is the latest
+      // chronologically ("to") and the last step-start seen is the earliest
+      // ("from").
+      let from: string | undefined
+      let to: string | undefined
+      let any = false
+      for (const item of MessageV2.stream(input.sessionID)) {
+        any = true
+        for (const part of item.parts) {
+          if (part.type === "step-finish" && part.snapshot) {
+            to ??= part.snapshot
+            continue
+          }
+          if (part.type === "step-start" && part.snapshot) from = part.snapshot
+        }
+      }
+      if (!any) return
+      const diffs = from && to ? yield* snapshot.diffFull(from, to) : []
       yield* sessions.setSummary({
         sessionID: input.sessionID,
         summary: {
@@ -144,11 +160,20 @@ export const layer = Layer.effect(
       yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore)
       yield* bus.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
 
-      const messages = all.filter(
-        (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+      // The summarized turn was just completed, so both messages sit near the
+      // tail; lazy newest-first lookups avoid loading the whole session.
+      const targetOption = yield* sessions.findMessage(
+        input.sessionID,
+        (m) => m.info.id === input.messageID && m.info.role === "user",
       )
-      const target = messages.find((m) => m.info.id === input.messageID)
-      if (!target || target.info.role !== "user") return
+      if (Option.isNone(targetOption)) return
+      const target = targetOption.value
+      if (target.info.role !== "user") return
+      const childOption = yield* sessions.findMessage(
+        input.sessionID,
+        (m) => m.info.role === "assistant" && m.info.parentID === input.messageID,
+      )
+      const messages = Option.isSome(childOption) ? [target, childOption.value] : [target]
       const msgDiffs = yield* computeDiff({ messages })
       
       // Check if stable_history is enabled (default: true)
