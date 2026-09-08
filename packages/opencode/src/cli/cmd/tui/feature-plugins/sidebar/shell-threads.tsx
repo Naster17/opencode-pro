@@ -147,70 +147,65 @@ function Detail(props: { api: TuiPluginApi; session_id: string; thread_id: strin
   )
 
   return (
-    <api.ui.Dialog size="large" onClose={() => {}}>
       <box paddingLeft={2} paddingRight={2} gap={1}>
-        <box flexDirection="row" gap={1}>
-          <Show when={detail()}>
-            {(info) => (
-              <>
-                <text flexShrink={0} fg={statusColor(api, info().status)}>
-                  {badge(info().status)}
-                </text>
-                <text fg={theme().text} attributes={TextAttributes.BOLD} wrapMode="none" overflow="hidden">
-                  {info().description || "(no description)"}
-                </text>
-              </>
-            )}
-          </Show>
+        <box flexDirection="row" justifyContent="space-between">
+          <box flexDirection="row" gap={1}>
+            <Show when={detail()} fallback={<text fg={theme().textMuted}>Loading…</text>}>
+              {(info) => (
+                <>
+                  <text flexShrink={0} fg={statusColor(api, info().status)}>
+                    {badge(info().status)}
+                  </text>
+                  <text fg={theme().text} attributes={TextAttributes.BOLD} wrapMode="none" overflow="hidden">
+                    {info().description || "(no description)"}
+                  </text>
+                </>
+              )}
+            </Show>
+          </box>
+          <text fg={theme().textMuted} onMouseUp={() => api.ui.dialog.clear()}>
+            esc
+          </text>
         </box>
 
-        <Show when={detail()} fallback={<text fg={theme().textMuted}>Loading…</text>}>
+        <Show when={detail()}>
           {(info) => (
-            <>
-              <Row label="id" value={info().threadID} />
-              <Row label="status" value={`${info().status}${info().exitCode != null ? ` (exit=${info().exitCode})` : ""}`} color={statusColor(api, info().status)} />
-              <Row label="pid" value={String(info().pid)} />
-              <Row label="runtime" value={runtime()} />
-              <Row label="started" value={new Date(info().startedAt).toLocaleString()} />
-              <Row label="output" value={`${formatBytes(info().bytes)} · ${info().cursor} chunks`} />
-              <Row label="cwd" value={info().cwd} />
-              <Show when={info().error}>
-                <Row label="error" value={info().error} color={theme().error} />
-              </Show>
+            <box gap={1}>
+              <box gap={0}>
+                <Row label="id" value={info().threadID} />
+                <Row label="status" value={`${info().status}${info().exitCode != null ? ` (exit=${info().exitCode})` : ""}`} color={statusColor(api, info().status)} />
+                <Row label="pid" value={String(info().pid)} />
+                <Row label="runtime" value={runtime()} />
+                <Row label="started" value={new Date(info().startedAt).toLocaleString()} />
+                <Row label="output" value={`${formatBytes(info().bytes)} · ${info().cursor} chunks`} />
+                <Row label="cwd" value={info().cwd} />
+                <Show when={info().error}>
+                  <Row label="error" value={info().error} color={theme().error} />
+                </Show>
+              </box>
 
-              <box marginTop={1}>
+              <box gap={0}>
                 <text fg={theme().textMuted}>command</text>
-                <box
-                  backgroundColor={theme().backgroundPanel}
-                  paddingLeft={1}
-                  paddingRight={1}
-                  paddingTop={0}
-                >
+                <box backgroundColor={theme().backgroundElement} paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}>
                   <text fg={theme().text} wrapMode="none" overflow="hidden">
                     $ {info().command}
                   </text>
                 </box>
               </box>
 
-              <box marginTop={1}>
+              <box gap={0}>
                 <text fg={theme().textMuted}>output{info().status === "running" ? " (live)" : ""}</text>
-                <box
-                  backgroundColor={theme().backgroundPanel}
-                  paddingLeft={1}
-                  paddingRight={1}
-                  paddingTop={0}
-                  paddingBottom={0}
-                >
+                <box backgroundColor={theme().backgroundElement} paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}>
                   <text fg={theme().text} wrapMode="none">
-                    {output()}
+                    {output() || "(no output)"}
                   </text>
                 </box>
               </box>
 
               <Show when={info().status === "running"}>
-                <box flexDirection="row" gap={2} marginTop={1}>
+                <box flexDirection="row" gap={2} paddingBottom={1}>
                   <box
-                    onMouseDown={() => {
+                    onMouseUp={() => {
                       if (!confirmStop()) {
                         setConfirmStop(true)
                         if (stopTimer) clearTimeout(stopTimer)
@@ -231,11 +226,10 @@ function Detail(props: { api: TuiPluginApi; session_id: string; thread_id: strin
                   <text fg={theme().textMuted}>press s or click twice to stop</text>
                 </box>
               </Show>
-            </>
+            </box>
           )}
         </Show>
       </box>
-    </api.ui.Dialog>
   )
 }
 
@@ -254,7 +248,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   return (
     <Show when={list().length > 0}>
       <box>
-        <box flexDirection="row" gap={1} onMouseDown={() => setOpen((value) => !value)}>
+        <box flexDirection="row" gap={1} onMouseUp={() => setOpen((value) => !value)}>
           <text fg={theme().text}>
             <b>Shell Threads</b>
           </text>
@@ -271,7 +265,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
                 color: statusColor(props.api, item.status),
               })
               return (
-                <box flexDirection="row" gap={1} onMouseDown={() => openDetail(item.threadID)}>
+                <box flexDirection="row" gap={1} onMouseUp={() => openDetail(item.threadID)}>
                   <text flexShrink={0} fg={state().color}>
                     {state().text}
                   </text>
