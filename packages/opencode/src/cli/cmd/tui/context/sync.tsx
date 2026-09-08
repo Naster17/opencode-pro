@@ -508,6 +508,23 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 bumpDataVersion(true)
               })
               .catch(() => {})
+            // Completed tool parts (carrying the additions/deletions metadata
+            // behind the turn footer +/-) can land in storage without a live
+            // part event, so the footer stays 0 until the next full sync.
+            // Re-merge the recent tail once the loop ends.
+            void fetchMessagePage(sessionID, HISTORY_TAIL_LIMIT)
+              .then((page) => {
+                setStore(
+                  produce((draft) => {
+                    draft.message[sessionID] = page.messages.map((x) => x.info)
+                    for (const message of page.messages) {
+                      draft.part[message.info.id] = mergeStoredParts(draft.part[message.info.id] ?? [], message.parts)
+                    }
+                  }),
+                )
+                bumpDataVersion(true)
+              })
+              .catch(() => {})
           }
           break
         }

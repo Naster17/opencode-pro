@@ -5,11 +5,13 @@ import {
   createMemo,
   createSignal,
   For,
+  getOwner,
   Index,
   Match,
   onCleanup,
   on,
   onMount,
+  runWithOwner,
   Show,
   Switch,
   useContext,
@@ -2217,10 +2219,17 @@ export function Session() {
   // cheap O(messages) numeric merge instead of re-scanning every part of the
   // whole history on each 16ms event flush (critical for huge sessions).
   const messageCodeStatsMemos = new Map<string, () => CodeStats>()
+  // Lazily created memos must be owned by the component root: codeStatsFor
+  // runs inside the messageMetrics memo, and memos created there would be
+  // disposed on its next recompute, freezing derived +/- stats until re-enter.
+  const derivedMemoOwner = getOwner()
   const codeStatsFor = (messageID: string) => {
     let memo = messageCodeStatsMemos.get(messageID)
     if (!memo) {
-      memo = createMemo(() => messageCodeStats(sync.data.part[messageID] ?? []))
+      const created = runWithOwner(derivedMemoOwner, () =>
+        createMemo(() => messageCodeStats(sync.data.part[messageID] ?? [])),
+      )
+      memo = created ?? createMemo(() => messageCodeStats(sync.data.part[messageID] ?? []))
       messageCodeStatsMemos.set(messageID, memo)
     }
     return memo()
@@ -2230,9 +2239,16 @@ export function Session() {
   const promptTokensFor = (messageID: string) => {
     let memo = promptTokensMemos.get(messageID)
     if (!memo) {
-      memo = createMemo(() =>
-        (sync.data.part[messageID] ?? []).reduce((sum, part) => sum + estimatePromptPartTokens(part), 0),
+      const created = runWithOwner(derivedMemoOwner, () =>
+        createMemo(() =>
+          (sync.data.part[messageID] ?? []).reduce((sum, part) => sum + estimatePromptPartTokens(part), 0),
+        ),
       )
+      memo =
+        created ??
+        createMemo(() =>
+          (sync.data.part[messageID] ?? []).reduce((sum, part) => sum + estimatePromptPartTokens(part), 0),
+        )
       promptTokensMemos.set(messageID, memo)
     }
     return memo()
@@ -3180,7 +3196,7 @@ function AssistantMessage(props: {
 
   const codeStats = createMemo(() => {
     if (!final()) return emptyCodeStats()
-    return props.metrics?.codeStats ?? messageCodeStats(props.parts)
+    return maxCodeStats(props.metrics?.codeStats ?? emptyCodeStats(), messageCodeStats(props.parts))
   })
 
   const keybind = useKeybind()
