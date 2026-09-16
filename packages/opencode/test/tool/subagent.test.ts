@@ -83,6 +83,7 @@ function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void;
         opts?.onPrompt?.(input)
         return reply(input, opts?.text ?? "done")
       }),
+    btw: (input) => Effect.sync(() => reply(input, opts?.text ?? "done")),
   }
 }
 
@@ -301,6 +302,7 @@ describe("tool.subagent", () => {
             ready.resolve(input)
             return cancelled.promise
           }).pipe(Effect.as(reply(input, "cancelled"))),
+        btw: (input) => Effect.succeed(reply(input, "cancelled")),
       }
 
       const fiber = yield* def

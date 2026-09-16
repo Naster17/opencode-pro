@@ -15,6 +15,7 @@ export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
   resolvePromptParts(template: string): Effect.Effect<SessionPrompt.PromptInput["parts"]>
   prompt(input: SessionPrompt.PromptInput): Effect.Effect<MessageV2.WithParts>
+  btw(input: SessionPrompt.BtwInput): Effect.Effect<MessageV2.WithParts>
 }
 
 const id = "subagent"

@@ -42,7 +42,17 @@ export function DialogSessionList() {
   )
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
-  const sessions = createMemo(() => searchResults() ?? sync.data.session)
+  const syncSessions = createMemo(() => {
+    const ids = new Set(sync.data.session.map((x) => x.id))
+    return { ids, list: sync.data.session }
+  })
+  // The list dialog lives across close-tab (ctrl-w) navigations: when the
+  // current session vanishes from sync it must stop being highlighted and
+  // the cursor must fall back to a live row instead of pointing past the end.
+  const liveCurrentSessionID = createMemo(() =>
+    currentSessionID() !== undefined && syncSessions().ids.has(currentSessionID()!) ? currentSessionID() : undefined,
+  )
+  const sessions = createMemo(() => searchResults() ?? syncSessions().list)
 
   function recover(session: NonNullable<ReturnType<typeof sessions>[number]>) {
     const workspace = project.workspace.get(session.workspaceID!)
@@ -148,10 +158,11 @@ export function DialogSessionList() {
         }
 
         const date = new Date(x.time.updated)
-        let category = date.toDateString()
-        if (category === today) {
-          category = "Today"
-        }
+        const short =
+          date.getFullYear() === new Date().getFullYear()
+            ? date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
+            : date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+        const category = date.toDateString() === today ? "Today" : short
         const isDeleting = toDelete() === x.id
         const status = sync.data.session_status?.[x.id]
         const isWorking = status?.type === "busy"
@@ -175,12 +186,12 @@ export function DialogSessionList() {
     dialog.setSize("large")
   })
 
-  return (
+    return (
     <DialogSelect
       title="Sessions"
       options={options()}
       skipFilter={true}
-      current={currentSessionID()}
+      current={liveCurrentSessionID()}
       onFilter={setSearch}
       onMove={() => {
         setToDelete(undefined)

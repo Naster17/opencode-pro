@@ -81,6 +81,28 @@ const CUSTOM_AGENT_REMINDER_PREFIX = "<system-reminder>\nCustom agent instructio
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
 
+function pad2(value: number) {
+  return String(value).padStart(2, "0")
+}
+
+function formatLocal(value: Date) {
+  return (
+    `${value.getFullYear()}-${pad2(value.getMonth() + 1)}-${pad2(value.getDate())} ` +
+    `${pad2(value.getHours())}:${pad2(value.getMinutes())}:${pad2(value.getSeconds())}`
+  )
+}
+
+// Trailing system block: live wall-clock time plus session start. Kept last
+// and outside the cached env prefix so per-request timestamps never
+// invalidate the prompt cache (see caching.normalize_dates).
+function timestampFooter(session: { time: { created: number } }) {
+  const now = new Date()
+  return [
+    `Current time: ${formatLocal(now)} (local, ${Intl.DateTimeFormat().resolvedOptions().timeZone ?? "unknown timezone"})`,
+    `Session started: ${formatLocal(new Date(session.time.created))} (local)`,
+  ].join("\n")
+}
+
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
@@ -128,6 +150,7 @@ export const layer = Layer.effect(
         cancel: (sessionID: SessionID) => cancel(sessionID),
         resolvePromptParts: (template: string) => resolvePromptParts(template),
         prompt: (input: PromptInput) => prompt(input),
+        btw: (input: BtwInput) => btw(input),
       } satisfies TaskPromptOps
     })
 
@@ -1590,7 +1613,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               instruction.systemForSession(input.sessionID).pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model, yield* modelMessageOptions(model)),
             ])
-            const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+            const system = [...env, ...instructions, ...(skills ? [skills] : []), timestampFooter(session)]
             const outcome = yield* handle
               .process({
                 user: lastUser,
@@ -1808,6 +1831,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             const system = [...env, ...instructions, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            system.push(timestampFooter(session))
             const result = yield* handle.process({
               user: lastUser,
               agent,

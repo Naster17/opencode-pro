@@ -159,6 +159,125 @@ describe("tool.shell_thread", () => {
     })
   })
 
+  test("waits for completion and returns output", async () => {
+    if (process.platform === "win32") return
+
+    await WithInstance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const tool = await init()
+        const start = await Effect.runPromise(
+          tool.execute(
+            {
+              action: "start",
+              command: "sleep 0.2; echo waited-done",
+              description: "Wait target",
+            },
+            ctx(),
+          ),
+        )
+        const threadID = String(start.metadata.threadID)
+
+        const result = await Effect.runPromise(
+          tool.execute({ action: "wait", threadID, timeoutMs: 10_000 }, ctx()),
+        )
+        expect(result.metadata.timedOut).toBe(false)
+        expect(result.output).toContain("waited-done")
+        expect(result.output).toContain("exited")
+
+        await Effect.runPromise(tool.execute({ action: "stop", threadID, signal: "SIGKILL" }, ctx()))
+      },
+    })
+  })
+
+  test("wait times out on running thread instead of hanging", async () => {
+    if (process.platform === "win32") return
+
+    await WithInstance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const tool = await init()
+        const start = await Effect.runPromise(
+          tool.execute(
+            {
+              action: "start",
+              command: "sleep 30",
+              description: "Never-ending wait target",
+            },
+            ctx(),
+          ),
+        )
+        const threadID = String(start.metadata.threadID)
+
+        const started = Date.now()
+        const result = await Effect.runPromise(
+          tool.execute({ action: "wait", threadID, timeoutMs: 500 }, ctx()),
+        )
+        expect(Date.now() - started).toBeLessThan(10_000)
+        expect(result.metadata.timedOut).toBe(true)
+        expect(result.output).toContain('<wait_timeout ms="500" running="1">')
+        expect(result.output).toContain("Never wait on servers")
+
+        await Effect.runPromise(tool.execute({ action: "stop", threadID, signal: "SIGKILL" }, ctx()))
+      },
+    })
+  })
+
+  test("waits on multiple threads with any and all modes", async () => {
+    if (process.platform === "win32") return
+
+    await WithInstance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const tool = await init()
+        const first = await Effect.runPromise(
+          tool.execute(
+            {
+              action: "start",
+              command: "sleep 0.2; echo first-done",
+              description: "First wait target",
+            },
+            ctx(),
+          ),
+        )
+        const second = await Effect.runPromise(
+          tool.execute(
+            {
+              action: "start",
+              command: "sleep 2; echo second-done",
+              description: "Second wait target",
+            },
+            ctx(),
+          ),
+        )
+        const firstID = String(first.metadata.threadID)
+        const secondID = String(second.metadata.threadID)
+
+        const started = Date.now()
+        const anyMulti = await Effect.runPromise(
+          tool.execute({ action: "wait", threadIDs: [firstID, secondID], mode: "any", timeoutMs: 10_000 }, ctx()),
+        )
+        expect(Date.now() - started).toBeLessThan(5_000)
+        expect(anyMulti.metadata.timedOut).toBe(true)
+        const threads = anyMulti.metadata.threads as Array<{ completed: boolean }>
+        expect(threads[0].completed).toBe(true)
+        expect(threads[1].completed).toBe(false)
+        expect(anyMulti.output).toContain("first-done")
+
+        const all = await Effect.runPromise(
+          tool.execute(
+            { action: "start", command: "echo combo-done", description: "Combo", wait: true, timeoutMs: 10_000 },
+            ctx(),
+          ),
+        )
+        expect(all.output).toContain("combo-done")
+
+        await Effect.runPromise(tool.execute({ action: "stop", threadID: firstID, signal: "SIGKILL" }, ctx()))
+        await Effect.runPromise(tool.execute({ action: "stop", threadID: secondID, signal: "SIGKILL" }, ctx()))
+      },
+    })
+  })
+
   test("start requests normal shell permission", async () => {
     if (process.platform === "win32") return
 

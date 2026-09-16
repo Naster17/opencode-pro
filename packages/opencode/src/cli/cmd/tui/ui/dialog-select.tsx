@@ -463,6 +463,7 @@ function Option(props: {
       </Show>
       <text
         flexGrow={1}
+        flexShrink={1}
         fg={props.active ? fg : props.current ? theme.primary : theme.text}
         attributes={props.active ? TextAttributes.BOLD : undefined}
         overflow="hidden"
@@ -475,8 +476,10 @@ function Option(props: {
         </Show>
       </text>
       <Show when={props.footer}>
-        <box flexShrink={0}>
-          <text fg={props.active ? fg : theme.textMuted}>{props.footer}</text>
+        <box flexShrink={0} paddingLeft={1}>
+          <text fg={props.active ? fg : theme.textMuted} wrapMode="none" overflow="hidden">
+            {props.footer}
+          </text>
         </box>
       </Show>
     </>

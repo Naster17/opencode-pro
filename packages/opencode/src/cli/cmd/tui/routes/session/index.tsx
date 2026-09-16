@@ -4136,139 +4136,158 @@ function Shell(props: ToolProps<typeof ShellTool>) {
 
 function ShellThread(props: ToolProps<typeof ShellThreadTool>) {
   const { theme } = useTheme()
+  const active = createMemo(() => longRunningToolActive(props.part))
   const action = createMemo(() => props.input.action ?? stringValue(props.metadata.action) ?? "thread")
-  const threadID = createMemo(() => props.input.threadID ?? stringValue(props.metadata.threadID))
-  const status = createMemo(() => stringValue(props.metadata.status))
-  const cursor = createMemo(() => (typeof props.metadata.cursor === "number" ? props.metadata.cursor : undefined))
-  const output = createMemo(() => stripAnsi((props.output ?? stringValue(props.metadata.output) ?? "").trim()))
-  const markerColor = createMemo(() => {
+  const rows = createMemo(() => shellThreadRows(props.metadata))
+  const description = createMemo(
+    () => stringValue(props.input.description) ?? stringValue(props.metadata.description),
+  )
+  const ids = createMemo(() => {
+    const raw = props.input.threadIDs
+    if (Array.isArray(raw)) {
+      const list = raw.filter((id): id is string => typeof id === "string")
+      if (list.length > 1) return `${list.length} threads`
+      if (list.length === 1) return shellThreadShort(list[0])
+    }
+    const single = props.input.threadID ?? stringValue(props.metadata.threadID)
+    if (single) return shellThreadShort(single)
+    if (rows().length > 1) return `${rows().length} threads`
+    if (rows().length === 1) return shellThreadShort(rows()[0].threadID)
+    return undefined
+  })
+  const primary = createMemo(() => rows()[0])
+  const status = createMemo(() => primary()?.status ?? stringValue(props.metadata.status) ?? "")
+  const statusColor = createMemo(() => {
     if (status() === "running") return theme.primary
     if (status() === "exited") return theme.success
     if (status() === "failed") return theme.error
     if (status() === "stopped") return theme.warning
     return theme.textMuted
   })
-  const [expanded, setExpanded] = createSignal(false)
-  const lines = createMemo(() => output().split("\n"))
-  const overflow = createMemo(() => lines().length > 10)
-  const limited = createMemo(() => {
-    if (expanded() || !overflow()) return output()
-    return [...lines().slice(0, 10), "…"].join("\n")
+  const exit = createMemo(() => {
+    if (primary()?.exit !== undefined) return primary()?.exit
+    if (typeof props.metadata.exit === "number" || props.metadata.exit === null) return props.metadata.exit
+    return undefined
   })
-  const title = createMemo(() => {
-    const label =
-      action() === "start"
-        ? "Start shell thread"
-        : action() === "read"
-          ? "Read shell thread"
-          : action() === "stop"
-            ? "Stop shell thread"
-            : "List shell threads"
-    const id = threadID()
-    return id ? `# ${label} ${id}` : `# ${label}`
+  const exitSuffix = createMemo(() => (exit() === undefined || exit() === null ? "" : ` · exit ${exit()}`))
+  const timedOut = createMemo(() => props.metadata.timedOut === true)
+  const notified = createMemo(() => props.metadata.notified === true)
+  const timeoutMs = createMemo(() => (typeof props.metadata.timeoutMs === "number" ? props.metadata.timeoutMs : undefined))
+  const mode = createMemo(() => stringValue(props.metadata.mode))
+  const verb = createMemo(() => {
+    switch (action()) {
+      case "start":
+        return "Run thread"
+      case "wait":
+        return "Wait thread"
+      case "read":
+        return "Read thread"
+      case "stop":
+        return "Stop thread"
+      default:
+        return "Threads"
+    }
   })
-  const threads = createMemo(() => shellThreadRows(props.metadata))
-  const color = (value?: string) => {
-    if (value === "running") return theme.primary
-    if (value === "exited") return theme.success
-    if (value === "failed") return theme.error
-    if (value === "stopped") return theme.warning
-    return theme.textMuted
-  }
-
+  const detail = createMemo(() => {
+    switch (action()) {
+      case "start": {
+        const bits = [description() ?? ids() ?? "thread"]
+        if (status()) bits.push(status())
+        return bits.join(" · ")
+      }
+      case "wait": {
+        const bits = [ids() ?? "thread", status()]
+        if (exitSuffix()) bits.push(exitSuffix().slice(3))
+        if (timeoutMs() !== undefined && timedOut()) bits.push(`timed out after ${timeoutMs()}ms`)
+        if (notified()) bits.push("notify on")
+        if (mode() === "any" && rows().length > 1) bits.push("first")
+        return bits.filter(Boolean).join(" · ")
+      }
+      case "read":
+        return `${description() ?? ids() ?? "thread"} · ${status()}${exitSuffix()}`
+      case "stop":
+        return `${description() ?? ids() ?? "thread"} · ${status()}`
+      default: {
+        if (rows().length === 0) return "(0)"
+        const names = rows()
+          .map((thread) => `${thread.description} ${thread.status}`)
+          .join(", ")
+        return `(${rows().length}) · ${names}`
+      }
+    }
+  })
+  const line = createMemo(() => Locale.truncate(`${verb()} ${detail()}`, 140))
+  const pending = createMemo(() => {
+    switch (action()) {
+      case "wait":
+        return `Waiting on ${ids() ?? "thread"}...`
+      case "start":
+        return "Starting thread..."
+      case "read":
+        return "Reading thread..."
+      case "stop":
+        return "Stopping thread..."
+      default:
+        return "Listing threads..."
+    }
+  })
+  const body = createMemo(() => {
+    const text = detail()
+    const label = `${verb()} `
+    return (
+      <>
+        <span style={{ fg: theme.textMuted }}>{label}</span>
+        <span style={{ fg: theme.text }}>{text}</span>
+      </>
+    )
+  })
   return (
-    <Switch>
-      <Match when={action() === "list"}>
-        <BlockTool title={title()} part={props.part} marker markerColor={theme.textMuted}>
-          <box gap={0}>
-            <Show
-              when={threads().length}
-              fallback={<text fg={theme.textMuted}>No shell threads for this session.</text>}
-            >
-              <text fg={theme.textMuted} wrapMode="none" overflow="hidden">
-                s {shellThreadCell("id", 18)} {shellThreadCell("status", 8)} {shellThreadCell("pid", 8)}{" "}
-                {shellThreadCell("cur", 6)} {shellThreadCell("description", 24)} command
-              </text>
-              <For each={threads()}>
-                {(thread) => (
-                  <text wrapMode="none" overflow="hidden" width="100%">
-                    <span style={{ fg: color(thread.status) }}>#</span>{" "}
-                    {shellThreadCell(shellThreadID(thread.threadID), 18)}{" "}
-                    <span style={{ fg: color(thread.status) }}>{shellThreadCell(thread.status, 8)}</span>{" "}
-                    <span style={{ fg: theme.textMuted }}>{shellThreadCell(String(thread.pid), 8)}</span>{" "}
-                    <span style={{ fg: theme.textMuted }}>{shellThreadCell(String(thread.cursor), 6)}</span>{" "}
-                    <span style={{ fg: theme.text }}>{shellThreadCell(thread.description, 24)}</span>{" "}
-                    <span style={{ fg: theme.textMuted }}>$ {thread.command}</span>
-                  </text>
-                )}
-              </For>
-            </Show>
-          </box>
-        </BlockTool>
-      </Match>
-      <Match when={props.metadata.output !== undefined || props.output !== undefined}>
-        <BlockTool
-          title={title()}
-          part={props.part}
-          marker
-          markerColor={markerColor()}
-          onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
-        >
-          <box gap={0}>
-            <Show when={props.input.command}>
-              <text fg={theme.text} wrapMode="char" width="100%">
-                $ {props.input.command}
-              </text>
-            </Show>
-            <Show when={status()}>
-              {(value) => (
-                <text fg={theme.textMuted}>
-                  status: {value()} <Show when={cursor() !== undefined}>· cursor: {cursor()}</Show>
-                </text>
-              )}
-            </Show>
-            <Show when={output()}>
-              <text fg={theme.text}>{limited()}</text>
-            </Show>
-            <Show when={overflow()}>
-              <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
-            </Show>
-          </box>
-        </BlockTool>
-      </Match>
-      <Match when={true}>
-        <InlineTool icon="$" pending="Managing shell thread..." complete={props.input.action} part={props.part}>
-          shell_thread {input(props.input)}
-        </InlineTool>
-      </Match>
-    </Switch>
+    <InlineTool
+      icon="≡"
+      iconColor={statusColor()}
+      pending={pending()}
+      complete={props.part.state.status === "completed" && body()}
+      spinner={active()}
+      subtleSpinner={true}
+      part={props.part}
+    >
+      {body()}
+    </InlineTool>
   )
 }
 
-function shellThreadRows(metadata: Record<string, unknown>) {
+type ShellThreadRow = {
+  threadID: string
+  status: string
+  pid?: number
+  cursor?: number
+  exit?: number | null
+  description: string
+  command: string
+  completed?: boolean
+}
+
+function shellThreadRows(metadata: Record<string, unknown>): ShellThreadRow[] {
   if (!Array.isArray(metadata.threads)) return []
   return metadata.threads.flatMap((item) => {
     if (!item || typeof item !== "object") return []
     const thread = item as Record<string, unknown>
     const threadID = stringValue(thread.threadID)
     const status = stringValue(thread.status)
+    const description = stringValue(thread.description) ?? threadID ?? "thread"
+    const command = stringValue(thread.command) ?? ""
+    if (!threadID || !status) return []
     const pid = typeof thread.pid === "number" ? thread.pid : undefined
     const cursor = typeof thread.cursor === "number" ? thread.cursor : undefined
-    const description = stringValue(thread.description)
-    const command = stringValue(thread.command)
-    if (!threadID || !status || pid === undefined || cursor === undefined || !description || !command) return []
-    return [{ threadID, status, pid, cursor, description, command }]
+    const exit = typeof thread.exit === "number" || thread.exit === null ? thread.exit : undefined
+    const completed = typeof thread.completed === "boolean" ? thread.completed : undefined
+    return [{ threadID, status, pid, cursor, exit, description, command, completed }]
   })
 }
 
-function shellThreadID(value: string) {
-  if (value.length <= 18) return value
-  return `${value.slice(0, 8)}…${value.slice(-7)}`
-}
-
-function shellThreadCell(value: string, width: number) {
-  if (value.length > width) return value.slice(0, width - 1) + "…"
-  return value.padEnd(width)
+function shellThreadShort(value: string) {
+  if (value.length <= 14) return value
+  return `${value.slice(0, 9)}…${value.slice(-4)}`
 }
 
 function PendingToolPreview(props: {

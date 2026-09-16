@@ -1,7 +1,9 @@
 import { Config } from "@/config/config"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
+import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
+import type { TaskPromptOps } from "@/tool/subagent"
 import { Identifier } from "@/id/id"
 import { BashArity } from "@/permission/arity"
 import { Plugin } from "@/plugin"
@@ -10,7 +12,7 @@ import { Shell } from "@/shell/shell"
 import { SessionID } from "@/session/schema"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect"
+import { Context, Deferred, Effect, Exit, Layer, Schema, Scope, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner, type ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner"
 import path from "path"
@@ -32,6 +34,8 @@ export const ThreadSnapshot = Schema.Struct({
 export type ThreadSnapshot = Schema.Schema.Type<typeof ThreadSnapshot>
 
 const DETAIL_TAIL_CHARS = 16_000
+const DEFAULT_WAIT_TIMEOUT_MS = 30_000
+const MAX_WAIT_TIMEOUT_MS = 300_000
 
 export const ThreadDetail = Schema.Struct({
   threadID: Schema.String,
@@ -59,10 +63,29 @@ export const Event = {
   ),
 }
 const Parameters = Schema.Struct({
-  action: Schema.Literals(["start", "read", "list", "stop"]).annotate({
-    description: "Operation to perform: start, read, list, or stop",
+  action: Schema.Literals(["start", "read", "list", "stop", "wait"]).annotate({
+    description: "Operation to perform: start, read, list, stop, or wait",
   }),
-  threadID: Schema.optional(Schema.String).annotate({ description: "Thread ID for read or stop" }),
+  threadID: Schema.optional(Schema.String).annotate({ description: "Thread ID for read, stop, or single-thread wait" }),
+  threadIDs: Schema.optional(Schema.Array(Schema.String)).annotate({
+    description: "Thread IDs for wait. Uses threadID when omitted.",
+  }),
+  mode: Schema.optional(Schema.Literals(["any", "all"])).annotate({
+    description: "Wait mode for multiple threads: any returns when the first completes, all waits for every thread. Defaults to all.",
+  }),
+  timeoutMs: Schema.optional(Schema.Number).annotate({
+    description: "Max time to wait in milliseconds for wait or start with wait. Defaults to 30000, max 300000.",
+  }),
+  notify: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "When true and the thread is still running after timeoutMs, return immediately and post a synthetic followup message when it completes.",
+  }),
+  notifyMessage: Schema.optional(Schema.String).annotate({
+    description: "Custom prefix for the synthetic followup message posted when notify fires.",
+  }),
+  wait: Schema.optional(Schema.Boolean).annotate({
+    description: "When true with action start, wait for completion in the same call.",
+  }),
   command: Schema.optional(Schema.String).annotate({ description: "Shell command to run when action is start" }),
   description: Schema.optional(Schema.String).annotate({ description: "Short description for start" }),
   workdir: Schema.optional(Schema.String).annotate({ description: "Working directory for start" }),
@@ -79,6 +102,8 @@ type Chunk = {
   time: number
 }
 
+type ThreadStatus = "running" | "exited" | "stopped" | "failed"
+
 type Thread = {
   id: string
   sessionID: SessionID
@@ -86,7 +111,7 @@ type Thread = {
   description: string
   cwd: string
   pid: number
-  status: "running" | "exited" | "stopped" | "failed"
+  status: ThreadStatus
   startedAt: number
   updatedAt: number
   exitCode?: number | null
@@ -96,6 +121,12 @@ type Thread = {
   chunks: Chunk[]
   handle: ChildProcessHandle
   scope: Scope.Scope
+  done: Deferred.Deferred<void>
+}
+
+type WaitResult = {
+  thread: Thread
+  completed: boolean
 }
 
 type State = {
@@ -167,6 +198,12 @@ export interface Interface {
     threadID: string
     signal?: Schema.Schema.Type<typeof Signal>
   }) => Effect.Effect<Thread, unknown>
+  readonly wait: (input: {
+    sessionID: SessionID
+    threadIDs: string[]
+    mode?: "any" | "all"
+    timeoutMs?: number
+  }) => Effect.Effect<WaitResult[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ShellThread") {}
@@ -254,6 +291,7 @@ export const layer: Layer.Layer<Service, never, ChildProcessSpawner> = Layer.eff
       const handle = yield* Scope.provide(scope)(
         spawner.spawn(commandSpec(input.shell, input.command, input.cwd, input.env)),
       )
+      const done = yield* Deferred.make<void>()
       const thread: Thread = {
         id: Identifier.create("sht", "ascending"),
         sessionID: input.sessionID,
@@ -269,9 +307,17 @@ export const layer: Layer.Layer<Service, never, ChildProcessSpawner> = Layer.eff
         chunks: [],
         handle,
         scope,
+        done,
       }
       s.threads.set(thread.id, thread)
       yield* publish(s, thread.sessionID)
+
+      const settle = (update: () => void) =>
+        Effect.gen(function* () {
+          update()
+          yield* Deferred.succeed(done, undefined).pipe(Effect.ignore)
+          yield* publish(yield* InstanceState.get(state), thread.sessionID)
+        })
 
       yield* Scope.provide(scope)(
         Stream.runForEach(Stream.decodeText(handle.all), (chunk) => Effect.sync(() => append(thread, chunk))).pipe(
@@ -289,20 +335,20 @@ export const layer: Layer.Layer<Service, never, ChildProcessSpawner> = Layer.eff
       yield* handle.exitCode.pipe(
         Effect.matchEffect({
           onFailure: (error) =>
-            Effect.sync(() => {
+            settle(() => {
               if (thread.status === "stopped") return
               thread.status = "failed"
               thread.error = error.message
               thread.exitCode = null
               thread.updatedAt = Date.now()
-            }).pipe(Effect.andThen(publish(s, thread.sessionID))),
+            }),
           onSuccess: (code) =>
-            Effect.sync(() => {
+            settle(() => {
               if (thread.status === "stopped") return
               thread.status = "exited"
               thread.exitCode = code
               thread.updatedAt = Date.now()
-            }).pipe(Effect.andThen(publish(s, thread.sessionID))),
+            }),
         }),
         Effect.forkIn(scope),
       )
@@ -324,11 +370,45 @@ export const layer: Layer.Layer<Service, never, ChildProcessSpawner> = Layer.eff
           .pipe(Effect.ignore)
       }
       yield* Scope.close(thread.scope, Exit.void).pipe(Effect.ignore)
+      yield* Deferred.succeed(thread.done, undefined).pipe(Effect.ignore)
       yield* publish(yield* InstanceState.get(state), thread.sessionID)
       return thread
     })
 
-    return { start, get, list, inspect, stop } satisfies Interface
+    const wait = Effect.fn("ShellThread.wait")(function* (input: {
+      sessionID: SessionID
+      threadIDs: string[]
+      mode?: "any" | "all"
+      timeoutMs?: number
+    }) {
+      const timeout = input.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS
+      if (!Number.isFinite(timeout) || timeout < 0) throw new Error(`Invalid timeoutMs: ${input.timeoutMs}`)
+      if (timeout > MAX_WAIT_TIMEOUT_MS) throw new Error(`timeoutMs exceeds maximum of ${MAX_WAIT_TIMEOUT_MS} ms`)
+      const ids = [...new Set(input.threadIDs)]
+      if (ids.length === 0) throw new Error("shell_thread wait requires at least one thread ID")
+      const mode = input.mode ?? "all"
+      const s = yield* InstanceState.get(state)
+      const found = ids.map((id) => {
+        const thread = s.threads.get(id)
+        if (!thread || thread.sessionID !== input.sessionID) throw new Error(`Shell thread not found: ${id}`)
+        return thread
+      })
+      const pending = found.filter((thread) => thread.status === "running")
+      if (pending.length === 0) return found.map((thread) => ({ thread, completed: true }))
+      if (mode === "any") {
+        yield* Effect.raceAll(pending.map((thread) => Deferred.await(thread.done))).pipe(
+          Effect.timeoutOption(`${timeout} millis`),
+        )
+        return found.map((thread) => ({ thread, completed: thread.status !== "running" }))
+      }
+      yield* Effect.forEach(pending, (thread) => Deferred.await(thread.done), {
+        concurrency: "unbounded",
+        discard: true,
+      }).pipe(Effect.timeoutOption(`${timeout} millis`))
+      return found.map((thread) => ({ thread, completed: thread.status !== "running" }))
+    })
+
+    return { start, get, list, inspect, stop, wait } satisfies Interface
   }),
 )
 
@@ -374,6 +454,122 @@ export const ShellThreadTool = Tool.define<
       })
     }
 
+    const resolveIDs = (params: Parameters) => {
+      const ids = params.threadIDs ?? (params.threadID ? [params.threadID] : [])
+      return [...new Set(ids)]
+    }
+
+    const waitDetail = (thread: Thread, completed: boolean) => {
+      const out = preview(output(thread).slice(-DETAIL_TAIL_CHARS))
+      const exit = thread.exitCode === undefined ? "" : `\nexit: ${thread.exitCode}`
+      return {
+        lines: [`## ${thread.description} (${thread.id})`, `status: ${thread.status}${exit}`, "", out],
+        out,
+      }
+    }
+
+    const abortEffect = (ctx: Tool.Context) =>
+      Effect.callback<void>((resume) => {
+        if (ctx.abort.aborted) return resume(Effect.void)
+        const handler = () => resume(Effect.void)
+        ctx.abort.addEventListener("abort", handler, { once: true })
+        return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
+      })
+
+    const notifyText = (results: WaitResult[], prefix?: string) =>
+      [
+        prefix ?? "Background shell thread update:",
+        ...results.map((result) => {
+          const exit = result.thread.exitCode === undefined ? "" : `\nexit: ${result.thread.exitCode}`
+          const tail = output(result.thread).slice(-DETAIL_TAIL_CHARS).trim()
+          return `## ${result.thread.description} (${result.thread.id})\nstatus: ${result.thread.status}${exit}\n\n${tail || "(no output)"}`
+        }),
+        "Continue with your task using read/stop as needed.",
+      ].join("\n\n")
+
+    const armNotify = Effect.fn("ShellThreadTool.armNotify")(function* (
+      ids: string[],
+      mode: "any" | "all",
+      ctx: Tool.Context,
+      prefix?: string,
+    ) {
+      const ops = ctx.extra?.promptOps as TaskPromptOps | undefined
+      if (!ops) return
+      const bridge = yield* EffectBridge.make()
+      const workload = Effect.gen(function* () {
+        const results = yield* threads.wait({ sessionID: ctx.sessionID, threadIDs: ids, mode })
+        const healthy = results.filter(
+          (result) => result.thread.sessionID === ctx.sessionID && result.completed,
+        )
+        if (healthy.length === 0) return
+        yield* Effect.promise(() =>
+          bridge.promise(
+            Effect.gen(function* () {
+              yield* ops.btw({
+                sessionID: ctx.sessionID,
+                parts: [{ type: "text" as const, text: notifyText(healthy, prefix), synthetic: true }],
+              })
+            }),
+          ),
+        )
+      }).pipe(Effect.ignore)
+      bridge.fork(workload)
+    })
+
+    const wait = Effect.fn("ShellThreadTool.wait")(function* (params: Parameters, ctx: Tool.Context) {
+      const ids = resolveIDs(params)
+      if (ids.length === 0) throw new Error("shell_thread wait requires threadID or threadIDs")
+      const mode = params.mode ?? "all"
+      const timeoutMs = params.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS
+      if (!Number.isFinite(timeoutMs) || timeoutMs < 0) throw new Error(`Invalid timeoutMs: ${params.timeoutMs}`)
+      if (timeoutMs > MAX_WAIT_TIMEOUT_MS) throw new Error(`timeoutMs exceeds maximum of ${MAX_WAIT_TIMEOUT_MS} ms`)
+
+      yield* ctx.metadata({ title: `Waiting on ${ids.join(", ")}`, metadata: { action: "wait", threadIDs: ids } })
+
+      const settled = yield* Effect.race(
+        threads
+          .wait({ sessionID: ctx.sessionID, threadIDs: ids, mode, timeoutMs })
+          .pipe(Effect.map((results) => ({ kind: "wait" as const, results }))),
+        abortEffect(ctx).pipe(Effect.map(() => ({ kind: "abort" as const, results: undefined }))),
+      )
+      if (settled.kind === "abort") throw new Error("shell_thread wait aborted")
+      const runningCount = settled.results.filter((result) => !result.completed).length
+      const timedOut = runningCount > 0
+      if (runningCount > 0 && params.notify) yield* armNotify(ids, mode, ctx, params.notifyMessage)
+
+      const lines = settled.results.flatMap((result) => waitDetail(result.thread, result.completed).lines)
+      if (runningCount > 0)
+        lines.push(
+          "",
+          `<wait_timeout ms="${timeoutMs}" running="${runningCount}">`,
+          "Still running — use read to poll, wait again, or stop to cancel. Never wait on servers, watchers, or other never-ending commands.",
+        )
+      const out = lines.join("\n")
+      return {
+        title: timedOut ? `Timed out waiting on ${ids.join(", ")}` : `Waited on ${ids.join(", ")}`,
+        output: out,
+        metadata: {
+          action: "wait",
+          timedOut,
+          notified: timedOut && params.notify === true,
+          mode,
+          timeoutMs,
+          output: out,
+          threads: settled.results.map((result) => ({
+            threadID: result.thread.id,
+            status: result.thread.status,
+            completed: result.completed,
+            pid: result.thread.pid,
+            cursor: result.thread.cursor,
+            exit: result.thread.exitCode,
+            output: waitDetail(result.thread, result.completed).out,
+            description: result.thread.description,
+            command: result.thread.command,
+          })),
+        },
+      }
+    })
+
     const start = Effect.fn("ShellThreadTool.start")(function* (params: Parameters, ctx: Tool.Context) {
       if (!params.command) throw new Error("shell_thread start requires command")
       if (!params.description) throw new Error("shell_thread start requires description")
@@ -398,17 +594,25 @@ export const ShellThreadTool = Tool.define<
         shell,
       })
 
+      if (params.wait) {
+        return yield* wait(
+          {
+            ...params,
+            action: "wait",
+            threadID: thread.id,
+            threadIDs: [thread.id],
+            timeoutMs: params.timeoutMs,
+          },
+          ctx,
+        )
+      }
+
       const out = preview(output(thread))
       return {
         title: `Started ${thread.description}`,
-        output: [
-          `Started shell thread ${thread.id}`,
-          `status: ${thread.status}`,
-          `pid: ${thread.pid}`,
-          `cursor: ${thread.cursor}`,
-          "",
-          out,
-        ].join("\n"),
+        output: [`## ${thread.description} (${thread.id})`, `status: ${thread.status}`, `pid: ${thread.pid}`, "", out].join(
+          "\n",
+        ),
         metadata: {
           action: "start",
           threadID: thread.id,
@@ -417,6 +621,7 @@ export const ShellThreadTool = Tool.define<
           cursor: thread.cursor,
           output: out,
           description: thread.description,
+          command: thread.command,
         },
       }
     })
@@ -425,11 +630,10 @@ export const ShellThreadTool = Tool.define<
       if (!params.threadID) throw new Error("shell_thread read requires threadID")
       const thread = yield* threads.get({ sessionID: ctx.sessionID, threadID: params.threadID })
       const out = preview(output(thread, params.since))
+      const exit = thread.exitCode === undefined ? "" : `\nexit: ${thread.exitCode}`
       return {
         title: `Read ${thread.description}`,
-        output: [`Shell thread ${thread.id}`, `status: ${thread.status}`, `cursor: ${thread.cursor}`, "", out].join(
-          "\n",
-        ),
+        output: [`## ${thread.description} (${thread.id})`, `status: ${thread.status}${exit}`, "", out].join("\n"),
         metadata: {
           action: "read",
           threadID: thread.id,
@@ -438,6 +642,8 @@ export const ShellThreadTool = Tool.define<
           cursor: thread.cursor,
           output: out,
           description: thread.description,
+          command: thread.command,
+          pid: thread.pid,
         },
       }
     })
@@ -468,7 +674,7 @@ export const ShellThreadTool = Tool.define<
     const stop = Effect.fn("ShellThreadTool.stop")(function* (params: Parameters, ctx: Tool.Context) {
       if (!params.threadID) throw new Error("shell_thread stop requires threadID")
       const thread = yield* threads.stop({ sessionID: ctx.sessionID, threadID: params.threadID, signal: params.signal })
-      const out = `Stopped shell thread ${thread.id}\nstatus: ${thread.status}`
+      const out = [`## ${thread.description} (${thread.id})`, `status: ${thread.status}`].join("\n")
       return {
         title: `Stopped ${thread.description}`,
         output: out,
@@ -479,6 +685,8 @@ export const ShellThreadTool = Tool.define<
           exit: thread.exitCode,
           output: out,
           description: thread.description,
+          command: thread.command,
+          pid: thread.pid,
         },
       }
     })
@@ -496,6 +704,8 @@ export const ShellThreadTool = Tool.define<
             return list(params, ctx).pipe(Effect.orDie)
           case "stop":
             return stop(params, ctx).pipe(Effect.orDie)
+          case "wait":
+            return wait(params, ctx).pipe(Effect.orDie)
         }
       },
     }
