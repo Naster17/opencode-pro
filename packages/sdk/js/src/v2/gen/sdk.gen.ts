@@ -16,6 +16,8 @@ import type {
   CommandListResponses,
   Config as Config3,
   ConfigGetResponses,
+  ConfigPermissionUpdateErrors,
+  ConfigPermissionUpdateResponses,
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
@@ -74,6 +76,7 @@ import type {
   McpLocalConfig,
   McpRemoteConfig,
   McpStatusResponses,
+  McpToolsResponses,
   OutputFormat,
   Part as Part2,
   PartDeleteErrors,
@@ -86,6 +89,7 @@ import type {
   PermissionReplyResponses,
   PermissionRespondErrors,
   PermissionRespondResponses,
+  PermissionRuleConfig,
   PermissionRuleset,
   ProjectCurrentResponses,
   ProjectInitGitResponses,
@@ -573,6 +577,53 @@ export class Event extends HeyApiClient {
   }
 }
 
+export class Permission extends HeyApiClient {
+  /**
+   * Update tool permissions
+   *
+   * Persist per-tool allow/ask/deny rules to local project or global config.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      scope?: "local" | "global"
+      permission?: {
+        [key: string]: PermissionRuleConfig
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "scope" },
+            { in: "body", key: "permission" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      ConfigPermissionUpdateResponses,
+      ConfigPermissionUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/config/permission",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Config2 extends HeyApiClient {
   /**
    * Get configuration
@@ -669,6 +720,11 @@ export class Config2 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _permission?: Permission
+  get permission(): Permission {
+    return (this._permission ??= new Permission({ client: this.client }))
   }
 }
 
@@ -2013,6 +2069,36 @@ export class Mcp extends HeyApiClient {
   }
 
   /**
+   * List MCP tools
+   *
+   * Get the list of tools exposed by connected Model Context Protocol (MCP) servers.
+   */
+  public tools<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<McpToolsResponses, unknown, ThrowOnError>({
+      url: "/mcp/tools",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Connect an MCP server.
    */
   public connect<ThrowOnError extends boolean = false>(
@@ -2606,7 +2692,7 @@ export class Question extends HeyApiClient {
   }
 }
 
-export class Permission extends HeyApiClient {
+export class Permission2 extends HeyApiClient {
   /**
    * List pending permissions
    *
@@ -5113,9 +5199,9 @@ export class OpencodeClient extends HeyApiClient {
     return (this._question ??= new Question({ client: this.client }))
   }
 
-  private _permission?: Permission
-  get permission(): Permission {
-    return (this._permission ??= new Permission({ client: this.client }))
+  private _permission?: Permission2
+  get permission(): Permission2 {
+    return (this._permission ??= new Permission2({ client: this.client }))
   }
 
   private _provider?: Provider

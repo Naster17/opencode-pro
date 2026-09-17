@@ -238,6 +238,29 @@ describe("session.retry.retryable", () => {
     expect(retryable).toBeDefined()
     expect(retryable).toBe("Response decompression failed")
   })
+
+  test("retries transient fetch failures from local proxies", () => {
+    const msg = "fetch failed"
+    expect(SessionRetry.retryable(wrap(msg))).toBe(msg)
+  })
+
+  test("retries socket hang up errors", () => {
+    const msg = "socket hang up"
+    expect(SessionRetry.retryable(wrap(msg))).toBe(msg)
+  })
+
+  test("does not blind-retry stale encrypted reasoning (healed by processor)", () => {
+    const error = MessageV2.APIError.Schema.parse(
+      new MessageV2.APIError({
+        message:
+          "Error from provider (Console): Upstream request failed: [invalid_request_error] reasoning `encrypted_content` was not issued to this caller",
+        isRetryable: false,
+        statusCode: 400,
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
 })
 
 describe("session.message-v2.fromError", () => {

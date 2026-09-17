@@ -370,6 +370,10 @@ export interface Interface {
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
   readonly update: (config: Info) => Effect.Effect<void>
   readonly updateGlobal: (config: Info) => Effect.Effect<{ info: Info; changed: boolean }>
+  readonly updatePermission: (input: {
+    scope: "local" | "global"
+    permission: Record<string, ConfigPermission.Rule>
+  }) => Effect.Effect<void>
   readonly invalidate: () => Effect.Effect<void>
   readonly directories: () => Effect.Effect<string[]>
   readonly waitForDependencies: () => Effect.Effect<void>
@@ -424,6 +428,15 @@ function writableGlobal(info: Info) {
   // When a user changes config from a value back to default in the Desktop app, we don't want to leave a blank `"shell": "",` key
   if ("shell" in next && next.shell === "") return { ...next, shell: undefined }
   return next
+}
+
+// Object-form permission patches merge at the pattern level so a per-skill
+// write like `{ skill: { "ecc-tools": "deny" } }` preserves sibling patterns
+// already present in the config. String patches replace the whole key.
+function mergePermissionRule(current: ConfigPermission.Rule | undefined, patch: ConfigPermission.Rule): ConfigPermission.Rule {
+  if (typeof patch === "string") return patch
+  const base = typeof current === "string" ? { "*": current } : (current ?? {})
+  return { ...base, ...patch }
 }
 
 export const ConfigDirectoryTypoError = NamedError.create(
@@ -872,12 +885,98 @@ export const layer = Layer.effect(
       return { info: next, changed }
     })
 
+    const deletePermissionKeys = Effect.fn("Config.deletePermissionKeys")(function* (file: string, keys: string[]) {
+      const before = yield* readConfigFile(file)
+      if (!before) return false
+      let parsed: unknown
+      try {
+        parsed = ConfigParse.jsonc(before, file)
+      } catch {
+        return false
+      }
+      const formattingOptions = { insertSpaces: true, tabSize: 2 }
+      let next = before
+      let changed = false
+      const remove = (at: string[]) => {
+        const edits = modify(next, at, undefined, { formattingOptions })
+        if (edits.length === 0) return
+        next = applyEdits(next, edits)
+        changed = true
+      }
+      for (const key of keys) {
+        if (isRecord(parsed)) {
+          if (isRecord(parsed.permission)) remove(["permission", key])
+          if (isRecord(parsed.tools)) remove(["tools", key])
+        }
+      }
+      if (!changed) return false
+      const after = ConfigParse.jsonc(next, file)
+      if (isRecord(after)) {
+        for (const name of ["permission", "tools"]) {
+          if (isRecord(after[name]) && Object.keys(after[name]).length === 0) remove([name])
+        }
+      }
+      yield* fs.writeFileString(file, next).pipe(Effect.orDie)
+      return true
+    })
+
+    const updatePermission = Effect.fn("Config.updatePermission")(function* (input: {
+      scope: "local" | "global"
+      permission: Record<string, ConfigPermission.Rule>
+    }) {
+      const merged = (current: Record<string, ConfigPermission.Rule>) =>
+        Object.fromEntries(
+          Object.entries(input.permission).map(([key, value]) => [
+            key,
+            mergePermissionRule(current[key], value),
+          ]),
+        ) as Record<string, ConfigPermission.Rule>
+      if (input.scope === "global") {
+        const globalPermission = (yield* getGlobal()).permission as Record<string, ConfigPermission.Rule> | undefined
+        yield* updateGlobal({ permission: merged(globalPermission ?? {}) as ConfigPermission.Info })
+        // Global loses to project files at load time. Drop the same keys
+        // locally so the manager's write is always the effective one.
+        const dir = yield* InstanceState.directory
+        const target = path.join(dir, ".opencode")
+        let changed = false
+        for (const file of [path.join(target, "opencode.jsonc"), path.join(target, "opencode.json")]) {
+          if (!existsSync(file)) continue
+          if (yield* deletePermissionKeys(file, Object.keys(input.permission))) changed = true
+        }
+        if (changed) yield* invalidate()
+        return
+      }
+      const dir = yield* InstanceState.directory
+      const target = path.join(dir, ".opencode")
+      const jsonc = path.join(target, "opencode.jsonc")
+      const file = existsSync(jsonc) ? jsonc : path.join(target, "opencode.json")
+      const before = (yield* readConfigFile(file)) ?? "{}"
+      const existing = ConfigParse.effectSchema(Info, ConfigParse.jsonc(before, file), file)
+      const patch = {
+        permission: merged((existing.permission ?? {}) as Record<string, ConfigPermission.Rule>) as ConfigPermission.Info,
+      }
+      if (!file.endsWith(".jsonc")) {
+        const serialized = JSON.stringify(mergeConfigForWrite(existing, patch), null, 2)
+        if (serialized === before) return
+        yield* fs.writeWithDirs(file, serialized).pipe(Effect.orDie)
+        yield* ensureGitignore(target).pipe(Effect.orDie)
+        yield* invalidate()
+        return
+      }
+      const updated = patchConfigJsonc(before, patch)
+      if (updated === before) return
+      yield* fs.writeWithDirs(file, updated).pipe(Effect.orDie)
+      yield* ensureGitignore(target).pipe(Effect.orDie)
+      yield* invalidate()
+    })
+
     return Service.of({
       get,
       getGlobal,
       getConsoleState,
       update,
       updateGlobal,
+      updatePermission,
       invalidate,
       directories,
       waitForDependencies,

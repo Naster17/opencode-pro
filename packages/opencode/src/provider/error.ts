@@ -45,6 +45,16 @@ export function isOverflow(message: string) {
   return /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message)
 }
 
+// Encrypted reasoning blocks (Anthropic thinking signatures, OpenAI Responses
+// `reasoning.encrypted_content`) are bound to the issuing caller (API key /
+// org / account). Replaying history issued under a different caller fails with
+// `reasoning encrypted_content was not issued to this caller`. This happens
+// without any model-string change when credentials rotate behind a proxy
+// (e.g. Console-managed providers, anon free keys, org/token refresh).
+export function isEncryptedReasoningCallerMismatch(message: string) {
+  return /encrypted_content.*not issued to this caller/i.test(message)
+}
+
 function message(providerID: ProviderID, e: APICallError) {
   return iife(() => {
     const msg = e.message

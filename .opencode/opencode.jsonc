@@ -5,10 +5,20 @@
     "edit": {
       "packages/opencode/migration/*": "deny",
     },
+    "ecc-changed-files": "deny",
+    "ecc-git-summary": "deny",
+    "ecc-dependency-analyzer": "deny",
+    "ecc-lint-check": "deny",
+    "question": "allow",
+    "webfetch": "allow",
+    "skill": "deny",
   },
   "mcp": {},
   "tools": {
     "github-triage": false,
     "github-pr-search": false,
+  },
+  "skills": {
+    "paths": ["./.opencode/ecc/skills"],
   },
 }

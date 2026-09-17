@@ -140,6 +140,28 @@ describe("mcp HttpApi", () => {
     expect(await disconnected.json()).toBe(true)
   })
 
+  test("serves tools endpoint with legacy parity", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        mcp: {
+          demo: {
+            type: "local",
+            command: ["echo", "demo"],
+            enabled: false,
+          },
+        },
+      },
+    })
+
+    for (const experimental of [false, true]) {
+      const response = await app(experimental).request(McpPaths.tools, {
+        headers: { "x-opencode-directory": tmp.path },
+      })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual([])
+    }
+  })
+
   test("serves deterministic OAuth endpoints", async () => {
     await using tmp = await tmpdir({
       config: {

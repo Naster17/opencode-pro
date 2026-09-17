@@ -1862,3 +1862,43 @@ describe("session.message-v2.fromError", () => {
     expect(result.name).toBe("MessageAbortedError")
   })
 })
+
+describe("session.message-v2.stripSignedReasoning", () => {
+  test("demotes signed reasoning to text", () => {
+    const messages = [
+      { role: "user", content: "hi" },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "old thinking", providerMetadata: { anthropic: { signature: "sig" } } },
+          { type: "text", text: "answer" },
+        ],
+      },
+    ] as any
+
+    const result = MessageV2.stripSignedReasoning(messages)
+
+    expect(result).not.toBe(messages)
+    expect(result[1].content).toEqual([
+      { type: "text", text: "old thinking" },
+      { type: "text", text: "answer" },
+    ])
+  })
+
+  test("keeps unsigned reasoning untouched", () => {
+    const messages = [
+      {
+        role: "assistant",
+        content: [{ type: "reasoning", text: "fresh" }],
+      },
+    ] as any
+
+    expect(MessageV2.stripSignedReasoning(messages)).toBe(messages)
+  })
+
+  test("returns same reference when nothing is signed", () => {
+    const messages = [{ role: "user", content: "hi" }] as any
+
+    expect(MessageV2.stripSignedReasoning(messages)).toBe(messages)
+  })
+})

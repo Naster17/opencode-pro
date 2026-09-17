@@ -1,6 +1,8 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
+import z from "zod/v4"
 import { Config } from "@/config/config"
+import { ConfigPermission } from "@/config/permission"
 import { InstanceState } from "@/effect/instance-state"
 import { InstanceStore } from "@/project/instance-store"
 import { Provider } from "@/provider/provider"
@@ -70,6 +72,57 @@ export const ConfigRoutes = lazy(() =>
         const response = c.json(result.config)
         void runRequest(
           "ConfigRoutes.update.dispose",
+          c,
+          InstanceStore.Service.use((store) => store.dispose(result.ctx)).pipe(
+            Effect.uninterruptible,
+            Effect.catchCause((cause) => Effect.sync(() => log.warn("instance disposal failed", { cause }))),
+          ),
+        )
+        return response
+      },
+    )
+    .patch(
+      "/permission",
+      describeRoute({
+        summary: "Update tool permissions",
+        description: "Persist per-tool allow/ask/deny rules to local project or global config.",
+        operationId: "config.permission.update",
+        responses: {
+          200: {
+            description: "Successfully updated tool permissions",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ success: z.literal(true) })),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          scope: z.enum(["local", "global"]),
+          permission: z.record(z.string(), ConfigPermission.Rule.zod),
+        }),
+      ),
+      async (c) => {
+        const result = await runRequest(
+          "ConfigRoutes.permission.update",
+          c,
+          Effect.gen(function* () {
+            const body = c.req.valid("json")
+            const cfg = yield* Config.Service
+            yield* cfg.updatePermission(body as {
+              scope: "local" | "global"
+              permission: Record<string, ConfigPermission.Rule>
+            })
+            return { ctx: yield* InstanceState.context }
+          }),
+        )
+        const response = c.json({ success: true as const })
+        void runRequest(
+          "ConfigRoutes.permission.update.dispose",
           c,
           InstanceStore.Service.use((store) => store.dispose(result.ctx)).pipe(
             Effect.uninterruptible,

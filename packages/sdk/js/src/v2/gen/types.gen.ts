@@ -1621,6 +1621,13 @@ export type McpStatus =
   | McpStatusNeedsAuth
   | McpStatusNeedsClientRegistration
 
+export type McpToolDefinition = {
+  id: string
+  client: string
+  name: string
+  description: string
+}
+
 export type McpUnsupportedOAuthError = {
   error: string
 }
@@ -3679,6 +3686,41 @@ export type ConfigUpdateResponses = {
 
 export type ConfigUpdateResponse = ConfigUpdateResponses[keyof ConfigUpdateResponses]
 
+export type ConfigPermissionUpdateData = {
+  body?: {
+    scope: "local" | "global"
+    permission: {
+      [key: string]: PermissionRuleConfig
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/config/permission"
+}
+
+export type ConfigPermissionUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ConfigPermissionUpdateError = ConfigPermissionUpdateErrors[keyof ConfigPermissionUpdateErrors]
+
+export type ConfigPermissionUpdateResponses = {
+  /**
+   * Tool permissions persisted
+   */
+  200: {
+    success: true
+  }
+}
+
+export type ConfigPermissionUpdateResponse = ConfigPermissionUpdateResponses[keyof ConfigPermissionUpdateResponses]
+
 export type ConfigProvidersData = {
   body?: never
   path?: never
@@ -4392,6 +4434,25 @@ export type McpAddResponses = {
 }
 
 export type McpAddResponse = McpAddResponses[keyof McpAddResponses]
+
+export type McpToolsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/mcp/tools"
+}
+
+export type McpToolsResponses = {
+  /**
+   * MCP tools
+   */
+  200: Array<McpToolDefinition>
+}
+
+export type McpToolsResponse = McpToolsResponses[keyof McpToolsResponses]
 
 export type McpAuthRemoveData = {
   body?: never

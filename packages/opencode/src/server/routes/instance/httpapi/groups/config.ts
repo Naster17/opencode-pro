@@ -1,5 +1,7 @@
 import { Config } from "@/config/config"
+import { ConfigPermission } from "@/config/permission"
 import { Provider } from "@/provider/provider"
+import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
@@ -7,6 +9,14 @@ import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 const root = "/config"
+
+export const PermissionUpdatePayload = Schema.Struct({
+  scope: Schema.Literals(["local", "global"]),
+  permission: Schema.Record(Schema.String, ConfigPermission.Rule),
+})
+const PermissionUpdateResult = Schema.Struct({
+  success: Schema.Literal(true),
+})
 
 export const ConfigApi = HttpApi.make("config")
   .add(
@@ -30,6 +40,17 @@ export const ConfigApi = HttpApi.make("config")
             identifier: "config.update",
             summary: "Update configuration",
             description: "Update OpenCode configuration settings and preferences.",
+          }),
+        ),
+        HttpApiEndpoint.patch("permission", `${root}/permission`, {
+          payload: PermissionUpdatePayload,
+          success: described(PermissionUpdateResult, "Tool permissions persisted"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "config.permission.update",
+            summary: "Update tool permissions",
+            description: "Persist per-tool allow/ask/deny rules to local project or global config.",
           }),
         ),
         HttpApiEndpoint.get("providers", `${root}/providers`, {

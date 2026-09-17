@@ -4,8 +4,8 @@ import { parsePluginSpecifier } from "@/plugin/shared"
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule, TuiPluginStatus } from "@opencode-ai/plugin/tui"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { useSync } from "@tui/context/sync"
-import { fileURLToPath } from "url"
 import path from "path"
+import { fileURLToPath } from "url"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
 
@@ -75,7 +75,7 @@ function state(api: TuiPluginApi, item: TuiPluginStatus) {
 
 function source(spec: string) {
   if (!spec.startsWith("file://")) return
-  return decodeURIComponent(new URL(spec).pathname)
+  return fileURLToPath(spec)
 }
 
 function meta(item: TuiPluginStatus, width: number) {
@@ -88,11 +88,11 @@ function meta(item: TuiPluginStatus, width: number) {
 
 function pluginName(spec: string) {
   if (spec.startsWith("file://")) {
-    const file = decodeURIComponent(new URL(spec).pathname)
-    const part = path.posix.basename(file)
+    const filepath = fileURLToPath(spec)
+    const part = path.basename(filepath)
     const base = part.includes(".") ? part.slice(0, part.lastIndexOf(".")) : part
     if (base === "index") {
-      const dir = path.posix.basename(path.posix.dirname(file))
+      const dir = path.basename(path.dirname(filepath))
       return dir || base
     }
     return base

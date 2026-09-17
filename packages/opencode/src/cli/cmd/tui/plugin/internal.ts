@@ -8,6 +8,7 @@ import SidebarShellThreads from "../feature-plugins/sidebar/shell-threads"
 import SidebarFiles from "../feature-plugins/sidebar/files"
 import SidebarFooter from "../feature-plugins/sidebar/footer"
 import PluginManager from "../feature-plugins/system/plugins"
+import ToolsManager from "../feature-plugins/system/tools"
 import LSPManager from "../feature-plugins/system/lsp-manager"
 import SessionV2Debug from "../feature-plugins/system/session-v2"
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
@@ -29,6 +30,7 @@ export const INTERNAL_TUI_PLUGINS: InternalTuiPlugin[] = [
   SidebarFiles,
   SidebarFooter,
   PluginManager,
+  ToolsManager,
   LSPManager,
   ...(Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM ? [SessionV2Debug] : []),
 ]

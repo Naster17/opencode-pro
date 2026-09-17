@@ -122,6 +122,7 @@ const KeybindsSchema = Schema.Struct({
   terminal_title_toggle: keybind("none", "Toggle terminal title"),
   tips_toggle: keybind("<leader>h", "Toggle tips on home screen"),
   plugin_manager: keybind("none", "Open plugin manager dialog"),
+  tools_manager: keybind("none", "Open tools manager dialog"),
   display_thinking: keybind("none", "Toggle thinking blocks visibility"),
   usage_widget_toggle: keybind("f4", "Toggle provider usage widgets visibility"),
 }).annotate({ identifier: "KeybindsConfig" })

@@ -28,7 +28,10 @@ import { zod, ZodOverride } from "@/util/effect-zod"
 import { NonNegativeInt, withStatics } from "@/util/schema"
 import { namedSchemaError } from "@/util/named-schema-error"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
+import * as Log from "@opencode-ai/core/util/log"
 import { ThinkTags } from "./think-tags"
+
+const log = Log.create({ service: "session.message" })
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -984,6 +987,25 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         })
       }
       const signedReasoning = hasSignedReasoning(msg.parts)
+      if (signedReasoning) {
+        const historic = `${msg.info.providerID}/${msg.info.modelID}`
+        const current = `${model.providerID}/${model.id}`
+        if (differentModel) {
+          log.debug("stripping signed reasoning on model switch", {
+            sessionID: msg.info.sessionID,
+            messageID: msg.info.id,
+            historic,
+            current,
+          })
+        } else {
+          log.debug("replaying signed reasoning", {
+            sessionID: msg.info.sessionID,
+            messageID: msg.info.id,
+            model: current,
+            npm: model.api.npm,
+          })
+        }
+      }
       for (const part of msg.parts) {
         if (part.type === "text") {
           if (part.text.trim() === "") {
@@ -1147,6 +1169,29 @@ export function toModelMessages(
   },
 ): Promise<ModelMessage[]> {
   return Effect.runPromise(toModelMessagesEffect(input, model, options).pipe(Effect.provide(EffectLogger.layer)))
+}
+
+// Drop caller-bound reasoning signatures (Anthropic thinking signatures,
+// OpenAI Responses `reasoning.encrypted_content`) by demoting signed reasoning
+// parts to plain text. Used to heal sessions bricked by
+// "encrypted_content was not issued to this caller" after credentials rotate
+// behind a proxy (Console-managed providers, anon keys, org/token refresh).
+// Mirrors the differentModel path above: unsigned reasoning text stays readable
+// while nothing stale is replayed. Messages without signed reasoning keep
+// their reference so callers can detect a no-op via `result !== messages`.
+export function stripSignedReasoning(messages: ModelMessage[]): ModelMessage[] {
+  const result = messages.map((msg) => {
+    if (msg.role !== "assistant" || !Array.isArray(msg.content)) return msg
+    if (!msg.content.some((part) => part.type === "reasoning" && "providerMetadata" in part)) return msg
+    return {
+      ...msg,
+      content: msg.content.flatMap((part) => {
+        if (part.type !== "reasoning" || !("providerMetadata" in part)) return [part]
+        return part.text?.trim() ? [{ type: "text" as const, text: part.text }] : []
+      }),
+    }
+  })
+  return result.every((msg, index) => msg === messages[index]) ? messages : result
 }
 
 export function page(input: { sessionID: SessionID; limit: number; before?: string }) {

@@ -1,4 +1,5 @@
 import { Provider } from "@/provider/provider"
+import * as ProviderError from "@/provider/error"
 import * as Log from "@opencode-ai/core/util/log"
 import { Context, Effect, Layer, Record } from "effect"
 import * as Stream from "effect/Stream"
@@ -413,8 +414,15 @@ const live: Layer.Layer<
 
       return streamText({
         onError(error) {
+          const message = error instanceof Error ? error.message : String(error)
           l.error("stream error", {
             error,
+            ...(ProviderError.isEncryptedReasoningCallerMismatch(message)
+              ? {
+                  encryptedReasoningCallerMismatch: true,
+                  hint: "History contains reasoning blocks issued to a different caller (key/org rotation behind proxy). Same provider/model string does not guarantee same caller.",
+                }
+              : {}),
           })
         },
         async experimental_repairToolCall(failed) {

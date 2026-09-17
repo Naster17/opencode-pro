@@ -100,6 +100,16 @@ export const Status = Schema.Union([
   .pipe(withStatics((s) => ({ zod: effectZod(s) })))
 export type Status = Schema.Schema.Type<typeof Status>
 
+export const Definition = Schema.Struct({
+  id: Schema.String,
+  client: Schema.String,
+  name: Schema.String,
+  description: Schema.String,
+})
+  .annotate({ identifier: "MCPToolDefinition" })
+  .pipe(withStatics((s) => ({ zod: effectZod(s) })))
+export type Definition = Schema.Schema.Type<typeof Definition>
+
 // Store transports for OAuth servers to allow finishing auth
 type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
 const pendingOAuthTransports = new Map<string, TransportWithAuth>()
@@ -212,6 +222,7 @@ interface State {
 export interface Interface {
   readonly status: () => Effect.Effect<Record<string, Status>>
   readonly clients: () => Effect.Effect<Record<string, MCPClient>>
+  readonly definitions: () => Effect.Effect<Definition[]>
   readonly tools: () => Effect.Effect<Record<string, Tool>>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: () => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
@@ -595,6 +606,23 @@ export const layer = Layer.effect(
       return s.clients
     })
 
+    const definitions = Effect.fn("MCP.definitions")(function* () {
+      const s = yield* InstanceState.get(state)
+      const result: Definition[] = []
+      for (const clientName of Object.keys(s.clients)) {
+        if (s.status[clientName]?.status !== "connected") continue
+        for (const tool of s.defs[clientName] ?? []) {
+          result.push({
+            id: sanitize(clientName) + "_" + sanitize(tool.name),
+            client: clientName,
+            name: tool.name,
+            description: tool.description ?? "",
+          })
+        }
+      }
+      return result.toSorted((a, b) => a.id.localeCompare(b.id))
+    })
+
     const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: ConfigMCP.Info) {
       const s = yield* InstanceState.get(state)
       const result = yield* create(name, mcp)
@@ -903,6 +931,7 @@ export const layer = Layer.effect(
     return Service.of({
       status,
       clients,
+      definitions,
       tools,
       prompts,
       resources,

@@ -1198,42 +1198,60 @@ export const layer: Layer.Layer<
             globalThis.process.env.OPENCODE_TEST_TOOL_RESULT_STALL_TIMEOUT_MS ??
               (event.type === "tool-error" ? TOOL_ERROR_STALL_TIMEOUT : TOOL_RESULT_STALL_TIMEOUT),
           )
-        const toolResultSettled = yield* Deferred.make<number>()
-        const signalToolResultSettled = Effect.fnUntraced(function* (event: StreamEvent) {
-          if (event.type !== "tool-result" && event.type !== "tool-error") return
-          if (Object.keys(ctx.toolcalls).length > 0) return
-          yield* Deferred.succeed(toolResultSettled, toolResultStallTimeout(event)).pipe(Effect.ignore)
-        })
-        const toolResultStall = Deferred.await(toolResultSettled).pipe(
-          Effect.flatMap((timeout) => Effect.sleep(timeout).pipe(Effect.as(timeout))),
-          Effect.tap((timeout) =>
-            Effect.sync(() =>
-              slog.warn("stream stalled after settled tool call", {
-                timeout,
-              }),
+
+        const runStream = Effect.fn("SessionProcessor.runStream")(function* (messages: LLM.StreamInput["messages"]) {
+          const toolResultSettled = yield* Deferred.make<number>()
+          const signalToolResultSettled = Effect.fnUntraced(function* (event: StreamEvent) {
+            if (event.type !== "tool-result" && event.type !== "tool-error") return
+            if (Object.keys(ctx.toolcalls).length > 0) return
+            yield* Deferred.succeed(toolResultSettled, toolResultStallTimeout(event)).pipe(Effect.ignore)
+          })
+          const toolResultStall = Deferred.await(toolResultSettled).pipe(
+            Effect.flatMap((timeout) => Effect.sleep(timeout).pipe(Effect.as(timeout))),
+            Effect.tap((timeout) =>
+              Effect.sync(() =>
+                slog.warn("stream stalled after settled tool call", {
+                  timeout,
+                }),
+              ),
             ),
-          ),
-        )
+          )
+          ctx.currentText = undefined
+          ctx.currentTextStartedAt = undefined
+          ctx.currentTextMetadata = undefined
+          ctx.reasoningMap = {}
+          ctx.reasoningTagStripper = {}
+          ctx.inlineThink = { active: false, pending: "" }
+          const stream = llm.stream({ ...streamInput, messages, ephemeral: input.ephemeral })
+
+          yield* Effect.raceFirst(
+            stream.pipe(
+              Stream.tap((event) => handleEvent(event).pipe(Effect.andThen(signalToolResultSettled(event)))),
+              Stream.takeUntil(() => ctx.needsCompaction),
+              Stream.runDrain,
+            ),
+            toolResultStall,
+          )
+        })
+
+        // History can carry reasoning blocks issued to a different caller
+        // (key/org rotation behind a proxy). The provider rejects the replay
+        // with "encrypted_content was not issued to this caller" on every
+        // attempt, bricking the session. Heal once per turn by demoting stale
+        // signed reasoning to text and re-running the stream.
+        const recoverStaleReasoning = (error: unknown) =>
+          Effect.gen(function* () {
+            const sanitized = MessageV2.stripSignedReasoning(streamInput.messages)
+            if (sanitized === streamInput.messages) return yield* Effect.fail(error)
+            slog.warn("retrying without stale signed reasoning", {
+              providerID: input.model.providerID,
+              modelID: input.model.id,
+            })
+            yield* runStream(sanitized)
+          })
 
         return yield* Effect.gen(function* () {
-          yield* Effect.gen(function* () {
-            ctx.currentText = undefined
-            ctx.currentTextStartedAt = undefined
-            ctx.currentTextMetadata = undefined
-            ctx.reasoningMap = {}
-            ctx.reasoningTagStripper = {}
-            ctx.inlineThink = { active: false, pending: "" }
-            const stream = llm.stream({ ...streamInput, ephemeral: input.ephemeral })
-
-            yield* Effect.raceFirst(
-              stream.pipe(
-                Stream.tap((event) => handleEvent(event).pipe(Effect.andThen(signalToolResultSettled(event)))),
-                Stream.takeUntil(() => ctx.needsCompaction),
-                Stream.runDrain,
-              ),
-              toolResultStall,
-            )
-          }).pipe(
+          yield* runStream(streamInput.messages).pipe(
             Effect.onInterrupt(() =>
               Effect.gen(function* () {
                 aborted = true
@@ -1249,6 +1267,10 @@ export const layer: Layer.Layer<
             Effect.catchIf(
               (error) => invalidToolCallFailure(error) !== undefined,
               (error) => recoverInvalidToolCallFailure(error).pipe(Effect.asVoid),
+            ),
+            Effect.catchIf(
+              (error) => ProviderError.isEncryptedReasoningCallerMismatch(errorDetails(error)),
+              (error) => recoverStaleReasoning(error).pipe(Effect.asVoid),
             ),
             Effect.retry(
               SessionRetry.policy({

@@ -16,6 +16,7 @@ export type Object = Schema.Schema.Type<typeof Object>
 export const Rule = Schema.Union([Action, Object])
   .annotate({ identifier: "PermissionRuleConfig" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type Rule = Schema.Schema.Type<typeof Rule>
 
 // Known permission keys get explicit types in the Effect schema for generated

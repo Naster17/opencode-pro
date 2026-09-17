@@ -29,6 +29,16 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
       }
     })
 
-    return handlers.handle("get", get).handle("update", update).handle("providers", providers)
+    const permission = Effect.fn("ConfigHttpApi.permission")(function* (ctx) {
+      yield* configSvc.updatePermission(ctx.payload)
+      yield* markInstanceForDisposal(yield* InstanceState.context)
+      return { success: true as const }
+    })
+
+    return handlers
+      .handle("get", get)
+      .handle("update", update)
+      .handle("permission", permission)
+      .handle("providers", providers)
   }),
 )

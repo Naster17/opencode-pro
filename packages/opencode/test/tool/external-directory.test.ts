@@ -142,8 +142,8 @@ describe("tool.assertExternalDirectory", () => {
       const req = requests.find((r) => r.permission === "external_directory")
       const expected = glob(path.join(outerTmp.path, "*"))
       expect(req).toBeDefined()
-      expect(req!.patterns).toEqual([expected])
-      expect(req!.always).toEqual([expected])
+      expect(req!.patterns.map(glob)).toEqual([expected])
+      expect(req!.always.map(glob)).toEqual([expected])
     })
 
     test("uses drive root glob for root files", async () => {
@@ -163,8 +163,8 @@ describe("tool.assertExternalDirectory", () => {
       const req = requests.find((r) => r.permission === "external_directory")
       const expected = path.join(root, "*")
       expect(req).toBeDefined()
-      expect(req!.patterns).toEqual([expected])
-      expect(req!.always).toEqual([expected])
+      expect(req!.patterns.map(glob)).toEqual([glob(expected)])
+      expect(req!.always.map(glob)).toEqual([glob(expected)])
     })
   }
 })

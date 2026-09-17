@@ -248,7 +248,7 @@ export const layer: Layer.Layer<
 
     const all: Interface["all"] = Effect.fn("ToolRegistry.all")(function* () {
       const s = yield* InstanceState.get(state)
-      return [...s.builtin, ...s.custom] as Tool.Def[]
+      return dedupeTools([...s.builtin, ...s.custom]) as Tool.Def[]
     })
 
     const ids: Interface["ids"] = Effect.fn("ToolRegistry.ids")(function* () {
@@ -342,6 +342,12 @@ export const layer: Layer.Layer<
     return Service.of({ ids, all, named, tools })
   }),
 ).pipe(Layer.provide(ShellThread.layer))
+
+export function dedupeTools<T extends { id: string }>(tools: T[]): T[] {
+  const last = new Map<string, T>()
+  for (const tool of tools) last.set(tool.id, tool)
+  return [...last.values()]
+}
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(

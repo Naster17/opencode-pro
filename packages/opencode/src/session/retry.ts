@@ -104,6 +104,16 @@ export function retryable(error: Err) {
     ) {
       return msg
     }
+    // Transient transport failures (local proxies like freellmapi restarting,
+    // dropped keep-alive sockets) surface as plain errors and should be
+    // retried with backoff instead of bricking the turn.
+    if (
+      /fetch failed|failed to fetch|socket hang up|connection reset|connection refused|ECONNRESET|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|EPIPE|network error/i.test(
+        msg,
+      )
+    ) {
+      return msg
+    }
   }
 
   const json = iife(() => {

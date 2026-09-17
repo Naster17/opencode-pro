@@ -2326,7 +2326,7 @@ describe("ProviderTransform.message - providerOptions key remapping", () => {
 })
 
 describe("ProviderTransform.message - claude w/bedrock custom inference profile", () => {
-  test("adds cachePoint", () => {
+  test("does not add cachePoint without cacheable history", () => {
     const model = {
       id: "amazon-bedrock/custom-claude-sonnet-4.5",
       providerID: "amazon-bedrock",
@@ -2350,13 +2350,7 @@ describe("ProviderTransform.message - claude w/bedrock custom inference profile"
 
     const result = ProviderTransform.message(msgs, model, {})
 
-    expect(result[0].providerOptions?.bedrock).toEqual(
-      expect.objectContaining({
-        cachePoint: {
-          type: "default",
-        },
-      }),
-    )
+    expect(result[0].providerOptions?.bedrock).toBeUndefined()
   })
 })
 
