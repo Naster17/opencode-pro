@@ -151,8 +151,14 @@ export const layer = Layer.effect(
     const cleanup = Effect.fn("SessionRevert.cleanup")(function* (session: Session.Info) {
       if (!session.revert) return
       const sessionID = session.id
-      const msgs = yield* sessions.messages({ sessionID })
       const messageID = session.revert.messageID
+      const latest = yield* sessions.messages({ sessionID })
+      const newest = latest.length ? latest[latest.length - 1].info.id : ""
+      if (messageID > newest) {
+        yield* sessions.clearRevert(sessionID)
+        return
+      }
+      const msgs = latest
       const remove = [] as MessageV2.WithParts[]
       let target: MessageV2.WithParts | undefined
       for (const msg of msgs) {

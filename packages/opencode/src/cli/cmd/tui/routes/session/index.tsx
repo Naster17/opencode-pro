@@ -327,6 +327,13 @@ export function Session() {
 
   // Single-line preview of message parts for the pending strip.
   function previewText(parts: Part[]): string {
+    const subtask = parts.find((part) => part.type === "subtask")
+    if (subtask && subtask.type === "subtask" && subtask.command) {
+      const args = subtask.prompt.split("\n")[0] ?? ""
+      const line = `/${subtask.command}${args ? ` ${args}` : ""}`
+      if (line.length > 120) return line.slice(0, 119).trimEnd() + "…"
+      return line
+    }
     const line = parts
       .flatMap((part) => (part.type === "text" && !part.synthetic ? [part.text] : []))
       .join(" ")

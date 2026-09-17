@@ -1217,13 +1217,27 @@ export function Prompt(props: PromptProps) {
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      if (!sync.data.command.some((x) => x.name === slashCommand)) {
+      if (!sync.data.command.some((x) => x.name === slashCommand.slice(1))) {
         // TUI command invoked from the prompt; forward the remaining text as arguments
         const name = slashCommand.slice(1)
         const tui = command
           .list()
           .find((x) => x.enabled !== false && x.slash && (x.slash.name === name || x.slash.aliases?.includes(name)))
-        if (tui) command.trigger(tui.value, args.trim() || undefined)
+        if (tui) {
+          command.trigger(tui.value, args.trim() || undefined)
+        } else {
+          toast.show({
+            message: `Unknown command: ${slashCommand}`,
+            variant: "error",
+          })
+        }
+        history.append({ ...store.prompt, mode: currentMode })
+        setLastPrompt({ ...store.prompt })
+        input.extmarks.clear()
+        setStore("prompt", { input: "", parts: [] })
+        setStore("extmarkToPartIndex", new Map())
+        props.onSubmit?.()
+        return true
       } else {
         const commandName = slashCommand.slice(1)
         const commandInfo = sync.data.command.find((x) => x.name === commandName)
