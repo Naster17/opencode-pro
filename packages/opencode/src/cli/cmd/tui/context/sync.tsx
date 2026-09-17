@@ -112,7 +112,7 @@ function partIncludesDelta(part: Part, event: QueuedPartDelta) {
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
-    const PART_EVENT_FLUSH_MS = 16    // History is loaded lazily in a sliding window at the tail of the session.
+    const PART_EVENT_FLUSH_MS = 16 // History is loaded lazily in a sliding window at the tail of the session.
     // Opening a session only fetches the most recent HISTORY_TAIL_LIMIT
     // messages; older pages (HISTORY_EARLIER_LIMIT each) are fetched on demand
     // when the user scrolls past the top of the loaded window. HISTORY_MESSAGE_CAP

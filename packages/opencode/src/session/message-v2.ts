@@ -786,7 +786,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   const compactedParts = new Set<string>()
   const cfg = config._tag === "Some" ? yield* config.value.get() : undefined
   const stablePrune = cfg?.compaction?.stable_prune ?? true
-  
+
   if (options?.compactToolOutput && storage._tag === "Some") {
     if (stablePrune) {
       const sessionID = input[0]?.info.sessionID
@@ -804,21 +804,19 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           yield* Effect.forEach(
             toolPartIds,
             (partId) =>
-              storage.value
-                .read<{ compacted: number }>(["compacted_tool", partId])
-                .pipe(
-                  Effect.map(() => {
-                    compactedParts.add(partId)
-                  }),
-                  Effect.catch(() => Effect.void),
-                ),
+              storage.value.read<{ compacted: number }>(["compacted_tool", partId]).pipe(
+                Effect.map(() => {
+                  compactedParts.add(partId)
+                }),
+                Effect.catch(() => Effect.void),
+              ),
             { concurrency: "unbounded" },
           )
         }
       }
     }
   }
-  
+
   // Empty text parts persist in history when a turn ends with only tool calls
   // (processor opens a text block that closes with no deltas) or is aborted.
   // Replaying them as empty content blocks makes strict providers reject the
@@ -845,11 +843,11 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     if (part.state.status === "completed" && part.state.time.compacted) {
       return true
     }
-    
+
     // Check stable_prune storage (new behavior, when stable_prune is enabled)
     return compactedParts.has(part.id)
   }
-  
+
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
   // Track media from tool results that need to be injected as user messages
@@ -1031,7 +1029,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               input: part.state.input,
               output,
               ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-              ...(differentModel || options?.stripProviderMetadata ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+              ...(differentModel || options?.stripProviderMetadata
+                ? {}
+                : { callProviderMetadata: providerMeta(part.metadata) }),
             })
           }
           if (part.state.status === "error") {
@@ -1044,7 +1044,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
                 input: part.state.input,
                 output,
                 ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-                ...(differentModel || options?.stripProviderMetadata ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+                ...(differentModel || options?.stripProviderMetadata
+                  ? {}
+                  : { callProviderMetadata: providerMeta(part.metadata) }),
               })
             } else {
               assistantMessage.parts.push({
@@ -1054,7 +1056,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
                 input: part.state.input,
                 errorText: part.state.error,
                 ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-                ...(differentModel || options?.stripProviderMetadata ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+                ...(differentModel || options?.stripProviderMetadata
+                  ? {}
+                  : { callProviderMetadata: providerMeta(part.metadata) }),
               })
             }
           }
@@ -1068,7 +1072,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               input: part.state.input,
               errorText: "[Tool execution was interrupted]",
               ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-              ...(differentModel || options?.stripProviderMetadata ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+              ...(differentModel || options?.stripProviderMetadata
+                ? {}
+                : { callProviderMetadata: providerMeta(part.metadata) }),
             })
         }
         if (part.type === "reasoning") {
@@ -1246,9 +1252,7 @@ export function filterCompacted(msgs: Iterable<WithParts>) {
   )
   const truncateSlice = (() => {
     if (latestTruncate < 0) return undefined
-    const markerPart = result[latestTruncate].parts.find(
-      (part): part is CompactionPart => part.type === "compaction",
-    )
+    const markerPart = result[latestTruncate].parts.find((part): part is CompactionPart => part.type === "compaction")
     if (!markerPart?.tail_start_id) return result.slice(latestTruncate)
     const tailIndex = result.findIndex((msg) => msg.info.id >= markerPart.tail_start_id!)
     if (tailIndex < 0 || tailIndex > latestTruncate) return result.slice(latestTruncate)

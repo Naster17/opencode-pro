@@ -71,7 +71,8 @@ const Parameters = Schema.Struct({
     description: "Thread IDs for wait. Uses threadID when omitted.",
   }),
   mode: Schema.optional(Schema.Literals(["any", "all"])).annotate({
-    description: "Wait mode for multiple threads: any returns when the first completes, all waits for every thread. Defaults to all.",
+    description:
+      "Wait mode for multiple threads: any returns when the first completes, all waits for every thread. Defaults to all.",
   }),
   timeoutMs: Schema.optional(Schema.Number).annotate({
     description: "Max time to wait in milliseconds for wait or start with wait. Defaults to 30000, max 300000.",
@@ -498,9 +499,7 @@ export const ShellThreadTool = Tool.define<
       const bridge = yield* EffectBridge.make()
       const workload = Effect.gen(function* () {
         const results = yield* threads.wait({ sessionID: ctx.sessionID, threadIDs: ids, mode })
-        const healthy = results.filter(
-          (result) => result.thread.sessionID === ctx.sessionID && result.completed,
-        )
+        const healthy = results.filter((result) => result.thread.sessionID === ctx.sessionID && result.completed)
         if (healthy.length === 0) return
         yield* Effect.promise(() =>
           bridge.promise(
@@ -610,9 +609,13 @@ export const ShellThreadTool = Tool.define<
       const out = preview(output(thread))
       return {
         title: `Started ${thread.description}`,
-        output: [`## ${thread.description} (${thread.id})`, `status: ${thread.status}`, `pid: ${thread.pid}`, "", out].join(
-          "\n",
-        ),
+        output: [
+          `## ${thread.description} (${thread.id})`,
+          `status: ${thread.status}`,
+          `pid: ${thread.pid}`,
+          "",
+          out,
+        ].join("\n"),
         metadata: {
           action: "start",
           threadID: thread.id,

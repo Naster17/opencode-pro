@@ -844,9 +844,7 @@ function ShellThread(props: ToolProps) {
   const active = createMemo(() => props.part.state.status === "running" || props.part.state.status === "pending")
   const action = createMemo(() => stringValue(props.input.action) ?? stringValue(props.metadata.action) ?? "thread")
   const rows = createMemo(() => shellThreadRows(props.metadata))
-  const description = createMemo(
-    () => stringValue(props.input.description) ?? stringValue(props.metadata.description),
-  )
+  const description = createMemo(() => stringValue(props.input.description) ?? stringValue(props.metadata.description))
   const ids = createMemo(() => {
     const raw = props.input.threadIDs
     if (Array.isArray(raw)) {

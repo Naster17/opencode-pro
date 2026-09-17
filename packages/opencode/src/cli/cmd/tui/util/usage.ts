@@ -160,8 +160,7 @@ function estimateCurrentContextTokens(messages: readonly Message[], getParts: (m
         chars += part.source?.text.value.length ?? `[Attached ${part.mime}: ${part.filename ?? "file"}]`.length
       } else if (part.type === "tool") {
         const cleared =
-          compacted.has(part.id) ||
-          (part.state.status === "completed" && part.state.time.compacted != null)
+          compacted.has(part.id) || (part.state.status === "completed" && part.state.time.compacted != null)
         const output = cleared
           ? PRUNED_OUTPUT_PLACEHOLDER
           : part.state.status === "completed"
@@ -197,8 +196,8 @@ function hasTokens(tokens: AssistantMessage["tokens"]) {
 }
 
 function assistantUsage(message: AssistantMessage, getParts: (messageID: string) => readonly Part[]) {
-  const finishes = getParts(message.id).filter((part): part is Extract<Part, { type: "step-finish" }> =>
-    part.type === "step-finish",
+  const finishes = getParts(message.id).filter(
+    (part): part is Extract<Part, { type: "step-finish" }> => part.type === "step-finish",
   )
   if (finishes.length === 0) return { tokens: message.tokens, cost: message.cost ?? 0 }
   return {
@@ -249,7 +248,9 @@ function currentContextUsage(
   )
   const lastAssistant = lastAssistantIndex >= 0 ? (visibleMessages[lastAssistantIndex] as AssistantMessage) : undefined
   const latestAssistant = visibleMessages.findLast((item): item is AssistantMessage => item.role === "assistant")
-  const latestUser = visibleMessages.findLast((item): item is Extract<Message, { role: "user" }> => item.role === "user")
+  const latestUser = visibleMessages.findLast(
+    (item): item is Extract<Message, { role: "user" }> => item.role === "user",
+  )
   const lastUsage = lastAssistant ? assistantUsage(lastAssistant, getParts).tokens : undefined
   const exactTokens = lastUsage ? lastUsage.input + lastUsage.cache.read + lastUsage.cache.write : 0
   const liveAssistant = latestAssistant && !latestAssistant.time.completed ? latestAssistant : undefined
@@ -263,15 +264,10 @@ function currentContextUsage(
       : exactTokens || estimateCurrentContextTokens(visibleMessages, getParts)
   if (liveTokens <= 0) return { tokens: 0, percent: null as number | null }
 
-  const providerID =
-    session?.model?.providerID ??
-    latestAssistant?.providerID ??
-    latestUser?.model.providerID
-  const modelID =
-    session?.model?.id ??
-    latestAssistant?.modelID ??
-    latestUser?.model.modelID
-  const limit = providerID && modelID ? providers.find((item) => item.id === providerID)?.models[modelID]?.limit.context : undefined
+  const providerID = session?.model?.providerID ?? latestAssistant?.providerID ?? latestUser?.model.providerID
+  const modelID = session?.model?.id ?? latestAssistant?.modelID ?? latestUser?.model.modelID
+  const limit =
+    providerID && modelID ? providers.find((item) => item.id === providerID)?.models[modelID]?.limit.context : undefined
   return {
     tokens: liveTokens,
     percent: limit ? Math.round((liveTokens / limit) * 100) : null,
@@ -367,7 +363,8 @@ export function summarizeUsage(
       const context_percent =
         last && context_tokens > 0
           ? (() => {
-              const limit = providers.find((item) => item.id === last.message.providerID)?.models[last.message.modelID]?.limit.context
+              const limit = providers.find((item) => item.id === last.message.providerID)?.models[last.message.modelID]
+                ?.limit.context
               if (!limit) return null
               return Math.round((context_tokens / limit) * 100)
             })()

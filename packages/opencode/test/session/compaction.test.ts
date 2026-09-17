@@ -1449,32 +1449,35 @@ describe("session.compaction.truncate", () => {
     ),
   )
 
-  it.live("returns zeros when there is nothing to cut", provideTmpdirInstance(() =>
-    Effect.gen(function* () {
-      const compact = yield* SessionCompaction.Service
-      const ssn = yield* SessionNs.Service
-      const info = yield* ssn.create({})
-      const user = yield* ssn.updateMessage({
-        id: MessageID.ascending(),
-        role: "user",
-        sessionID: info.id,
-        agent: "build",
-        model: ref,
-        time: { created: Date.now() },
-      })
-      yield* ssn.updatePart({
-        id: PartID.ascending(),
-        messageID: user.id,
-        sessionID: info.id,
-        type: "text",
-        text: "only turn",
-      })
+  it.live(
+    "returns zeros when there is nothing to cut",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const info = yield* ssn.create({})
+        const user = yield* ssn.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: info.id,
+          agent: "build",
+          model: ref,
+          time: { created: Date.now() },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: user.id,
+          sessionID: info.id,
+          type: "text",
+          text: "only turn",
+        })
 
-      const result = yield* compact.truncate({ sessionID: info.id, agent: "build", model: ref })
-      expect(result.messages).toBe(0)
-      expect(result.tokens).toBe(0)
-    }),
-  ))
+        const result = yield* compact.truncate({ sessionID: info.id, agent: "build", model: ref })
+        expect(result.messages).toBe(0)
+        expect(result.tokens).toBe(0)
+      }),
+    ),
+  )
 
   it.live(
     "cuts a token-heavy session to the default window even with few messages",
@@ -1605,97 +1608,16 @@ describe("session.compaction.truncate", () => {
     ),
   )
 
-  it.live("ignores tool outputs hidden behind a summary boundary", provideTmpdirInstance((dir) =>
-    Effect.gen(function* () {
-      const compact = yield* SessionCompaction.Service
-      const ssn = yield* SessionNs.Service
-      const info = yield* ssn.create({})
+  it.live(
+    "ignores tool outputs hidden behind a summary boundary",
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const info = yield* ssn.create({})
 
-      // Older turn with a big tool output…
-      const first = yield* ssn.updateMessage({
-        id: MessageID.ascending(),
-        role: "user",
-        sessionID: info.id,
-        agent: "build",
-        model: ref,
-        time: { created: Date.now() },
-      })
-      yield* ssn.updatePart({
-        id: PartID.ascending(),
-        messageID: first.id,
-        sessionID: info.id,
-        type: "text",
-        text: "first",
-      })
-      const toolMsg: MessageV2.Assistant = {
-        id: MessageID.ascending(),
-        role: "assistant",
-        sessionID: info.id,
-        mode: "build",
-        agent: "build",
-        path: { cwd: dir, root: dir },
-        cost: 0,
-        tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-        modelID: ref.modelID,
-        providerID: ref.providerID,
-        parentID: first.id,
-        time: { created: Date.now() },
-        finish: "end_turn",
-      }
-      yield* ssn.updateMessage(toolMsg)
-      yield* ssn.updatePart({
-        id: PartID.ascending(),
-        messageID: toolMsg.id,
-        sessionID: info.id,
-        type: "tool",
-        callID: crypto.randomUUID(),
-        tool: "bash",
-        state: {
-          status: "completed",
-          input: {},
-          output: "x".repeat(200_000),
-          title: "done",
-          metadata: {},
-          time: { start: Date.now(), end: Date.now() },
-        },
-      })
-
-      // …then a completed compaction pair, then newer turns. The hidden tool
-      // output never reaches the wire, so prune must leave it alone.
-      const markerMsg = yield* ssn.updateMessage({
-        id: MessageID.ascending(),
-        role: "user",
-        sessionID: info.id,
-        agent: "build",
-        model: ref,
-        time: { created: Date.now() },
-      })
-      yield* ssn.updatePart({
-        id: PartID.ascending(),
-        messageID: markerMsg.id,
-        sessionID: info.id,
-        type: "compaction",
-        auto: true,
-      })
-      yield* ssn.updateMessage({
-        id: MessageID.ascending(),
-        role: "assistant",
-        sessionID: info.id,
-        mode: "compaction",
-        agent: "compaction",
-        parentID: markerMsg.id,
-        summary: true,
-        path: { cwd: dir, root: dir },
-        cost: 0,
-        tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-        modelID: ref.modelID,
-        providerID: ref.providerID,
-        time: { created: Date.now(), completed: Date.now() },
-        finish: "stop",
-      })
-
-      for (const text of ["second", "third"]) {
-        const msg = yield* ssn.updateMessage({
+        // Older turn with a big tool output…
+        const first = yield* ssn.updateMessage({
           id: MessageID.ascending(),
           role: "user",
           sessionID: info.id,
@@ -1705,18 +1627,102 @@ describe("session.compaction.truncate", () => {
         })
         yield* ssn.updatePart({
           id: PartID.ascending(),
-          messageID: msg.id,
+          messageID: first.id,
           sessionID: info.id,
           type: "text",
-          text,
+          text: "first",
         })
-      }
+        const toolMsg: MessageV2.Assistant = {
+          id: MessageID.ascending(),
+          role: "assistant",
+          sessionID: info.id,
+          mode: "build",
+          agent: "build",
+          path: { cwd: dir, root: dir },
+          cost: 0,
+          tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: ref.modelID,
+          providerID: ref.providerID,
+          parentID: first.id,
+          time: { created: Date.now() },
+          finish: "end_turn",
+        }
+        yield* ssn.updateMessage(toolMsg)
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: toolMsg.id,
+          sessionID: info.id,
+          type: "tool",
+          callID: crypto.randomUUID(),
+          tool: "bash",
+          state: {
+            status: "completed",
+            input: {},
+            output: "x".repeat(200_000),
+            title: "done",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
 
-      const result = yield* compact.prune({ sessionID: info.id })
-      expect(result.pruned).toBe(0)
-      expect(result.tokens).toBe(0)
-    }),
-  ))
+        // …then a completed compaction pair, then newer turns. The hidden tool
+        // output never reaches the wire, so prune must leave it alone.
+        const markerMsg = yield* ssn.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: info.id,
+          agent: "build",
+          model: ref,
+          time: { created: Date.now() },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: markerMsg.id,
+          sessionID: info.id,
+          type: "compaction",
+          auto: true,
+        })
+        yield* ssn.updateMessage({
+          id: MessageID.ascending(),
+          role: "assistant",
+          sessionID: info.id,
+          mode: "compaction",
+          agent: "compaction",
+          parentID: markerMsg.id,
+          summary: true,
+          path: { cwd: dir, root: dir },
+          cost: 0,
+          tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: ref.modelID,
+          providerID: ref.providerID,
+          time: { created: Date.now(), completed: Date.now() },
+          finish: "stop",
+        })
+
+        for (const text of ["second", "third"]) {
+          const msg = yield* ssn.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID: info.id,
+            agent: "build",
+            model: ref,
+            time: { created: Date.now() },
+          })
+          yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: msg.id,
+            sessionID: info.id,
+            type: "text",
+            text,
+          })
+        }
+
+        const result = yield* compact.prune({ sessionID: info.id })
+        expect(result.pruned).toBe(0)
+        expect(result.tokens).toBe(0)
+      }),
+    ),
+  )
 })
 
 describe("session.compaction.process", () => {

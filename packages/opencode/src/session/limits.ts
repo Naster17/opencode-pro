@@ -16,11 +16,7 @@ const flags = new Map<SessionID, Info>()
 
 export interface Interface {
   readonly get: (sessionID: SessionID) => Effect.Effect<Info>
-  readonly set: (input: {
-    sessionID: SessionID
-    enabled?: boolean
-    threshold?: number | null
-  }) => Effect.Effect<Info>
+  readonly set: (input: { sessionID: SessionID; enabled?: boolean; threshold?: number | null }) => Effect.Effect<Info>
 }
 
 export const DEFAULT_INFO: Info = { enabled: false }

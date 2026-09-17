@@ -186,7 +186,7 @@ export function DialogSessionList() {
     dialog.setSize("large")
   })
 
-    return (
+  return (
     <DialogSelect
       title="Sessions"
       options={options()}

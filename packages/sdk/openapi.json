@@ -5946,7 +5946,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "boolean",
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "threshold": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["enabled"],
+                  "additionalProperties": false,
                   "description": "Updated"
                 }
               }
@@ -5973,7 +5983,7 @@
             }
           }
         },
-        "description": "Per-session runtime flag that disables auto-compaction and context window limit enforcement for the session.",
+        "description": "Per-session runtime flag that disables auto-compaction and context window limit enforcement for the session. Set threshold to only suppress auto-compaction until the session reaches that many tokens.",
         "summary": "Toggle no-compact mode",
         "requestBody": {
           "content": {
@@ -5983,9 +5993,11 @@
                 "properties": {
                   "enabled": {
                     "type": "boolean"
+                  },
+                  "threshold": {
+                    "type": "number"
                   }
                 },
-                "required": ["enabled"],
                 "additionalProperties": false
               }
             }
@@ -5995,6 +6007,515 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.nocompact({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/prune": {
+      "post": {
+        "tags": ["session"],
+        "operationId": "session.prune",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pruned tool outputs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "pruned": {
+                      "type": "number"
+                    },
+                    "tokens": {
+                      "type": "number"
+                    },
+                    "belowMinimum": {
+                      "type": "boolean"
+                    },
+                    "scanned": {
+                      "type": "number"
+                    },
+                    "protectedTokens": {
+                      "type": "number"
+                    },
+                    "alreadyCleared": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["pruned", "tokens"],
+                  "additionalProperties": false,
+                  "description": "Pruned tool outputs"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Compress old tool call outputs to free context space. Set dryRun to only estimate savings, or force to prune even below the minimum token threshold.",
+        "summary": "Prune tool outputs",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dryRun": {
+                    "type": "boolean"
+                  },
+                  "force": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.prune({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/truncate": {
+      "post": {
+        "tags": ["session"],
+        "operationId": "session.truncate",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Truncated session history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "messages": {
+                      "type": "number"
+                    },
+                    "tokens": {
+                      "type": "number"
+                    },
+                    "keptMessages": {
+                      "type": "number"
+                    },
+                    "kept": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["messages", "tokens", "keptMessages", "kept"],
+                  "additionalProperties": false,
+                  "description": "Truncated session history"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Cut older messages out of the model context without an LLM summary, keeping a recent token slice (default ~25% of visible tokens). Appends a truncate marker that undo/redo can revert.",
+        "summary": "Truncate session history",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "keepMessages": {
+                    "type": "number"
+                  },
+                  "ratio": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.truncate({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/shell_thread": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "session.shell_thread_list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Shell thread details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "threadID": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": ["running", "exited", "stopped", "failed"]
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "command": {
+                        "type": "string"
+                      },
+                      "cwd": {
+                        "type": "string"
+                      },
+                      "pid": {
+                        "type": "number"
+                      },
+                      "startedAt": {
+                        "type": "number"
+                      },
+                      "updatedAt": {
+                        "type": "number"
+                      },
+                      "exitCode": {
+                        "type": "number"
+                      },
+                      "error": {
+                        "type": "string"
+                      },
+                      "cursor": {
+                        "type": "number"
+                      },
+                      "bytes": {
+                        "type": "number"
+                      },
+                      "outputTail": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "threadID",
+                      "status",
+                      "description",
+                      "command",
+                      "cwd",
+                      "pid",
+                      "startedAt",
+                      "updatedAt",
+                      "cursor",
+                      "bytes",
+                      "outputTail"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "Shell thread details"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Inspect the shell threads of a session, including command, working directory, pid, status and recent output.",
+        "summary": "List shell threads",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.shell_thread_list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/shell_thread/{threadID}/stop": {
+      "post": {
+        "tags": ["session"],
+        "operationId": "session.shell_thread_stop",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "name": "threadID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stopped shell thread",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "threadID": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["running", "exited", "stopped", "failed"]
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "command": {
+                      "type": "string"
+                    },
+                    "cwd": {
+                      "type": "string"
+                    },
+                    "pid": {
+                      "type": "number"
+                    },
+                    "startedAt": {
+                      "type": "number"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    },
+                    "exitCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "cursor": {
+                      "type": "number"
+                    },
+                    "bytes": {
+                      "type": "number"
+                    },
+                    "outputTail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "threadID",
+                    "status",
+                    "description",
+                    "command",
+                    "cwd",
+                    "pid",
+                    "startedAt",
+                    "updatedAt",
+                    "cursor",
+                    "bytes",
+                    "outputTail"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Stopped shell thread"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stop a running shell thread. Defaults to SIGTERM; use SIGKILL to force kill.",
+        "summary": "Stop shell thread",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "signal": {
+                    "type": "string",
+                    "enum": ["SIGTERM", "SIGKILL", "SIGINT", "SIGHUP"]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.shell_thread_stop({\n  ...\n})"
           }
         ]
       }
@@ -10624,11 +11145,56 @@
           "overflow": {
             "type": "boolean"
           },
+          "truncated": {
+            "type": "boolean"
+          },
           "tail_start_id": {
             "type": "string"
+          },
+          "removedMessages": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "removedTokens": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id", "sessionID", "messageID", "type", "auto"],
+        "additionalProperties": false
+      },
+      "PrunePart": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "messageID": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["prune"]
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "tokens": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "partIDs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["id", "sessionID", "messageID", "type", "count", "tokens", "partIDs"],
         "additionalProperties": false
       },
       "Part": {
@@ -10668,6 +11234,9 @@
           },
           {
             "$ref": "#/components/schemas/CompactionPart"
+          },
+          {
+            "$ref": "#/components/schemas/PrunePart"
           }
         ]
       },

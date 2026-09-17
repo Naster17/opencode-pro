@@ -267,7 +267,8 @@ export const Info = Schema.Struct({
         description: "Enable automatic compaction when context is full (default: true)",
       }),
       prune: Schema.optional(Schema.Boolean).annotate({
-        description: "Enable automatic pruning of old tool outputs after each turn (default: false, use /prune manually)",
+        description:
+          "Enable automatic pruning of old tool outputs after each turn (default: false, use /prune manually)",
       }),
       stable_prune: Schema.optional(Schema.Boolean).annotate({
         description:

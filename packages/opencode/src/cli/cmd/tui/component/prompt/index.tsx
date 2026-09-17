@@ -1205,9 +1205,9 @@ export function Prompt(props: PromptProps) {
       iife(() => {
         const name = inputText.split("\n")[0].split(" ")[0].slice(1)
         if (sync.data.command.some((x) => x.name === name)) return true
-        return command.list().some(
-          (x) => x.enabled !== false && x.slash && (x.slash.name === name || x.slash.aliases?.includes(name)),
-        )
+        return command
+          .list()
+          .some((x) => x.enabled !== false && x.slash && (x.slash.name === name || x.slash.aliases?.includes(name)))
       })
     ) {
       // Parse command from first line, preserve multi-line content in arguments
@@ -1220,9 +1220,9 @@ export function Prompt(props: PromptProps) {
       if (!sync.data.command.some((x) => x.name === slashCommand)) {
         // TUI command invoked from the prompt; forward the remaining text as arguments
         const name = slashCommand.slice(1)
-        const tui = command.list().find(
-          (x) => x.enabled !== false && x.slash && (x.slash.name === name || x.slash.aliases?.includes(name)),
-        )
+        const tui = command
+          .list()
+          .find((x) => x.enabled !== false && x.slash && (x.slash.name === name || x.slash.aliases?.includes(name)))
         if (tui) command.trigger(tui.value, args.trim() || undefined)
       } else {
         void sdk.client.session.command({

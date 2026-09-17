@@ -351,11 +351,7 @@ export interface Interface {
     model: Provider.Model
     sessionID: SessionID
   }) => Effect.Effect<boolean>
-  readonly prune: (input: {
-    sessionID: SessionID
-    force?: boolean
-    dryRun?: boolean
-  }) => Effect.Effect<{
+  readonly prune: (input: { sessionID: SessionID; force?: boolean; dryRun?: boolean }) => Effect.Effect<{
     pruned: number
     tokens: number
     belowMinimum?: boolean
@@ -604,9 +600,7 @@ export const layer: Layer.Layer<
         if (stablePrune) {
           // Store compacted metadata separately to avoid modifying old parts.
           // This prevents cache invalidation. The compacted status is checked in toModelMessagesEffect.
-          const compactedPartIDs = toPrune.flatMap((part) =>
-            part.state.status === "completed" ? [part.id] : [],
-          )
+          const compactedPartIDs = toPrune.flatMap((part) => (part.state.status === "completed" ? [part.id] : []))
           const existing = yield* storage
             .read<{ compacted: number; partIDs?: string[] }>(["compacted_tool_session", input.sessionID])
             .pipe(Effect.catch(() => Effect.succeed({ compacted: compactedAt, partIDs: [] })))

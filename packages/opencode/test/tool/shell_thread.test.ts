@@ -140,9 +140,7 @@ describe("tool.shell_thread", () => {
 
         await wait(300)
         const details = await runtime.runPromise(
-          ShellThread.Service.use((service) =>
-            service.inspect({ sessionID: SessionID.make("ses_shell_thread") }),
-          ),
+          ShellThread.Service.use((service) => service.inspect({ sessionID: SessionID.make("ses_shell_thread") })),
         )
         const detail = details.find((item) => item.threadID === threadID)
         expect(detail).toBeDefined()
@@ -152,9 +150,7 @@ describe("tool.shell_thread", () => {
         expect(detail!.pid).toBeNumber()
         expect(detail!.outputTail).toContain("inspect-me")
 
-        await Effect.runPromise(
-          tool.execute({ action: "stop", threadID, signal: "SIGKILL" }, ctx()),
-        )
+        await Effect.runPromise(tool.execute({ action: "stop", threadID, signal: "SIGKILL" }, ctx()))
       },
     })
   })
@@ -178,9 +174,7 @@ describe("tool.shell_thread", () => {
         )
         const threadID = String(start.metadata.threadID)
 
-        const result = await Effect.runPromise(
-          tool.execute({ action: "wait", threadID, timeoutMs: 10_000 }, ctx()),
-        )
+        const result = await Effect.runPromise(tool.execute({ action: "wait", threadID, timeoutMs: 10_000 }, ctx()))
         expect(result.metadata.timedOut).toBe(false)
         expect(result.output).toContain("waited-done")
         expect(result.output).toContain("exited")
@@ -210,9 +204,7 @@ describe("tool.shell_thread", () => {
         const threadID = String(start.metadata.threadID)
 
         const started = Date.now()
-        const result = await Effect.runPromise(
-          tool.execute({ action: "wait", threadID, timeoutMs: 500 }, ctx()),
-        )
+        const result = await Effect.runPromise(tool.execute({ action: "wait", threadID, timeoutMs: 500 }, ctx()))
         expect(Date.now() - started).toBeLessThan(10_000)
         expect(result.metadata.timedOut).toBe(true)
         expect(result.output).toContain('<wait_timeout ms="500" running="1">')
