@@ -451,7 +451,7 @@ export function Autocomplete(props: {
         "description",
         (obj) => obj.aliases?.join(" ") ?? "",
       ],
-      limit: 10,
+      limit: store.visible === "/" ? 50 : 10,
       scoreFn: (objResults) => {
         const displayResult = objResults[0]
         let score = objResults.score
@@ -471,25 +471,22 @@ export function Autocomplete(props: {
     setStore("selected", 0)
   })
 
-  function move(direction: -1 | 1) {
+  function move(direction: number) {
     if (!store.visible) return
     if (!options().length) return
-    let next = store.selected + direction
-    if (next < 0) next = options().length - 1
-    if (next >= options().length) next = 0
+    const count = options().length
+    let next = (((store.selected + direction) % count) + count) % count
     moveTo(next)
   }
 
   function moveTo(next: number) {
     setStore("selected", next)
     if (!scroll) return
-    const viewportHeight = Math.min(height(), options().length)
-    const scrollBottom = scroll.scrollTop + viewportHeight
-    if (next < scroll.scrollTop) {
-      scroll.scrollBy(next - scroll.scrollTop)
-    } else if (next + 1 > scrollBottom) {
-      scroll.scrollBy(next + 1 - scrollBottom)
-    }
+    const count = options().length
+    const viewportHeight = Math.min(height(), count)
+    if (viewportHeight <= 0) return
+    const target = Math.min(Math.max(0, next - Math.floor(viewportHeight / 2)), Math.max(0, count - viewportHeight))
+    scroll.scrollTo(target)
   }
 
   function select() {
@@ -632,6 +629,30 @@ export function Autocomplete(props: {
             e.preventDefault()
             return
           }
+          if (name === "pagedown") {
+            setStore("input", "keyboard")
+            move(10)
+            e.preventDefault()
+            return
+          }
+          if (name === "pageup") {
+            setStore("input", "keyboard")
+            move(-10)
+            e.preventDefault()
+            return
+          }
+          if (name === "home") {
+            setStore("input", "keyboard")
+            moveTo(0)
+            e.preventDefault()
+            return
+          }
+          if (name === "end") {
+            setStore("input", "keyboard")
+            moveTo(options().length - 1)
+            e.preventDefault()
+            return
+          }
         }
         if (!store.visible) {
           if (e.name === "@") {
@@ -703,7 +724,10 @@ export function Autocomplete(props: {
                 setStore("input", "mouse")
                 moveTo(index)
               }}
-              onMouseUp={() => select()}
+              onMouseUp={() => {
+            setStore("input", "mouse")
+            select()
+          }}
             >
               <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
                 {option().display}
