@@ -37,12 +37,7 @@ export function SessionPermissionDock(props: {
             <Button variant="ghost" size="normal" onClick={() => props.onDecide("reject")} disabled={props.responding}>
               {language.t("ui.permission.deny")}
             </Button>
-            <Button
-              variant="ghost"
-              size="normal"
-              onClick={() => props.onDecide("session")}
-              disabled={props.responding}
-            >
+            <Button variant="ghost" size="normal" onClick={() => props.onDecide("session")} disabled={props.responding}>
               Allow all
             </Button>
             <Button

@@ -334,7 +334,7 @@ type MessageTransformConfig = {
 
 function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: CachingConfig): ModelMessage[] {
   const cachingEnabled = config?.enabled ?? true
-  
+
   if (!cachingEnabled) {
     return msgs
   }
@@ -343,14 +343,14 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: Cach
 
   // Cache system prompts (first 2)
   const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
-  
+
   // Cache conversation history more aggressively:
   // - All messages except the last user message and its response
   // - This allows the entire conversation history to be cached
   // Transient calls like /btw can read existing cache points, but should not
   // advance the durable session cache head to a side-quest turn.
   const nonSystem = msgs.filter((msg) => msg.role !== "system")
-  
+
   // Find the last user message index
   let lastUserIndex = -1
   for (let i = nonSystem.length - 1; i >= 0; i--) {
@@ -359,14 +359,15 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: Cach
       break
     }
   }
-  
+
   const minMessages = config?.min_messages ?? 5
-  
+
   // Cache everything except the last user message (and any assistant response after it)
   // This maximizes cache hits while keeping the current turn fresh
   const cacheableHistory = lastUserIndex > 0 && nonSystem.length >= minMessages ? nonSystem.slice(0, lastUserIndex) : []
-  const singleTurnUser = system.length === 0 && nonSystem.length === 1 && nonSystem[0].role === "user" ? nonSystem[0] : undefined
-  
+  const singleTurnUser =
+    system.length === 0 && nonSystem.length === 1 && nonSystem[0].role === "user" ? nonSystem[0] : undefined
+
   // For very long conversations, add cache breakpoints every N messages to improve hit rate
   const CACHE_BREAKPOINT_INTERVAL = config?.breakpoint_interval ?? 10
   const breakpointIndices = new Set<number>()
@@ -432,7 +433,7 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: Cach
       breakpointIndices.has(i) ||
       i === transientHistoryBreakpoint ||
       (!config?.transient && i === cacheableHistory.length - 1)
-    
+
     // Only apply cache control at breakpoints to avoid excessive cache entries
     if (!isBreakpoint) continue
 
@@ -503,7 +504,12 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
   })
 }
 
-export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>, config?: MessageTransformConfig) {
+export function message(
+  msgs: ModelMessage[],
+  model: Provider.Model,
+  options: Record<string, unknown>,
+  config?: MessageTransformConfig,
+) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
   if (
@@ -526,16 +532,18 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
       typeof options.reasoningEffort === "string" && ["low", "medium", "high"].includes(options.reasoningEffort)
         ? options.reasoningEffort
         : "medium"
-    
+
     // Cache the current date at midnight to avoid breaking cache every second
     // This ensures the date only changes once per day, maximizing cache hits
     const normalizeDates = config?.caching?.normalize_dates ?? true
-    const stableDate = normalizeDates ? (() => {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      return today.toISOString().slice(0, 10)
-    })() : new Date().toISOString().slice(0, 10)
-    
+    const stableDate = normalizeDates
+      ? (() => {
+          const today = new Date()
+          today.setHours(0, 0, 0, 0)
+          return today.toISOString().slice(0, 10)
+        })()
+      : new Date().toISOString().slice(0, 10)
+
     msgs = [
       {
         role: "system",

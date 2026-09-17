@@ -14,9 +14,16 @@ const OPENCODE_SERVER_DIST = "../opencode/dist/node"
 const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
 const rendererSourcemap = process.env.ELECTRON_RENDERER_SOURCEMAP !== "false"
 
-const ignoreKnownBuildWarnings = (warning: { code?: string; id?: string; message: string }, next: (warning: unknown) => void) => {
+const ignoreKnownBuildWarnings = (
+  warning: { code?: string; id?: string; message: string },
+  next: (warning: unknown) => void,
+) => {
   if (warning.code === "EVAL" && warning.id?.includes("/packages/opencode/dist/node/node.js")) return
-  if (warning.message.includes("dynamically imported by") && warning.message.includes("will not move module into another chunk")) return
+  if (
+    warning.message.includes("dynamically imported by") &&
+    warning.message.includes("will not move module into another chunk")
+  )
+    return
   next(warning)
 }
 

@@ -143,7 +143,13 @@ describe("billed usage tracker", () => {
           tracker.onEvent({
             id: "e4",
             type: "message.part.delta",
-            properties: { sessionID: "session_1", messageID: "msg_3", partID: "p4", field: "text", delta: "a".repeat(8) },
+            properties: {
+              sessionID: "session_1",
+              messageID: "msg_3",
+              partID: "p4",
+              field: "text",
+              delta: "a".repeat(8),
+            },
           })
           tracker.flush()
 

@@ -55,7 +55,7 @@ function usageKey(
           item.session?.revert?.messageID ?? "",
           item.messages.length,
           last?.id ?? "",
-          last?.role === "assistant" ? last.time.completed ?? 0 : last?.time.created ?? 0,
+          last?.role === "assistant" ? (last.time.completed ?? 0) : (last?.time.created ?? 0),
           item.additions ?? 0,
           item.deletions ?? 0,
         ].join(":")
@@ -144,7 +144,11 @@ export function DialogUsage() {
       }
     })
   })
-  const allSessions = createMemo(() => sessionData().filter((item) => !item.session?.parentID).flatMap((item) => item.sessions))
+  const allSessions = createMemo(() =>
+    sessionData()
+      .filter((item) => !item.session?.parentID)
+      .flatMap((item) => item.sessions),
+  )
 
   onMount(() => {
     dialog.setSize("large")
@@ -154,7 +158,10 @@ export function DialogUsage() {
       setMode("sections")
       return false
     })
-    void syncUsageSessions(sync.data.session.map((item) => item.id), sync).finally(() => setLoading(false))
+    void syncUsageSessions(
+      sync.data.session.map((item) => item.id),
+      sync,
+    ).finally(() => setLoading(false))
   })
 
   onCleanup(() => {
@@ -216,9 +223,7 @@ export function DialogUsage() {
   const modelTokensWidth = createMemo(() =>
     Math.max("tokens".length, ...models().map((item) => formatCompactTokens(item.tokens).length)),
   )
-  const modelSpentWidth = createMemo(() =>
-    Math.max("spent".length, ...models().map((item) => money(item.cost).length)),
-  )
+  const modelSpentWidth = createMemo(() => Math.max("spent".length, ...models().map((item) => money(item.cost).length)))
   const modelTitleWidth = createMemo(() =>
     Math.max(12, contentWidth - 1 - modelCallsWidth() - 2 - modelTokensWidth() - 2 - modelSpentWidth()),
   )

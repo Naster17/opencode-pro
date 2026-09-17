@@ -507,7 +507,11 @@ describe("session.compaction.isOverflow", () => {
         const withoutInputLimit = createModel({ context: 200_000, output: 32_000 })
         const tokens = { input: 166_000, output: 9_000, reasoning: 0, cache: { read: 5_000, write: 0 } }
 
-        const withLimit = yield* compact.isOverflow({ tokens, model: withInputLimit, sessionID: SessionID.descending() })
+        const withLimit = yield* compact.isOverflow({
+          tokens,
+          model: withInputLimit,
+          sessionID: SessionID.descending(),
+        })
         const withoutLimit = yield* compact.isOverflow({
           tokens,
           model: withoutInputLimit,

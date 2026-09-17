@@ -54,7 +54,9 @@ export function helpCommandSearchTerms(command: Pick<CommandOption, "slash">, bi
 export function matchesHelpQuery(query: string, row: Pick<HelpRow, "label" | "description" | "meta" | "search">) {
   const needle = normalizeHelpText(query)
   if (!needle) return true
-  return [row.label, row.description, row.meta, ...row.search].some((item) => item && normalizeHelpText(item).includes(needle))
+  return [row.label, row.description, row.meta, ...row.search].some(
+    (item) => item && normalizeHelpText(item).includes(needle),
+  )
 }
 
 function keybindCategory(key: string) {
@@ -213,48 +215,51 @@ export function DialogHelp(props: { commands: CommandOption[] }) {
   )
 
   const commandSections = createMemo(() =>
-    [...new Set(commands().map((item) => item.category))].map((category) => ({
-      title: `Commands · ${category}`,
-      rows: commands()
-        .filter((item) => item.category === category)
-        .map((item) => item.row)
-        .filter((row) => matchesHelpQuery(query(), row)),
-    })).filter((section) => section.rows.length > 0),
+    [...new Set(commands().map((item) => item.category))]
+      .map((category) => ({
+        title: `Commands · ${category}`,
+        rows: commands()
+          .filter((item) => item.category === category)
+          .map((item) => item.row)
+          .filter((row) => matchesHelpQuery(query(), row)),
+      }))
+      .filter((section) => section.rows.length > 0),
   )
 
-  const overviewRows = createMemo(() =>
-    [
-      {
-        label: "Command palette",
-        meta: keybind.print("command_list"),
-        description: "Browse every available action in the current context.",
-        search: helpSearchTerms(keybind.print("command_list")),
-      },
-      {
-        label: "Agent switch",
-        meta: keybind.print("agent_cycle"),
-        description: "Move between agents without leaving the prompt.",
-        search: helpSearchTerms(keybind.print("agent_cycle")),
-      },
-      {
-        label: "Model switch",
-        meta: keybind.print("model_list"),
-        description: "Pick a model, provider, or variant for the active agent.",
-        search: helpSearchTerms(keybind.print("model_list")),
-      },
-      {
-        label: "Sidebar toggle",
-        meta: keybind.print("sidebar_toggle"),
-        description: "Show or hide the session sidebar.",
-        search: helpSearchTerms(keybind.print("sidebar_toggle")),
-      },
-      {
-        label: "Interrupt run",
-        meta: keybind.print("session_interrupt"),
-        description: "Stop the current generation or tool run.",
-        search: helpSearchTerms(keybind.print("session_interrupt")),
-      },
-    ].filter((row) => matchesHelpQuery(query(), row)) satisfies HelpRow[],
+  const overviewRows = createMemo(
+    () =>
+      [
+        {
+          label: "Command palette",
+          meta: keybind.print("command_list"),
+          description: "Browse every available action in the current context.",
+          search: helpSearchTerms(keybind.print("command_list")),
+        },
+        {
+          label: "Agent switch",
+          meta: keybind.print("agent_cycle"),
+          description: "Move between agents without leaving the prompt.",
+          search: helpSearchTerms(keybind.print("agent_cycle")),
+        },
+        {
+          label: "Model switch",
+          meta: keybind.print("model_list"),
+          description: "Pick a model, provider, or variant for the active agent.",
+          search: helpSearchTerms(keybind.print("model_list")),
+        },
+        {
+          label: "Sidebar toggle",
+          meta: keybind.print("sidebar_toggle"),
+          description: "Show or hide the session sidebar.",
+          search: helpSearchTerms(keybind.print("sidebar_toggle")),
+        },
+        {
+          label: "Interrupt run",
+          meta: keybind.print("session_interrupt"),
+          description: "Stop the current generation or tool run.",
+          search: helpSearchTerms(keybind.print("session_interrupt")),
+        },
+      ].filter((row) => matchesHelpQuery(query(), row)) satisfies HelpRow[],
   )
 
   const hasResults = createMemo(

@@ -25,11 +25,13 @@ export const TuiOptions = z.object({
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   code_block: z
     .object({
-      default_mode: z
-        .enum(["collapsed", "extended"])
+      default_mode: z.enum(["collapsed", "extended"]).optional().describe("Default display mode for large code blocks"),
+      collapse_lines: z
+        .number()
+        .int()
+        .min(1)
         .optional()
-        .describe("Default display mode for large code blocks"),
-      collapse_lines: z.number().int().min(1).optional().describe("Number of lines to show before collapsing code blocks"),
+        .describe("Number of lines to show before collapsing code blocks"),
     })
     .optional()
     .describe("Large code block display settings"),

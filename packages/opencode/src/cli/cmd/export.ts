@@ -289,28 +289,26 @@ const run = Effect.fn("Cli.export.body")(function* (args: { sessionID?: string; 
       if (msg.info.role !== "user") return Effect.succeed(msg)
       const info = msg.info as MessageV2.User
       if (info.summary?.diffs) return Effect.succeed(msg)
-      return storage
-        .read<Snapshot.FileDiff[]>(["message_diff", sessionInfo.id, msg.info.id])
-        .pipe(
-          Effect.catch(() => storage.read<Snapshot.FileDiff[]>(["message_diff", msg.info.id])),
-          Effect.map(
-            (diffs) =>
-              ({
-                ...msg,
-                info: {
-                  ...info,
-                  summary: info.summary
-                    ? {
-                        title: info.summary.title,
-                        body: info.summary.body,
-                        diffs,
-                      }
-                    : { diffs },
-                },
-              }) satisfies MessageV2.WithParts,
-          ),
-          Effect.catch(() => Effect.succeed(msg)),
-        )
+      return storage.read<Snapshot.FileDiff[]>(["message_diff", sessionInfo.id, msg.info.id]).pipe(
+        Effect.catch(() => storage.read<Snapshot.FileDiff[]>(["message_diff", msg.info.id])),
+        Effect.map(
+          (diffs) =>
+            ({
+              ...msg,
+              info: {
+                ...info,
+                summary: info.summary
+                  ? {
+                      title: info.summary.title,
+                      body: info.summary.body,
+                      diffs,
+                    }
+                  : { diffs },
+              },
+            }) satisfies MessageV2.WithParts,
+        ),
+        Effect.catch(() => Effect.succeed(msg)),
+      )
     })
 
     const exportData = { info: sessionInfo, messages: exportMessages }

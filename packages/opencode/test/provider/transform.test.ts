@@ -2423,12 +2423,22 @@ describe("ProviderTransform.message - transient caching", () => {
     ] as any[]
 
   test("does not advance the durable cache head for transient turns", () => {
-    const normal = ProviderTransform.message(messages(), model, {}, {
-      caching: { breakpoint_interval: 100, min_messages: 1 },
-    }) as any[]
-    const transient = ProviderTransform.message(messages(), model, {}, {
-      caching: { breakpoint_interval: 100, min_messages: 1, transient: true },
-    }) as any[]
+    const normal = ProviderTransform.message(
+      messages(),
+      model,
+      {},
+      {
+        caching: { breakpoint_interval: 100, min_messages: 1 },
+      },
+    ) as any[]
+    const transient = ProviderTransform.message(
+      messages(),
+      model,
+      {},
+      {
+        caching: { breakpoint_interval: 100, min_messages: 1, transient: true },
+      },
+    ) as any[]
 
     expect(normal[4].providerOptions?.anthropic?.cacheControl).toEqual({ type: "ephemeral" })
     expect(transient[2].providerOptions?.anthropic?.cacheControl).toEqual({ type: "ephemeral" })
@@ -2440,9 +2450,14 @@ describe("ProviderTransform.message - transient caching", () => {
     const input = messages()
     const before = structuredClone(input)
 
-    ProviderTransform.message(input, model, {}, {
-      caching: { breakpoint_interval: 100, min_messages: 1 },
-    })
+    ProviderTransform.message(
+      input,
+      model,
+      {},
+      {
+        caching: { breakpoint_interval: 100, min_messages: 1 },
+      },
+    )
 
     expect(input).toStrictEqual(before)
   })

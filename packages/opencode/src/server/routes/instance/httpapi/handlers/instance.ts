@@ -62,7 +62,9 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
       return yield* lsp.status()
     })
 
-    const installLsp = Effect.fn("InstanceHttpApi.lspInstall")(function* (ctx: { payload: typeof LSPInstallPayload.Type }) {
+    const installLsp = Effect.fn("InstanceHttpApi.lspInstall")(function* (ctx: {
+      payload: typeof LSPInstallPayload.Type
+    }) {
       return yield* lsp.install(ctx.payload.id)
     })
 

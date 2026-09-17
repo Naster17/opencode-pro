@@ -414,7 +414,7 @@ describe("session.message-v2.toModelMessage", () => {
               update: () => Effect.die("unexpected storage.update"),
               write: () => Effect.die("unexpected storage.write"),
               list: () => Effect.succeed([]),
-              read: <T,>(key: string[]) => {
+              read: <T>(key: string[]) => {
                 if (key[0] === "compacted_tool_session") {
                   return Effect.succeed({ partIDs: ["a-pruned"] } as T)
                 }
@@ -504,7 +504,7 @@ describe("session.message-v2.toModelMessage", () => {
               update: () => Effect.die("unexpected storage.update"),
               write: () => Effect.die("unexpected storage.write"),
               list: () => Effect.succeed([]),
-              read: <T,>(key: string[]) => {
+              read: <T>(key: string[]) => {
                 if (key[0] === "compacted_tool_session") {
                   return Effect.succeed({ partIDs: ["a-pruned-explicit"] } as T)
                 }
@@ -1232,9 +1232,7 @@ describe("session.message-v2.toModelMessage", () => {
     expect(await MessageV2.toModelMessages(input, model, { inlineReasoning: true })).toStrictEqual([
       {
         role: "assistant",
-        content: [
-          { type: "text", text: "<think>\nthinking\n</think>answer" },
-        ],
+        content: [{ type: "text", text: "<think>\nthinking\n</think>answer" }],
       },
     ])
   })

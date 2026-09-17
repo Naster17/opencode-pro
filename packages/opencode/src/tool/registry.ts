@@ -313,8 +313,7 @@ export const layer: Layer.Layer<
           using _ = log.time(tool.id)
           const output = {
             description: tool.description,
-            parameters:
-              tool.id === SubagentTool.id && !isBoss ? SubagentParametersWithoutModel : tool.parameters,
+            parameters: tool.id === SubagentTool.id && !isBoss ? SubagentParametersWithoutModel : tool.parameters,
           }
           yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
           return {

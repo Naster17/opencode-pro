@@ -87,12 +87,7 @@ function globalFooter(api: TuiPluginApi, item: ListedGlobal) {
   return item.enabled ? footer(api, "enabled", "success") : footer(api, "disabled", "error")
 }
 
-function DetailsDialog(props: {
-  item: ListedServer
-  status: ServerStatus
-  roots: string[]
-  onBack: () => void
-}) {
+function DetailsDialog(props: { item: ListedServer; status: ServerStatus; roots: string[]; onBack: () => void }) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const size = useTerminalDimensions()
@@ -177,8 +172,14 @@ function DetailsDialog(props: {
       </text>
       <box flexDirection="row" flexWrap="wrap" gap={1} paddingTop={1} paddingBottom={1}>
         <DetailBadge label={props.status} color={statusColor(theme, props.status)} />
-        <DetailBadge label={props.item.installed ? "installed" : "not installed"} color={props.item.installed ? theme.success : theme.textMuted} />
-        <DetailBadge label={props.item.managed ? "managed" : "system"} color={props.item.managed ? theme.primary : theme.textMuted} />
+        <DetailBadge
+          label={props.item.installed ? "installed" : "not installed"}
+          color={props.item.installed ? theme.success : theme.textMuted}
+        />
+        <DetailBadge
+          label={props.item.managed ? "managed" : "system"}
+          color={props.item.managed ? theme.primary : theme.textMuted}
+        />
         <Show when={props.item.active}>
           <DetailBadge label="connected" color={theme.accent} />
         </Show>
@@ -243,11 +244,15 @@ function DetailsContent(props: {
         <Show when={props.resolved.length > 0} fallback={<DetailRow label="Resolved binaries">not found</DetailRow>}>
           <DetailRows
             label="Resolved binaries"
-            lines={props.resolved.map((item) => `${item.candidate}: ${item.path}${item.source === "managed" ? " (managed)" : ""}`)}
+            lines={props.resolved.map(
+              (item) => `${item.candidate}: ${item.path}${item.source === "managed" ? " (managed)" : ""}`,
+            )}
           />
         </Show>
         <Show when={props.item.spec.kind === "custom" && props.item.spec.command.length}>
-          <DetailRow label="Command">{props.item.spec.kind === "custom" ? props.item.spec.command.join(" ") : ""}</DetailRow>
+          <DetailRow label="Command">
+            {props.item.spec.kind === "custom" ? props.item.spec.command.join(" ") : ""}
+          </DetailRow>
         </Show>
       </DetailSection>
     </box>
@@ -332,9 +337,15 @@ function lspDetailsWidth(
     `Connected roots: ${roots.join(", ") || "none"}`.length,
     `Declared binaries: ${item.spec.binaries.join(", ") || "none declared"}`.length,
     ...(resolved.length
-      ? resolved.map((entry) => `Resolved binaries: ${entry.candidate}: ${entry.path}${entry.source === "managed" ? " (managed)" : ""}`.length)
+      ? resolved.map(
+          (entry) =>
+            `Resolved binaries: ${entry.candidate}: ${entry.path}${entry.source === "managed" ? " (managed)" : ""}`
+              .length,
+        )
       : [`Resolved binaries: not found`.length]),
-    ...(item.spec.kind === "custom" && item.spec.command.length ? [`Command: ${item.spec.command.join(" ")}`.length] : []),
+    ...(item.spec.kind === "custom" && item.spec.command.length
+      ? [`Command: ${item.spec.command.join(" ")}`.length]
+      : []),
   ].sort((a, b) => a - b)
   const target = lengths[Math.max(0, Math.floor(lengths.length * 0.8) - 1)] ?? 60
   return Math.max(56, Math.min(72, target + 8))
@@ -388,7 +399,11 @@ function View(props: { api: TuiPluginApi; initialCurrent?: string }) {
           description: undefined,
           enabled,
           installed:
-            currentPending === "installing" ? true : currentPending === "deleting" ? false : LSPCatalog.detectInstalled(spec, active),
+            currentPending === "installing"
+              ? true
+              : currentPending === "deleting"
+                ? false
+                : LSPCatalog.detectInstalled(spec, active),
           managed:
             currentPending === "installing"
               ? true
@@ -400,7 +415,9 @@ function View(props: { api: TuiPluginApi; initialCurrent?: string }) {
           spec,
         }
       })
-      .toSorted((left, right) => Number(right.installed) - Number(left.installed) || left.title.localeCompare(right.title)),
+      .toSorted(
+        (left, right) => Number(right.installed) - Number(left.installed) || left.title.localeCompare(right.title),
+      ),
   )
 
   const items = createMemo<ListedItem[]>(() => [
@@ -449,7 +466,8 @@ function View(props: { api: TuiPluginApi; initialCurrent?: string }) {
   const openDetails = (itemID: string) => {
     const item = lspEntries().find((entry) => entry.id === itemID)
     if (!item) return
-    const roots = props.api.state.lsp()
+    const roots = props.api.state
+      .lsp()
       .filter((entry) => entry.id === item.id && entry.status === "connected")
       .map((entry) => entry.root)
     const status = serverStatus(item, globalEnabled())
@@ -502,7 +520,9 @@ function View(props: { api: TuiPluginApi; initialCurrent?: string }) {
 
     props.api.ui.toast({
       variant: failed ? "error" : "warning",
-      message: failed ? message ?? `Failed to install ${item.id} LSP` : `Finished installing ${item.title}, but it is still not detected in system`,
+      message: failed
+        ? (message ?? `Failed to install ${item.id} LSP`)
+        : `Finished installing ${item.title}, but it is still not detected in system`,
     })
   }
 
@@ -525,7 +545,7 @@ function View(props: { api: TuiPluginApi; initialCurrent?: string }) {
     props.api.ui.toast({
       variant: "error",
       message: failed
-        ? message ?? `Failed to delete ${item.id} LSP`
+        ? (message ?? `Failed to delete ${item.id} LSP`)
         : `Failed to fully delete ${item.title}. Managed files are still present.`,
     })
   }
@@ -606,16 +626,16 @@ function View(props: { api: TuiPluginApi; initialCurrent?: string }) {
       .then(async (result) => {
         const state = await syncServerState(item)
         const failed = result?.data?.ok === false || Boolean(result?.error)
-        installToast(
-          item,
-          state,
-          failed,
-          resultMessage(result),
-        )
+        installToast(item, state, failed, resultMessage(result))
       })
       .catch(async (error: unknown) => {
         const state = await syncServerState(item)
-        installToast(item, state, true, error instanceof Error ? `Installation error: ${error.message}` : `Failed to install ${item.id} LSP`)
+        installToast(
+          item,
+          state,
+          true,
+          error instanceof Error ? `Installation error: ${error.message}` : `Failed to install ${item.id} LSP`,
+        )
       })
       .finally(() => {
         setPendingState(item.id)
@@ -634,16 +654,16 @@ function View(props: { api: TuiPluginApi; initialCurrent?: string }) {
       .then(async (result) => {
         const state = await syncServerState(item)
         const failed = result?.data?.ok === false || Boolean(result?.error)
-        deleteToast(
-          item,
-          state,
-          failed,
-          resultMessage(result),
-        )
+        deleteToast(item, state, failed, resultMessage(result))
       })
       .catch(async (error: unknown) => {
         const state = await syncServerState(item)
-        deleteToast(item, state, true, error instanceof Error ? `Deletion error: ${error.message}` : `Failed to delete ${item.id} LSP`)
+        deleteToast(
+          item,
+          state,
+          true,
+          error instanceof Error ? `Deletion error: ${error.message}` : `Failed to delete ${item.id} LSP`,
+        )
       })
       .finally(() => {
         setPendingState(item.id)

@@ -78,16 +78,18 @@ export const WebFetchTool = Tool.define(
             Effect.die(new Error(`Too many redirects while fetching ${params.url} (max ${MAX_REDIRECTS})`))
 
           const execute = (request: HttpClientRequest.HttpClientRequest) =>
-            httpOk.execute(request).pipe(
-              Effect.catchIf(
-                (err) =>
-                  err.reason._tag === "StatusCodeError" &&
-                  err.reason.response.status >= 300 &&
-                  err.reason.response.status < 400 &&
-                  err.reason.response.headers.location !== undefined,
-                redirectError,
-              ),
-            )
+            httpOk
+              .execute(request)
+              .pipe(
+                Effect.catchIf(
+                  (err) =>
+                    err.reason._tag === "StatusCodeError" &&
+                    err.reason.response.status >= 300 &&
+                    err.reason.response.status < 400 &&
+                    err.reason.response.headers.location !== undefined,
+                  redirectError,
+                ),
+              )
 
           // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
           const response = yield* execute(request).pipe(

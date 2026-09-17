@@ -570,10 +570,7 @@ describe("session.llm.stream", () => {
     await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await getModel(
-          ProviderID.make("llama.cpp"),
-          ModelID.make("Ministral-3-14B-Reasoning-2512"),
-        )
+        const resolved = await getModel(ProviderID.make("llama.cpp"), ModelID.make("Ministral-3-14B-Reasoning-2512"))
         const sessionID = SessionID.make("session-test-llama-reasoning-options")
         const agent = {
           name: "test",
