@@ -2708,6 +2708,12 @@ function UserMessage(props: { message: UserMessage; parts: Part[]; onMouseUp: ()
     return texts.join("\n\n")
   })
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
+  const subtasks = createMemo(() =>
+    props.parts.flatMap((x) =>
+      x.type === "subtask" ? [{ command: x.command, description: x.description }] : [],
+    ),
+  )
+  const hasEcho = createMemo(() => !!text() || subtasks().length > 0)
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(props.message.agent))
@@ -2733,7 +2739,7 @@ function UserMessage(props: { message: UserMessage; parts: Part[]; onMouseUp: ()
 
   return (
     <>
-      <Show when={text()}>
+      <Show when={hasEcho()}>
         <box
           id={props.message.id}
           border={["left"]}
@@ -2755,7 +2761,19 @@ function UserMessage(props: { message: UserMessage; parts: Part[]; onMouseUp: ()
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
-            <text fg={theme.text}>{text()}</text>
+            <Show when={text()}>
+              <text fg={theme.text}>{text()}</text>
+            </Show>
+            <For each={subtasks()}>
+              {(subtask) => (
+                <text fg={theme.text}>
+                  <span style={{ fg: theme.accent, bold: true }}>/{subtask.command ?? "command"}</span>
+                  <Show when={subtask.description}>
+                    <span style={{ fg: theme.textMuted }}> · {subtask.description}</span>
+                  </Show>
+                </text>
+              )}
+            </For>
             <Show when={files().length}>
               <box
                 flexDirection="row"

@@ -1225,20 +1225,88 @@ export function Prompt(props: PromptProps) {
           .find((x) => x.enabled !== false && x.slash && (x.slash.name === name || x.slash.aliases?.includes(name)))
         if (tui) command.trigger(tui.value, args.trim() || undefined)
       } else {
-        void sdk.client.session.command({
-          sessionID,
-          command: slashCommand.slice(1),
-          arguments: args,
-          agent: agent.name,
-          model: `${selectedModel.providerID}/${selectedModel.modelID}`,
-          messageID,
-          variant,
-          parts: requestParts
-            .filter((x) => x.type === "file")
-            .map((x) => ({
-              ...x,
-            })),
-        })
+        const commandName = slashCommand.slice(1)
+        const commandInfo = sync.data.command.find((x) => x.name === commandName)
+        const commandEcho = {
+          id: PartID.ascending(),
+          type: "text" as const,
+          text: `${slashCommand}${args ? ` ${args}` : ""}`,
+          synthetic: true,
+        }
+        sync.set(
+          produce((draft) => {
+            const messages = draft.message[sessionID] ?? []
+            const optimisticMessage: UserMessage = {
+              id: messageID,
+              sessionID,
+              role: "user",
+              time: { created: Date.now() },
+              agent: agent.name,
+              model: {
+                providerID: selectedModel.providerID,
+                modelID: selectedModel.modelID,
+                variant,
+              },
+            }
+            const result = messages.findIndex((item) => item.id === messageID)
+            if (result >= 0) messages[result] = optimisticMessage
+            else messages.push(optimisticMessage)
+            draft.message[sessionID] = messages
+            draft.part[messageID] = [
+              { ...commandEcho, messageID, sessionID },
+              ...requestParts
+                .filter((x) => x.type === "file")
+                .map((x) => ({ ...x, messageID, sessionID })),
+            ]
+            draft.session_status[sessionID] = { type: "busy" }
+          }),
+        )
+        void (async () => {
+          const result = await sdk.client.session.command({
+            sessionID,
+            command: commandName,
+            arguments: args,
+            agent: agent.name,
+            model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+            messageID,
+            variant,
+            parts: requestParts
+              .filter((x) => x.type === "file")
+              .map((x) => ({
+                ...x,
+              })),
+          })
+          if (result.error) {
+            sync.set(
+              produce((draft) => {
+                draft.message[sessionID] = (draft.message[sessionID] ?? []).filter(
+                  (item) => item.id !== messageID,
+                )
+                delete draft.part[messageID]
+                draft.session_status[sessionID] = { type: "idle" }
+              }),
+            )
+            const data =
+              result.error && "data" in result.error && typeof result.error.data === "object"
+                ? (result.error.data as Record<string, unknown> | null)
+                : null
+            const detail = data && typeof data.message === "string" ? `: ${data.message}` : ""
+            toast.show({
+              message: `/${commandName} failed${detail}`,
+              variant: "error",
+            })
+            return
+          }
+          if (commandInfo?.subtask) return
+          sync.set(
+            produce((draft) => {
+              const parts = draft.part[messageID] ?? []
+              draft.part[messageID] = parts.filter(
+                (part) => !(part.type === "text" && "synthetic" in part && part.synthetic),
+              )
+            }),
+          )
+        })()
       }
     } else {
       // Held (deferred) submits are only deferred while the session is actually

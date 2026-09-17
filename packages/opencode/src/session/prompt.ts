@@ -672,7 +672,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       if (!taskAgent) {
         const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
         const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
-        const error = new NamedError.Unknown({ message: `Agent not found: "${task.agent}".${hint}` })
+        const message = `Agent not found: "${task.agent}".${hint}`
+        yield* sessions.updatePart({
+          ...part,
+          state: {
+            status: "error",
+            error: `Tool execution failed: ${message}`,
+            time: { start: part.state.status === "running" ? part.state.time.start : Date.now(), end: Date.now() },
+            metadata: part.state.status === "pending" ? undefined : part.state.metadata,
+            input: part.state.input,
+          },
+        } satisfies MessageV2.ToolPart)
+        assistantMessage.finish = "tool-calls"
+        assistantMessage.time.completed = Date.now()
+        yield* sessions.updateMessage(assistantMessage)
+        const error = new NamedError.Unknown({ message })
         yield* bus.publish(Session.Event.Error, { sessionID, error: error.toObject() })
         throw error
       }
@@ -1910,7 +1924,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
       yield* elog.info("command", { sessionID: input.sessionID, command: input.command, agent: input.agent })
-      const cmd = yield* commands.get(input.command)
+      const aliases: Record<string, string> = {
+        "git-upstream": "upstream-sync",
+      }
+      const resolvedName = aliases[input.command] ?? input.command
+      const cmd = yield* commands.get(resolvedName)
       if (!cmd) {
         const available = (yield* commands.list()).map((c) => c.name)
         const hint = available.length ? ` Available commands: ${available.join(", ")}` : ""
@@ -1975,7 +1993,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       if (!agent) {
         const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
         const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
-        const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
+        const message = `Agent not found: "${agentName}".${hint}`
+        const echoID = input.messageID ?? MessageID.ascending()
+        const fallbackModel = yield* lastModel(input.sessionID)
+        yield* sessions.updateMessage({
+          id: echoID,
+          role: "user",
+          sessionID: input.sessionID,
+          time: { created: Date.now() },
+          agent: yield* agents.defaultAgent(),
+          model: fallbackModel,
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: echoID,
+          sessionID: input.sessionID,
+          type: "text",
+          text: `/${resolvedName} failed: ${message}`,
+        } satisfies MessageV2.TextPart)
+        const error = new NamedError.Unknown({ message })
         yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
         throw error
       }
