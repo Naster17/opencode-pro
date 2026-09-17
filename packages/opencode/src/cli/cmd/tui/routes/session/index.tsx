@@ -2744,43 +2744,45 @@ function UserMessage(props: { message: UserMessage; parts: Part[]; onMouseUp: ()
     return { title: " Compaction ", color: theme.borderActive }
   })
 
+  const markerOnly = createMemo(() => !hasEcho() && !!marker())
   return (
     <>
-      <Show when={hasEcho()}>
+      <Show when={hasEcho() || markerOnly()}>
         <box
           id={props.message.id}
-          border={["left"]}
+          border={markerOnly() ? [] : ["left"]}
           borderColor={color()}
           customBorderChars={SplitBorder.customBorderChars}
           marginTop={props.index === 0 ? 0 : 1}
         >
-          <box
-            onMouseOver={() => {
-              setHover(true)
-            }}
-            onMouseOut={() => {
-              setHover(false)
-            }}
-            onMouseUp={props.onMouseUp}
-            paddingTop={1}
-            paddingBottom={1}
-            paddingLeft={2}
-            backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
-            flexShrink={0}
-          >
-            <Show when={text()}>
-              <text fg={theme.text}>{text()}</text>
-            </Show>
-            <For each={subtasks()}>
-              {(subtask) => (
-                <text fg={theme.text}>
-                  <span style={{ fg: theme.accent, bold: true }}>/{subtask.command ?? "command"}</span>
-                  <Show when={subtask.description}>
-                    <span style={{ fg: theme.textMuted }}> · {subtask.description}</span>
-                  </Show>
-                </text>
-              )}
-            </For>
+          <Show when={hasEcho()}>
+            <box
+              onMouseOver={() => {
+                setHover(true)
+              }}
+              onMouseOut={() => {
+                setHover(false)
+              }}
+              onMouseUp={props.onMouseUp}
+              paddingTop={1}
+              paddingBottom={1}
+              paddingLeft={2}
+              backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+              flexShrink={0}
+            >
+              <Show when={text()}>
+                <text fg={theme.text}>{text()}</text>
+              </Show>
+              <For each={subtasks()}>
+                {(subtask) => (
+                  <text fg={theme.text}>
+                    <span style={{ fg: theme.accent, bold: true }}>/{subtask.command ?? "command"}</span>
+                    <Show when={subtask.description}>
+                      <span style={{ fg: theme.textMuted }}> · {subtask.description}</span>
+                    </Show>
+                  </text>
+                )}
+              </For>
             <Show when={files().length}>
               <box
                 flexDirection="row"
@@ -2811,12 +2813,13 @@ function UserMessage(props: { message: UserMessage; parts: Part[]; onMouseUp: ()
                 <span style={{ fg: theme.textMuted }}>{Locale.todayTimeOrDateTime(props.message.time.created)}</span>
               </text>
             </Show>
-          </box>
+            </box>
+          </Show>
         </box>
       </Show>
       <Show when={marker()}>
         <box
-          marginTop={1}
+          marginTop={markerOnly() ? 1 : 0}
           border={["top"]}
           title={marker()!.title}
           titleAlignment="center"
