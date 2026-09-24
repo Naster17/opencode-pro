@@ -173,9 +173,17 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const selected = createMemo(() => flat()[store.selected])
 
+  // NOTE: depend on the option COUNT, not the options array identity.
+  // Cosmetic option updates (delete-confirm titles, favorite regroups) rebuild
+  // the array with the same items; reacting to identity would snap the
+  // selection back to initial and wipe flows like the two-press ctrl+d
+  // delete confirm (options change -> effect reruns -> onMove clears state).
+  // A count change means items were added/removed (e.g. async load), which is
+  // the only case that needs an automatic scroll to the selection.
+  const optionCount = () => flat().length
   createEffect(
     on(
-      [() => store.filter, () => props.initialID, () => props.initial ?? props.current, flat],
+      [() => store.filter, () => props.initialID, () => props.initial ?? props.current, optionCount],
       ([filter]) => {
         setTimeout(() => {
           if (filter.length > 0) {

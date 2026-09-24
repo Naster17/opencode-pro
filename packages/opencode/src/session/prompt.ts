@@ -199,20 +199,32 @@ export const layer = Layer.effect(
       return parts
     })
 
+    // Attempts are budgeted in-memory: a failed attempt (model error, empty
+    // output, conversion failure) no longer orphans the session at
+    // "New session - …" forever — later turns retry until one succeeds.
+    const titleAttempts = new Map<string, number>()
+    const TITLE_MAX_ATTEMPTS = 3
+
     const title = Effect.fn("SessionPrompt.ensureTitle")(function* (input: {
-      session: Session.Info
+      sessionID: SessionID
       history: MessageV2.WithParts[]
       providerID: ProviderID
       modelID: ModelID
     }) {
-      if (input.session.parentID) return
-      if (!Session.isDefaultTitle(input.session.title)) return
+      const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+      if (session.parentID) return
+      if (!Session.isDefaultTitle(session.title)) {
+        titleAttempts.delete(input.sessionID)
+        return
+      }
 
       const real = (m: MessageV2.WithParts) =>
         m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic)
       const idx = input.history.findIndex(real)
       if (idx === -1) return
-      if (input.history.filter(real).length !== 1) return
+      const attempts = titleAttempts.get(input.sessionID) ?? 0
+      if (attempts >= TITLE_MAX_ATTEMPTS) return
+      titleAttempts.set(input.sessionID, attempts + 1)
 
       const context = input.history.slice(0, idx + 1)
       const firstUser = context[idx]
@@ -228,9 +240,33 @@ export const layer = Layer.effect(
         ? yield* provider.getModel(ag.model.providerID, ag.model.modelID)
         : ((yield* provider.getSmallModel(input.providerID)) ??
           (yield* provider.getModel(input.providerID, input.modelID)))
+      // Model-message conversion can throw for exotic first messages
+      // (attachments, custom parts). Fall back to plain text so titling a
+      // session never depends on the full converter succeeding.
+      const textFallback = [
+        {
+          role: "user" as const,
+          content:
+            firstUser.parts
+              .flatMap((p) => {
+                if (p.type === "text") return [p.text]
+                if (p.type === "file") return [`[${p.mime ?? "file"}: ${p.filename ?? "attachment"}]`]
+                return []
+              })
+              .join("\n") || "New conversation",
+        },
+      ]
       const msgs = onlySubtasks
         ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
-        : yield* MessageV2.toModelMessagesEffect(context, mdl)
+        : yield* MessageV2.toModelMessagesEffect(context, mdl).pipe(
+            Effect.catchCause((cause) =>
+              elog
+                .warn("title context conversion failed, using text fallback", {
+                  error: Cause.squash(cause),
+                })
+                .pipe(Effect.as(textFallback)),
+            ),
+          )
       const text = yield* llm
         .stream({
           agent: ag,
@@ -239,7 +275,7 @@ export const layer = Layer.effect(
           small: true,
           tools: {},
           model: mdl,
-          sessionID: input.session.id,
+          sessionID: input.sessionID,
           retries: 2,
           messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
         })
@@ -254,11 +290,12 @@ export const layer = Layer.effect(
         .split("\n")
         .map((line) => line.trim())
         .find((line) => line.length > 0)
-      if (!cleaned) return
+      // Empty output counts as a failed attempt (budgeted above) instead of a
+      // silent skip, so reasoning-only responses get retried next turn.
+      if (!cleaned) return yield* Effect.fail(new Error("Title model returned no usable text"))
       const t = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-      yield* sessions
-        .setTitle({ sessionID: input.session.id, title: t })
-        .pipe(Effect.catchCause((cause) => elog.error("failed to generate title", { error: Cause.squash(cause) })))
+      yield* sessions.setTitle({ sessionID: input.sessionID, title: t })
+      titleAttempts.delete(input.sessionID)
     })
 
     const insertReminders = Effect.fn("SessionPrompt.insertReminders")(function* (input: {
@@ -1867,11 +1904,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
             if (step === 1 && !handle.message.error) {
               yield* title({
-                session,
+                sessionID,
                 modelID: lastUser.model.modelID,
                 providerID: lastUser.model.providerID,
                 history: yield* MessageV2.filterCompactedEffect(sessionID),
-              }).pipe(Effect.ignore, Effect.forkIn(scope))
+              }).pipe(
+                Effect.tapError((error) =>
+                  elog.warn("title generation failed, will retry next turn", {
+                    error: error instanceof Error ? error.message : String(error),
+                  }),
+                ),
+                Effect.ignore,
+                Effect.forkIn(scope),
+              )
             }
 
             if (structured !== undefined) {

@@ -48,7 +48,7 @@ import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { raw, reply, TestLLMServer } from "../lib/llm-server"
+import { httpError, raw, reply, TestLLMServer } from "../lib/llm-server"
 
 void Log.init({ print: false })
 
@@ -1063,6 +1063,73 @@ it.live(
       { git: true, config: providerCfg },
     ),
   10_000,
+)
+
+it.live(
+  "retries session title on a later turn after a failed attempt",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create()
+        expect(chat.title).toMatch(/^New session - /)
+
+        const isTitle = (hit: { body: unknown }) =>
+          JSON.stringify(hit.body ?? {}).includes("Generate a title for this conversation")
+        // Cover the initial title request plus its internal retries.
+        yield* llm.pushMatch(
+          isTitle as Parameters<typeof llm.pushMatch>[0],
+          httpError(500, { error: "boom" }),
+          httpError(500, { error: "boom" }),
+          httpError(500, { error: "boom" }),
+        )
+
+        yield* prompt.prompt({
+          sessionID: chat.id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "first" }],
+        })
+
+        // Wait until no new LLM traffic arrives (title retries exhausted).
+        {
+          const start = Date.now()
+          let last = -1
+          let stable = 0
+          while (stable < 20 && Date.now() - start < 20_000) {
+            const count = yield* llm.calls
+            if (count === last) stable += 1
+            else {
+              stable = 0
+              last = count
+            }
+            yield* Effect.sleep(50)
+          }
+        }
+        yield* llm.reset
+        // Failed attempt must not set a title, ...
+        expect((yield* sessions.get(chat.id)).title).toMatch(/^New session - /)
+
+        // ...but the next turn retries instead of orphaning the session.
+        yield* prompt.prompt({
+          sessionID: chat.id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "second" }],
+        })
+        const deadline = Date.now() + 10_000
+        let title = ""
+        while (Date.now() < deadline) {
+          title = (yield* sessions.get(chat.id)).title
+          if (!/^New session - /.test(title)) break
+          yield* Effect.sleep(50)
+        }
+        expect(title).toBe("E2E Title")
+      }),
+      { git: true, config: providerCfg },
+    ),
+  60_000,
 )
 
 it.live(

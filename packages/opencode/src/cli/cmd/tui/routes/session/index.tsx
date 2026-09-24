@@ -2448,8 +2448,7 @@ export function Session() {
                     foregroundColor: theme.border,
                   },
                 }}
-                stickyScroll={true}
-                stickyStart="bottom"
+                stickyScroll={false}
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
               >

@@ -661,13 +661,34 @@ export class TestLLMServer extends Context.Service<TestLLMServer, TestLLMServer.
         return first.item
       }
 
+      // Explicitly-matched entries only: generic queue items are never stolen
+      // by auto-handled requests (e.g. titles), preserving existing behavior
+      // unless a test opts in with pushMatch.
+      const pullMatched = (hit: Hit) => {
+        const index = list.findIndex((entry) => entry.match && entry.match(hit))
+        if (index === -1) return
+        const first = list[index]
+        list = [...list.slice(0, index), ...list.slice(index + 1)]
+        return first.item
+      }
+
       const handle = Effect.fn("TestLLMServer.handle")(function* (mode: "chat" | "responses") {
         const req = yield* HttpServerRequest.HttpServerRequest
         const body = yield* req.json.pipe(Effect.orElseSucceed(() => ({})))
         const current = hit(req.originalUrl, body)
         if (isTitleRequest(body)) {
+          const matched = pullMatched(current)
           hits = [...hits, current]
           yield* notify()
+          if (matched) {
+            if (matched.type !== "sse") return fail(matched)
+            if (mode === "responses") return send(responses(matched, modelFrom(body)))
+            if (matched.reset) {
+              yield* reset(matched)
+              return HttpServerResponse.empty()
+            }
+            return send(matched)
+          }
           const auto: Sse = { type: "sse", head: [role()], tail: [textLine("E2E Title"), finishLine("stop")] }
           if (mode === "responses") return send(responses(auto, modelFrom(body)))
           return send(auto)
