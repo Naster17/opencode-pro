@@ -240,17 +240,54 @@ export function normalizeSystemPrompt(content: string, config?: Config.Info): st
   today.setHours(0, 0, 0, 0)
   const stableDate = today.toDateString()
 
-  // Replace various date formats with stable version
+  const pad2 = (v: number) => String(v).padStart(2, "0")
+  const now = floorDateToCacheBucket()
+  const stableMinute = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`
+
+  // Replace various date formats with stable version.
+  // Current time / Session started use minute precision (see timestampFooter):
+  // normalize seconds away if any caller still emits them.
   return content
     .replace(/Today's date: .+$/gm, `Today's date: ${stableDate}`)
     .replace(/Current date: \d{4}-\d{2}-\d{2}/g, `Current date: ${today.toISOString().slice(0, 10)}`)
+    .replace(/^Current time: \d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?.*$/gm, (line) => {
+      const tz = line.match(/\(local.*\)\s*$/)?.[0] ?? ""
+      return `Current time: ${stableMinute} ${tz}`.trimEnd()
+    })
+    .replace(/^Session started: \d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?.*$/gm, (line) => {
+      const tz = line.match(/\(local\)\s*$/)?.[0] ?? "(local)"
+      const datePart = line.match(/Session started: (\d{4}-\d{2}-\d{2} \d{2}:\d{2})/)?.[1] ?? stableMinute
+      return `Session started: ${datePart} ${tz}`.trimEnd()
+    })
     .replace(/Date: .+$/gm, `Date: ${stableDate}`)
+}
+
+/** Wall-clock quantum for cache-sensitive timestamps. Must match formatLocal in session/prompt. */
+export const CACHE_TIME_BUCKET_MINUTES = 5
+
+export function floorDateToCacheBucket(value = new Date()): Date {
+  const floored = new Date(value)
+  floored.setMinutes(Math.floor(floored.getMinutes() / CACHE_TIME_BUCKET_MINUTES) * CACHE_TIME_BUCKET_MINUTES, 0, 0)
+  return floored
+}
+
+export function isVolatileTimestampBlock(content: string): boolean {
+  const trimmed = content.trim()
+  if (!trimmed) return false
+  const lines = trimmed.split("\n").map((l) => l.trim()).filter(Boolean)
+  if (lines.length === 0 || lines.length > 3) return false
+  return lines.every((l) => /^Current time: /.test(l) || /^Session started: /.test(l))
 }
 
 /**
  * Check if a model supports prompt caching
  */
 export function supportsCaching(model: Provider.Model): boolean {
+  // Antigravity models support prompt caching
+  if (model.providerID === "antigravity") {
+    return true
+  }
+
   // Anthropic models support prompt caching
   if (
     model.providerID === "anthropic" ||

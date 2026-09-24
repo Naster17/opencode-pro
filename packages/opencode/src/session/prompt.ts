@@ -58,6 +58,7 @@ import { SessionEvent } from "@/v2/session-event"
 import { Modelv2 } from "@/v2/model"
 import { AgentAttachment, FileAttachment, Source } from "@/v2/session-prompt"
 import { SessionBtw } from "./btw"
+import { floorDateToCacheBucket } from "./cache-optimizer"
 import * as DateTime from "effect/DateTime"
 import { eq } from "@/storage/db"
 import * as Database from "@/storage/db"
@@ -86,9 +87,14 @@ function pad2(value: number) {
 }
 
 function formatLocal(value: Date) {
+  // Bucketed via floorDateToCacheBucket on purpose: wall-clock timestamps in
+  // the system prompt must stay stable across requests or prefix prompt
+  // caching (exact prefix match) re-prices the whole conversation behind
+  // every clock tick. Models rarely need minute accuracy here.
+  const floored = floorDateToCacheBucket(value)
   return (
-    `${value.getFullYear()}-${pad2(value.getMonth() + 1)}-${pad2(value.getDate())} ` +
-    `${pad2(value.getHours())}:${pad2(value.getMinutes())}:${pad2(value.getSeconds())}`
+    `${floored.getFullYear()}-${pad2(floored.getMonth() + 1)}-${pad2(floored.getDate())} ` +
+    `${pad2(floored.getHours())}:${pad2(floored.getMinutes())}`
   )
 }
 

@@ -27,4 +27,27 @@ describe("ModelCompat", () => {
   ])("rejects unsupported Google model %s", (id) => {
     expect(ModelCompat.isGoogleModelIDCompatible(id)).toBe(false)
   })
+
+  const textModel = (id: string, providerID = "google") => ({
+    id,
+    providerID,
+    api: { id, npm: "@ai-sdk/google" },
+    status: "active",
+    capabilities: { input: { text: true }, output: { text: true } },
+  })
+
+  test.each(["claude-sonnet-4-6", "claude-opus-4-6-thinking", "gpt-oss-120b-medium"])(
+    "selects Antigravity non-Gemini model %s despite google SDK envelope",
+    (id) => {
+      expect(ModelCompat.isSelectable(textModel(id, "antigravity") as any)).toBe(true)
+    },
+  )
+
+  test("still rejects non-Gemini ids for plain google provider", () => {
+    expect(ModelCompat.isSelectable(textModel("claude-sonnet-4-6") as any)).toBe(false)
+  })
+
+  test("still selects Gemini models for plain google provider", () => {
+    expect(ModelCompat.isSelectable(textModel("gemini-3.8-flash") as any)).toBe(true)
+  })
 })

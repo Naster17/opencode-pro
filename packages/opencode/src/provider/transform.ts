@@ -341,8 +341,17 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: Cach
 
   msgs = structuredClone(msgs)
 
-  // Cache system prompts (first 2)
-  const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
+  // Cache system prompts (first 2), skipping the volatile wall-clock footer
+  // (Current time / Session started) which changes every minute and must
+  // never be pinned into an explicit cache block.
+  const isVolatile = (msg: ModelMessage) => {
+    const c = typeof msg.content === "string" ? msg.content : ""
+    if (!c) return false
+    const lines = c.trim().split("\n").map((l) => l.trim()).filter(Boolean)
+    if (lines.length === 0 || lines.length > 3) return false
+    return lines.every((l) => l.startsWith("Current time: ") || l.startsWith("Session started: "))
+  }
+  const system = msgs.filter((msg) => msg.role === "system" && !isVolatile(msg)).slice(0, 2)
 
   // Cache conversation history more aggressively:
   // - All messages except the last user message and its response
@@ -363,10 +372,11 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: Cach
   const minMessages = config?.min_messages ?? 5
 
   // Cache everything except the last user message (and any assistant response after it)
-  // This maximizes cache hits while keeping the current turn fresh
+  // This maximizes cache hits while keeping the current turn fresh.
+  // Note: a lone first-turn user message is deliberately NOT marked. Markers are
+  // recomputed from scratch on every request, so turn 2 re-marks turn 1 as
+  // history anyway — marking it on turn 1 only pays cache-write for zero gain.
   const cacheableHistory = lastUserIndex > 0 && nonSystem.length >= minMessages ? nonSystem.slice(0, lastUserIndex) : []
-  const singleTurnUser =
-    system.length === 0 && nonSystem.length === 1 && nonSystem[0].role === "user" ? nonSystem[0] : undefined
 
   // For very long conversations, add cache breakpoints every N messages to improve hit rate
   const CACHE_BREAKPOINT_INTERVAL = config?.breakpoint_interval ?? 10
@@ -457,10 +467,6 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: Cach
     }
 
     msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, providerOptions)
-  }
-
-  if (singleTurnUser) {
-    singleTurnUser.providerOptions = mergeDeep(singleTurnUser.providerOptions ?? {}, providerOptions)
   }
 
   return msgs
@@ -565,6 +571,7 @@ export function message(
   if (
     (model.providerID === "anthropic" ||
       model.providerID === "google-vertex-anthropic" ||
+      model.providerID.startsWith("opencode") ||
       model.api.id.includes("anthropic") ||
       model.api.id.includes("claude") ||
       model.id.includes("anthropic") ||
@@ -573,6 +580,9 @@ export function message(
       model.api.npm === "@ai-sdk/alibaba") &&
     model.api.npm !== "@ai-sdk/gateway"
   ) {
+    // For opencode Zen the openaiCompatible.cache_control markers ride along
+    // on wire messages (spread by the SDK); Anthropic-fronting gateways honor
+    // them, other upstreams ignore the unknown fields.
     msgs = applyCaching(msgs, model, config?.caching)
   }
 
@@ -1018,6 +1028,10 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex
     case "@ai-sdk/google":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-generative-ai
+      // Claude / GPT-OSS served through the Antigravity envelope ignore
+      // thinkingConfig (stripped in the fetch handler), so expose no variants
+      // instead of fake low/high levels that change nothing.
+      if (!id.includes("gemini") && !id.includes("gemma")) return {}
       if (id.includes("2.5")) {
         return {
           high: {
@@ -1035,8 +1049,17 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         }
       }
       let levels = ["low", "high"]
-      if (id.includes("3.1")) {
+      if (
+        id.includes("3.1") ||
+        id.includes("3.6") ||
+        id.includes("3.7") ||
+        id.includes("3.8") ||
+        (model.providerID === "antigravity" && id.includes("gemini"))
+      ) {
         levels = ["low", "medium", "high"]
+      }
+      if (id === "gemini-3.1-pro") {
+        levels = ["low", "high"]
       }
 
       return Object.fromEntries(
@@ -1145,9 +1168,15 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 export function options(input: {
   model: Provider.Model
   sessionID: string
+  parentSessionID?: string
   providerOptions?: Record<string, any>
 }): Record<string, any> {
   const result: Record<string, any> = {}
+  // Subagents and forks run under child sessions but share most of the parent
+  // prefix (system prompts, tools). Scope the server cache key to the parent
+  // so the gateway can reuse the already-cached prefix instead of starting
+  // cold on a fresh key per child session.
+  const cacheScope = input.parentSessionID ?? input.sessionID
 
   if (
     input.model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
@@ -1167,7 +1196,7 @@ export function options(input: {
 
   if (input.model.api.npm === "@ai-sdk/azure") {
     result["store"] = false
-    result["promptCacheKey"] = input.sessionID
+    result["promptCacheKey"] = cacheScope
   }
 
   if (input.model.api.npm === "@openrouter/ai-sdk-provider" || input.model.api.npm === "@llmgateway/ai-sdk-provider") {
@@ -1196,8 +1225,20 @@ export function options(input: {
     }
   }
 
-  if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
-    result["promptCacheKey"] = input.sessionID
+  // Gateways scope server-side prefix cache by an explicit session key.
+  // Without it the gateway cannot correlate consecutive turns of one session
+  // and every request pays full price. Sent to OpenAI, Zen, and every
+  // OpenAI-compatible backend; providers that don't understand it ignore the
+  // unknown top-level field. Per-provider opt-out via `noCacheKey: true`.
+  if (
+    input.model.providerID === "openai" ||
+    input.model.providerID.startsWith("opencode") ||
+    input.model.api.npm === "@ai-sdk/openai-compatible" ||
+    input.providerOptions?.setCacheKey
+  ) {
+    if (input.providerOptions?.noCacheKey !== true) {
+      result["promptCacheKey"] = cacheScope
+    }
   }
 
   if (input.model.providerID === "llama.cpp" && input.model.api.npm === "@ai-sdk/openai-compatible") {
@@ -1296,18 +1337,18 @@ export function options(input: {
     }
 
     if (input.model.providerID.startsWith("opencode")) {
-      result["promptCacheKey"] = input.sessionID
+      // promptCacheKey is covered by the general rule below (parent-scoped).
       result["include"] = ["reasoning.encrypted_content"]
       result["reasoningSummary"] = "auto"
     }
   }
 
   if (input.model.providerID === "venice") {
-    result["promptCacheKey"] = input.sessionID
+    result["promptCacheKey"] = cacheScope
   }
 
   if (input.model.providerID === "openrouter") {
-    result["prompt_cache_key"] = input.sessionID
+    result["prompt_cache_key"] = cacheScope
   }
   if (input.model.api.npm === "@ai-sdk/gateway") {
     result["gateway"] = {
@@ -1332,7 +1373,7 @@ export function smallOptions(model: Provider.Model) {
     }
     return { store: false }
   }
-  if (model.providerID === "google") {
+  if (model.providerID === "google" || model.providerID === "antigravity") {
     // gemini-3 uses thinkingLevel, gemini-2.5 uses thinkingBudget
     if (model.api.id.includes("gemini-3")) {
       return { thinkingConfig: { thinkingLevel: "minimal" } }

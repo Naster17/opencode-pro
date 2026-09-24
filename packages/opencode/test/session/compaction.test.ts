@@ -3177,6 +3177,63 @@ describe("SessionNs.getUsage", () => {
     },
   )
 
+  test.each([
+    { name: "openai chat", raw: { prompt_tokens_details: { cached_tokens: 200 } } },
+    { name: "openai responses", raw: { input_tokens_details: { cached_tokens: 200 } } },
+    { name: "anthropic", raw: { cache_read_input_tokens: 200 } },
+    { name: "google", raw: { cachedContentTokenCount: 200 } },
+  ])("extracts cache read tokens from $name raw passthrough", ({ raw }) => {
+    const model = createModel({ context: 100_000, output: 32_000 })
+    const result = SessionNs.getUsage({
+      model,
+      usage: {
+        inputTokens: 1000,
+        outputTokens: 500,
+        totalTokens: 1500,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
+        raw,
+      },
+    })
+
+    expect(result.tokens.input).toBe(800)
+    expect(result.tokens.cache.read).toBe(200)
+  })
+
+  test.each([
+    { name: "anthropic", raw: { cache_creation_input_tokens: 300 } },
+    { name: "openai details", raw: { prompt_tokens_details: { cache_creation_input_tokens: 300 } } },
+  ])("extracts cache write tokens from $name raw passthrough", ({ raw }) => {
+    const model = createModel({ context: 100_000, output: 32_000 })
+    const result = SessionNs.getUsage({
+      model,
+      usage: {
+        inputTokens: 1000,
+        outputTokens: 500,
+        totalTokens: 1500,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
+        raw,
+      },
+    })
+
+    expect(result.tokens.cache.write).toBe(300)
+  })
+
   test("extracts cache write tokens from vertex metadata key", () => {
     const model = createModel({ context: 100_000, output: 32_000, npm: "@ai-sdk/google-vertex/anthropic" })
     const result = SessionNs.getUsage({

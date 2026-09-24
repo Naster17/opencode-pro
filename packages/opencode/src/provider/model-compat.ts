@@ -1,5 +1,6 @@
 type TextModel = {
   id: string
+  providerID?: string
   api: {
     id: string
     npm: string
@@ -48,6 +49,10 @@ export function isGoogleModelIDCompatible(id: string) {
 export function isSelectable(model: TextModel) {
   if (model.status === "deprecated") return false
   if (!model.capabilities.input.text || !model.capabilities.output.text) return false
+  // Antigravity serves Claude and GPT-OSS through the Google-protocol envelope
+  // (@ai-sdk/google), so their IDs are not gemini-like. They are registered
+  // explicitly by the plugin and are always selectable.
+  if (model.providerID === "antigravity") return true
   if (model.api.npm === "@ai-sdk/google") {
     return isGoogleModelIDCompatible(model.id) && isGoogleModelIDCompatible(model.api.id)
   }

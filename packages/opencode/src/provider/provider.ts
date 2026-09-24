@@ -1609,8 +1609,18 @@ const layer: Layer.Layer<
           const providerID = ProviderID.make(p.id)
           if (disabled.has(providerID)) continue
 
+          if (!database[providerID]) {
+            database[providerID] = {
+              id: providerID,
+              name: p.id === "antigravity" ? "Antigravity" : providerID,
+              source: "custom",
+              env: [],
+              options: {},
+              models: {},
+            }
+          }
+
           const provider = database[providerID]
-          if (!provider) continue
           const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
 
           provider.models = yield* Effect.promise(async () => {
@@ -1665,30 +1675,30 @@ const layer: Layer.Layer<
               name,
               providerID: ProviderID.make(providerID),
               capabilities: {
-                temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
-                reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
-                attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
-                toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
+                temperature: model.temperature ?? existingModel?.capabilities?.temperature ?? false,
+                reasoning: model.reasoning ?? existingModel?.capabilities?.reasoning ?? false,
+                attachment: model.attachment ?? existingModel?.capabilities?.attachment ?? false,
+                toolcall: model.tool_call ?? existingModel?.capabilities?.toolcall ?? true,
                 input: {
-                  text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
-                  audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
-                  image: model.modalities?.input?.includes("image") ?? existingModel?.capabilities.input.image ?? false,
-                  video: model.modalities?.input?.includes("video") ?? existingModel?.capabilities.input.video ?? false,
-                  pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities.input.pdf ?? false,
+                  text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities?.input?.text ?? true,
+                  audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities?.input?.audio ?? false,
+                  image: model.modalities?.input?.includes("image") ?? existingModel?.capabilities?.input?.image ?? false,
+                  video: model.modalities?.input?.includes("video") ?? existingModel?.capabilities?.input?.video ?? false,
+                  pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities?.input?.pdf ?? false,
                 },
                 output: {
-                  text: model.modalities?.output?.includes("text") ?? existingModel?.capabilities.output.text ?? true,
+                  text: model.modalities?.output?.includes("text") ?? existingModel?.capabilities?.output?.text ?? true,
                   audio:
-                    model.modalities?.output?.includes("audio") ?? existingModel?.capabilities.output.audio ?? false,
+                    model.modalities?.output?.includes("audio") ?? existingModel?.capabilities?.output?.audio ?? false,
                   image:
-                    model.modalities?.output?.includes("image") ?? existingModel?.capabilities.output.image ?? false,
+                    model.modalities?.output?.includes("image") ?? existingModel?.capabilities?.output?.image ?? false,
                   video:
-                    model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
-                  pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
+                    model.modalities?.output?.includes("video") ?? existingModel?.capabilities?.output?.video ?? false,
+                  pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities?.output?.pdf ?? false,
                 },
                 interleaved:
                   model.interleaved ??
-                  existingModel?.capabilities.interleaved ??
+                  existingModel?.capabilities?.interleaved ??
                   (!existingModel && apiNpm === "@ai-sdk/openai-compatible" && apiID.includes("deepseek")
                     ? { field: "reasoning_content" }
                     : false),
@@ -1697,8 +1707,8 @@ const layer: Layer.Layer<
                 input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
                 output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
                 cache: {
-                  read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
-                  write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
+                  read: model?.cost?.cache_read ?? existingModel?.cost?.cache?.read ?? 0,
+                  write: model?.cost?.cache_write ?? existingModel?.cost?.cache?.write ?? 0,
                 },
               },
               options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
@@ -1756,7 +1766,7 @@ const layer: Layer.Layer<
 
           const stored = yield* auth.get(providerID).pipe(Effect.orDie)
           if (!plugin.auth.loader) continue
-          if (!stored && providerID !== "openai") continue
+          if (!stored && providerID !== "openai" && providerID !== "antigravity" && providerID !== "google") continue
 
           const options = yield* Effect.promise(() =>
             plugin.auth!.loader!(

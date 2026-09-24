@@ -12,6 +12,7 @@ import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { ServerAuth } from "@/server/auth"
 import { CodexAuthPlugin } from "./codex"
+import { AntigravityAuthPlugin } from "./antigravity"
 import { Session } from "@/session/session"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { CopilotAuthPlugin } from "./github-copilot/copilot"
@@ -59,6 +60,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pl
 // Built-in plugins that are directly imported (not installed from npm)
 const INTERNAL_PLUGINS: PluginInstance[] = [
   CodexAuthPlugin,
+  AntigravityAuthPlugin,
   CopilotAuthPlugin,
   GitlabAuthPlugin,
   PoeAuthPlugin,

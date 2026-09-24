@@ -136,7 +136,12 @@ const live: Layer.Layer<
       const isOpenaiOauth = item.id === "openai" && info?.type === "oauth"
 
       const system: string[] = []
-      system.push(
+      // Keep the volatile wall-clock footer (Current time / Session started)
+      // as a separate trailing system block so the large env+instructions
+      // prefix stays byte-stable across requests. This is critical for Gemini
+      // implicit prompt caching (prefix must match exactly) and lets explicit
+      // caches (Anthropic) pin only the stable prefix.
+      const [stablePrefix, volatileFooter] = splitTimestampFooter(
         [
           // Keep general environment/instruction blocks first so agent prompts can
           // override behavior and persona instead of being diluted by later system text.
@@ -145,12 +150,16 @@ const live: Layer.Layer<
           ...input.system,
           // use agent prompt otherwise provider prompt
           ...(input.agent.prompt ? [input.agent.prompt] : []),
+          // build/plan agents always reason and work in English
+          ...(ENGLISH_ONLY_AGENTS.includes(input.agent.name) ? [ENGLISH_ONLY_RULE] : []),
           // any custom prompt from last user message
           ...(input.user.system ? [input.user.system] : []),
         ]
           .filter((x) => x)
           .join("\n"),
       )
+      system.push(stablePrefix)
+      if (volatileFooter) system.push(volatileFooter)
 
       const header = system[0]
 
@@ -172,9 +181,8 @@ const live: Layer.Layer<
 
       // Normalize system prompts for cache stability
       if (CacheOptimizer.supportsCaching(input.model)) {
-        system[0] = CacheOptimizer.normalizeSystemPrompt(system[0], cfg)
-        if (system.length > 1) {
-          system[1] = CacheOptimizer.normalizeSystemPrompt(system[1], cfg)
+        for (let i = 0; i < system.length; i++) {
+          system[i] = CacheOptimizer.normalizeSystemPrompt(system[i], cfg)
         }
 
         // Log if plugins modified the header (potential cache invalidation)
@@ -196,6 +204,7 @@ const live: Layer.Layer<
         : ProviderTransform.options({
             model: input.model,
             sessionID: input.sessionID,
+            parentSessionID: input.parentSessionID,
             providerOptions: item.options,
           })
       const options = mergeOptions(mergeOptions(mergeOptions(base, input.model.options), input.agent.options), variant)
@@ -270,7 +279,9 @@ const live: Layer.Layer<
       // during compaction), inject a stub tool to satisfy the validation requirement.
       // The stub description explicitly tells the model not to call it.
       if (
-        (isLiteLLMProxy || input.model.providerID.includes("github-copilot")) &&
+        (isLiteLLMProxy ||
+          input.model.providerID.includes("github-copilot") ||
+          input.model.providerID.startsWith("opencode")) &&
         Object.keys(tools).length === 0 &&
         hasToolCalls(input.messages)
       ) {
@@ -534,6 +545,31 @@ function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" 
 
 function sortTools(tools: Record<string, Tool>) {
   return Object.fromEntries(Object.entries(tools).sort(([a], [b]) => a.localeCompare(b)))
+}
+
+// Build and Plan agents always work in English: reasoning, code, comments,
+// and tool inputs stay English. The response language switches to the user's
+// language only on explicit request. Static text by design so it never
+// perturbs the cached system prefix.
+export const ENGLISH_ONLY_AGENTS = ["build", "plan"]
+
+export const ENGLISH_ONLY_RULE = [
+  "Language: always think, reason, and work in English.",
+  "Write code, comments, commit messages, and tool inputs in English.",
+  "Respond to the user in English by default.",
+  "Switch to the user's language (or a specified one) only when the user explicitly asks for it;",
+  "even then, keep all internal reasoning, code, comments, and tool inputs in English.",
+].join("\n")
+
+// Split trailing wall-clock footer (Current time / Session started) from the
+// stable system prefix. Returns [prefix, footer] where footer is undefined
+// when no timestamp block is present.
+export function splitTimestampFooter(text: string): [string, string | undefined] {
+  const match = text.match(/\n?(Current time: .+\nSession started: .+)\s*$/)
+  if (!match || match.index === undefined || !match[1]) return [text, undefined]
+  const prefix = text.slice(0, match.index)
+  if (!prefix.trim()) return [text, undefined]
+  return [prefix.trimEnd(), match[1]]
 }
 
 // Check if messages contain any tool-call content

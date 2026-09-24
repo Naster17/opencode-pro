@@ -359,8 +359,28 @@ export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsa
   const outputTokens = safe(input.usage.outputTokens ?? 0)
   const reasoningTokens = safe(input.usage.outputTokenDetails?.reasoningTokens ?? input.usage.reasoningTokens ?? 0)
 
+  const rawUsage = input.usage as {
+    raw?: {
+      cachedContentTokenCount?: number
+      cache_read_input_tokens?: number
+      cache_creation_input_tokens?: number
+      prompt_tokens_details?: { cached_tokens?: number; cache_creation_input_tokens?: number }
+      input_tokens_details?: { cached_tokens?: number }
+    }
+  }
   const cacheReadInputTokens = safe(
-    input.usage.inputTokenDetails?.cacheReadTokens ?? input.usage.cachedInputTokens ?? 0,
+    input.usage.inputTokenDetails?.cacheReadTokens ??
+      input.usage.cachedInputTokens ??
+      (input.usage as { cachedPromptTokens?: number }).cachedPromptTokens ??
+      rawUsage?.raw?.cachedContentTokenCount ??
+      // Anthropic raw shape passthrough
+      rawUsage?.raw?.cache_read_input_tokens ??
+      // OpenAI chat / responses raw shapes passthrough
+      rawUsage?.raw?.prompt_tokens_details?.cached_tokens ??
+      rawUsage?.raw?.input_tokens_details?.cached_tokens ??
+      (input.metadata?.["google"] as { cachedContentTokenCount?: number } | undefined)?.cachedContentTokenCount ??
+      (input.metadata?.["antigravity"] as { cachedContentTokenCount?: number } | undefined)?.cachedContentTokenCount ??
+      0,
   )
   const cacheWriteInputTokens = safe(
     Number(
@@ -373,6 +393,9 @@ export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsa
         input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
         // @ts-expect-error
         input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+        // raw passthrough shapes (Anthropic top-level, OpenAI details)
+        rawUsage?.raw?.cache_creation_input_tokens ??
+        rawUsage?.raw?.prompt_tokens_details?.cache_creation_input_tokens ??
         0,
     ),
   )

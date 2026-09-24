@@ -84,6 +84,72 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.promptCacheKey).toBe(sessionID)
   })
 
+  test("should set promptCacheKey for opencode zen models regardless of model id", () => {
+    for (const id of ["muse-spark-1.3-contributor-free", "gpt-5.3-codex-spark", "big-pickle"]) {
+      const zenModel = {
+        ...mockModel,
+        providerID: "opencode",
+        api: {
+          id,
+          url: "https://opencode.ai/zen/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      }
+      const result = ProviderTransform.options({ model: zenModel, sessionID, providerOptions: {} })
+      expect(result.promptCacheKey).toBe(sessionID)
+    }
+  })
+
+  test("should set promptCacheKey for any openai-compatible provider", () => {
+    const customModel = {
+      ...mockModel,
+      providerID: "modal4",
+      api: {
+        id: "moonshotai/Kimi-K3",
+        url: "https://example.modal.direct/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+    const result = ProviderTransform.options({ model: customModel, sessionID, providerOptions: {} })
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should respect noCacheKey opt-out for openai-compatible providers", () => {
+    const customModel = {
+      ...mockModel,
+      providerID: "modal4",
+      api: {
+        id: "moonshotai/Kimi-K3",
+        url: "https://example.modal.direct/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+    const result = ProviderTransform.options({ model: customModel, sessionID, providerOptions: { noCacheKey: true } })
+    expect(result.promptCacheKey).toBeUndefined()
+  })
+
+  test("should scope promptCacheKey to parent session for subagents and forks", () => {
+    const zenModel = {
+      ...mockModel,
+      providerID: "opencode",
+      api: {
+        id: "muse-spark-1.3-contributor-free",
+        url: "https://opencode.ai/zen/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+    const child = ProviderTransform.options({
+      model: zenModel,
+      sessionID: "child-session",
+      parentSessionID: "root-session",
+      providerOptions: {},
+    })
+    expect(child.promptCacheKey).toBe("root-session")
+
+    const root = ProviderTransform.options({ model: zenModel, sessionID: "root-session", providerOptions: {} })
+    expect(root.promptCacheKey).toBe("root-session")
+  })
+
   test("should set store=false for openai provider", () => {
     const openaiModel = {
       ...mockModel,
@@ -2391,6 +2457,50 @@ describe("ProviderTransform.message - bedrock caching with non-bedrock providerI
   })
 })
 
+describe("ProviderTransform.message - opencode zen caching", () => {
+  const model = {
+    id: "muse-spark-1.3-contributor-free",
+    providerID: "opencode",
+    api: {
+      id: "muse-spark-1.3-contributor-free",
+      url: "https://opencode.ai/zen/v1",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Muse Spark 1.3 Free",
+    capabilities: {},
+    options: {},
+    headers: {},
+  } as any
+
+  test("attaches openaiCompatible cache_control to system messages", () => {
+    const msgs = [
+      { role: "system", content: "You are a helpful assistant" },
+      { role: "user", content: "Hello" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result[0].providerOptions?.openaiCompatible).toEqual({
+      cache_control: { type: "ephemeral" },
+    })
+  })
+
+  test("attaches cache_control at history breakpoints", () => {
+    const msgs = [
+      { role: "system", content: "You are a helpful assistant" },
+      ...Array.from({ length: 6 }, (_, i) => ({
+        role: i % 2 === 0 ? "user" : "assistant",
+        content: `message ${i}`,
+      })),
+      { role: "user", content: "latest" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+    const marked = result.filter((m: any) => m.providerOptions?.openaiCompatible?.cache_control)
+    expect(marked.length).toBeGreaterThan(0)
+  })
+})
+
 describe("ProviderTransform.message - transient caching", () => {
   const model = {
     id: "anthropic/claude-sonnet-4",
@@ -2692,6 +2802,18 @@ describe("ProviderTransform.variants", () => {
     const result = ProviderTransform.variants(model)
     expect(result).toEqual({})
   })
+
+  test.each(["claude-sonnet-4-6", "claude-opus-4-6-thinking", "gpt-oss-120b-medium"])(
+    "antigravity non-Gemini model %s exposes no thinking variants (envelope strips thinkingConfig)",
+    (id) => {
+      const model = createMockModel({
+        id,
+        providerID: "antigravity",
+        api: { id, url: "", npm: "@ai-sdk/google" },
+      })
+      expect(ProviderTransform.variants(model)).toEqual({})
+    },
+  )
 
   test("deepseek returns enable_thinking toggle variants for openai-compatible models", () => {
     const model = createMockModel({

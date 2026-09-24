@@ -174,16 +174,19 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const selected = createMemo(() => flat()[store.selected])
 
   createEffect(
-    on([() => store.filter, () => props.initialID, () => props.initial ?? props.current], ([filter]) => {
-      setTimeout(() => {
-        if (filter.length > 0) {
-          moveTo(0, true)
-          return
-        }
-        const index = initialIndex()
-        if (index >= 0) moveTo(index, true)
-      }, 0)
-    }),
+    on(
+      [() => store.filter, () => props.initialID, () => props.initial ?? props.current, flat],
+      ([filter]) => {
+        setTimeout(() => {
+          if (filter.length > 0) {
+            moveTo(0, true)
+            return
+          }
+          const index = initialIndex()
+          if (index >= 0) moveTo(index, true)
+        }, 0)
+      },
+    ),
   )
 
   function move(direction: number) {

@@ -1466,6 +1466,253 @@ describe("session.llm.stream", () => {
     })
   })
 
+  test("sends promptCacheKey and stable prefix across turns for opencode zen models", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const providerID = "opencode-test"
+    const modelID = "muse-spark-test"
+
+    const first = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+    const second = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Done"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                name: "OpenCode Zen",
+                npm: "@ai-sdk/openai-compatible",
+                api: `${server.url.origin}/v1`,
+                models: {
+                  [modelID]: {
+                    name: "Muse Spark Test",
+                    reasoning: true,
+                    tool_call: true,
+                    limit: { context: 200000, output: 64000 },
+                  },
+                },
+                options: { apiKey: "test-zen-key" },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(modelID))
+        const sessionID = SessionID.make("session-test-zen-cache")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("user-zen-1"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const question = tool({
+          description: "Ask a question",
+          inputSchema: z.object({ q: z.string() }),
+          execute: async () => ({ output: "stub" }),
+        })
+
+        await drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: { question },
+        })
+
+        await drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [
+            { role: "user", content: "Hello" },
+            {
+              role: "assistant",
+              content: [{ type: "tool-call", toolCallId: "call-1", toolName: "question", input: { q: "x" } }],
+            } as any,
+            {
+              role: "tool",
+              content: [
+                {
+                  type: "tool-result",
+                  toolCallId: "call-1",
+                  toolName: "question",
+                  output: { type: "text", value: "42" },
+                },
+              ],
+            } as any,
+            { role: "user", content: "Thanks" },
+          ] as ModelMessage[],
+          tools: { question },
+        })
+
+        const turn1 = (await first).body as Record<string, any>
+        const turn2 = (await second).body as Record<string, any>
+
+        // Session-scoped cache key must be present so the gateway can
+        // correlate consecutive turns of one session.
+        expect(turn1.promptCacheKey).toBe(sessionID)
+        expect(turn2.promptCacheKey).toBe(sessionID)
+
+        const sys1 = (turn1.messages as any[]).filter((m) => m.role === "system")
+        const sys2 = (turn2.messages as any[]).filter((m) => m.role === "system")
+        expect(sys1.length).toBeGreaterThan(0)
+        expect(sys2.length).toBe(sys1.length)
+
+        // Stable prefix: first system block byte-identical across turns.
+        expect(sys2[0]).toEqual(sys1[0])
+
+        // Volatile footer (if present) must be minute-precision, never seconds.
+        for (const sys of [...sys1.slice(1), ...sys2.slice(1)]) {
+          const text = typeof sys.content === "string" ? sys.content : JSON.stringify(sys.content)
+          if (!text.includes("Current time:")) continue
+          expect(text).toMatch(/Current time: \d{4}-\d{2}-\d{2} \d{2}:\d{2} \(local/)
+          expect(text).not.toMatch(/\d{2}:\d{2}:\d{2}/)
+        }
+
+        // Tool definitions must not churn between turns.
+        expect(turn2.tools).toEqual(turn1.tools)
+
+        // Shared history prefix must serialize identically.
+        const firstUser1 = (turn1.messages as any[]).find((m) => m.role === "user")
+        const firstUser2 = (turn2.messages as any[]).find((m) => m.role === "user")
+        expect(firstUser2).toEqual(firstUser1)
+      },
+    })
+  })
+
+  test("injects English-only rule for build agent and omits it for others", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const providerID = "vivgrid"
+    const modelID = "gemini-3.1-pro-preview"
+    const fixture = await loadFixture(providerID, modelID)
+
+    const first = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+    const second = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(fixture.model.id))
+        const sessionID = SessionID.make("session-test-lang-rule")
+
+        const base = {
+          sessionID,
+          model: resolved,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }] as ModelMessage[],
+          tools: {},
+        }
+
+        const buildAgent = {
+          name: "build",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const otherAgent = { ...buildAgent, name: "test" }
+
+        const buildUser = {
+          id: MessageID.make("user-lang-build"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: buildAgent.name,
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
+        } satisfies MessageV2.User
+        await drain({ ...base, agent: buildAgent, user: buildUser })
+
+        const otherUser = {
+          ...buildUser,
+          id: MessageID.make("user-lang-other"),
+          agent: otherAgent.name,
+        } satisfies MessageV2.User
+        await drain({ ...base, agent: otherAgent, user: otherUser })
+
+        const buildBody = (await first).body as Record<string, any>
+        const otherBody = (await second).body as Record<string, any>
+        const systemText = (body: Record<string, any>) =>
+          (body.messages as any[]).filter((m) => m.role === "system").map((m) => m.content).join("\n")
+
+        expect(systemText(buildBody)).toContain(LLM.ENGLISH_ONLY_RULE)
+        expect(systemText(otherBody)).not.toContain(LLM.ENGLISH_ONLY_RULE)
+      },
+    })
+  })
+
   test("sends Google API payload for Gemini models", async () => {
     const server = state.server
     if (!server) {

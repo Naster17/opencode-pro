@@ -8,6 +8,12 @@ import { billedAvgTokensPerSecond, formatCompactTokens, money, summarizeUsage } 
 import { Locale } from "@/util/locale"
 import { isCodexModel } from "@/plugin/codex"
 import { clearCodexUsageCache, formatResetDuration, getCodexUsage } from "./codex-usage"
+import { isAntigravityModel } from "@/plugin/antigravity"
+import {
+  clearAntigravityUsageCache,
+  formatBucket as formatAntigravityBucket,
+  getAntigravityUsage,
+} from "./antigravity-usage"
 import { BilledUsageTracker } from "./billed-usage"
 import { useBtwUsage } from "@tui/context/btw"
 import { useLocal } from "@tui/context/local"
@@ -18,6 +24,7 @@ const authPaths = [
   path.join(Global.Path.data, "auth.json"),
   path.join(Global.Path.home, ".codex", "auth.json"),
   path.join(Global.Path.home, ".codex", ".cockpit_codex_auth.json"),
+  path.join(Global.Path.home, ".config", "opencode", "antigravity-accounts.json"),
 ]
 const codexHotSwapRefreshDelays = [0, 1_000, 3_000, 8_000]
 
@@ -63,7 +70,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   ])
   const codexSelected = createMemo(() => {
     const current = local.model.current()
-    if (current && isCodexModel(current.providerID, current.modelID)) return true
+    if (current) return isCodexModel(current.providerID, current.modelID)
     const model = sync.data.config.model
     if (!model) return false
     const [providerID, ...rest] = model.split("/")
@@ -106,17 +113,70 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     }
   }
 
+  const [antigravityUsageVersion, setAntigravityUsageVersion] = createSignal(0)
+  const antigravityHotSwapTimers = new Set<ReturnType<typeof setTimeout>>()
+
+  const antigravitySelected = createMemo(() => {
+    const current = local.model.current()
+    if (current) return isAntigravityModel(current.providerID, current.modelID)
+    const model = sync.data.config.model
+    if (!model) return false
+    const [providerID, ...rest] = model.split("/")
+    return isAntigravityModel(providerID ?? "", rest.join("/"))
+  })
+  const antigravityUsed = createMemo(() =>
+    sessionMessages().some((message) => {
+      if (message.role === "user") return isAntigravityModel(message.model.providerID, message.model.modelID)
+      return isAntigravityModel(message.providerID, message.modelID)
+    }),
+  )
+  const showAntigravityUsage = createMemo(() => usageWidgetsVisible() && (antigravitySelected() || antigravityUsed()))
+  const antigravityUsageKey = createMemo(() => (showAntigravityUsage() ? antigravityUsageVersion() : -1))
+  let antigravityRefreshTimer: ReturnType<typeof setTimeout> | undefined
+  const scheduleAntigravityRefresh = (force = false) => {
+    if (!showAntigravityUsage()) return
+    if (antigravityRefreshTimer) clearTimeout(antigravityRefreshTimer)
+    antigravityRefreshTimer = setTimeout(
+      () => {
+        setAntigravityUsageVersion((value) => value + (force ? 1000 : 1))
+        antigravityRefreshTimer = undefined
+      },
+      force ? 0 : 150,
+    )
+  }
+  const [antigravityUsage] = createResource(antigravityUsageKey, (key) =>
+    key >= 0 ? getAntigravityUsage(key > 0) : undefined,
+  )
+
+  const triggerAntigravityHotSwapRefresh = () => {
+    if (!showAntigravityUsage()) return
+    clearAntigravityUsageCache()
+    for (const timer of antigravityHotSwapTimers) clearTimeout(timer)
+    antigravityHotSwapTimers.clear()
+    for (const delay of codexHotSwapRefreshDelays) {
+      const timer = setTimeout(() => {
+        antigravityHotSwapTimers.delete(timer)
+        clearAntigravityUsageCache()
+        scheduleAntigravityRefresh(true)
+      }, delay)
+      antigravityHotSwapTimers.add(timer)
+    }
+  }
+
   const countdown = setInterval(() => setNow(Date.now()), 60_000)
   onCleanup(() => clearInterval(countdown))
   onCleanup(() => {
     if (codexRefreshTimer) clearTimeout(codexRefreshTimer)
     for (const timer of codexHotSwapTimers) clearTimeout(timer)
     codexHotSwapTimers.clear()
+    if (antigravityRefreshTimer) clearTimeout(antigravityRefreshTimer)
+    for (const timer of antigravityHotSwapTimers) clearTimeout(timer)
+    antigravityHotSwapTimers.clear()
   })
 
   let authFingerprint = ""
   const authWatcher = setInterval(async () => {
-    if (!showCodexUsage()) return
+    if (!showCodexUsage() && !showAntigravityUsage()) return
     const nextFingerprint = (
       await Promise.all(
         authPaths.map((item) =>
@@ -134,7 +194,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     }
     if (nextFingerprint === authFingerprint) return
     authFingerprint = nextFingerprint
-    triggerCodexHotSwapRefresh()
+    if (showCodexUsage()) triggerCodexHotSwapRefresh()
+    if (showAntigravityUsage()) triggerAntigravityHotSwapRefresh()
   }, 2_000)
   onCleanup(() => clearInterval(authWatcher))
 
@@ -145,19 +206,31 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     wasShowingCodexUsage = next
   })
 
+  let wasShowingAntigravityUsage = false
+  createEffect(() => {
+    const next = showAntigravityUsage()
+    if (next && !wasShowingAntigravityUsage) scheduleAntigravityRefresh(true)
+    wasShowingAntigravityUsage = next
+  })
+
   const trackedSessionIDs = createMemo(() => new Set([props.session_id, ...descendantSessions()]))
   const onTrackedSession = (sessionID: string) => trackedSessionIDs().has(sessionID)
   const offStatus = props.api.event.on("session.status", (event) => {
     if (!onTrackedSession(event.properties.sessionID)) return
-    if (event.properties.status.type === "busy") scheduleCodexRefresh(false)
+    if (event.properties.status.type === "busy") {
+      scheduleCodexRefresh(false)
+      scheduleAntigravityRefresh(false)
+    }
   })
   const offIdle = props.api.event.on("session.idle", (event) => {
     if (!onTrackedSession(event.properties.sessionID)) return
     scheduleCodexRefresh(true)
+    scheduleAntigravityRefresh(true)
   })
   const offModel = props.api.event.on("session.next.model.switched", (event) => {
     if (!onTrackedSession(event.properties.sessionID)) return
     scheduleCodexRefresh(true)
+    scheduleAntigravityRefresh(true)
   })
   onCleanup(offStatus)
   onCleanup(offIdle)
@@ -320,6 +393,30 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     }
   })
 
+  const antigravityStats = createMemo(() => {
+    if (!showAntigravityUsage()) return
+    const snapshot = antigravityUsage()
+    if (!snapshot?.configured) return
+
+    const labelWidth = Math.max("Gemini".length, "Claude".length, "Account".length)
+    const formatRow = (label: string, value: string) => (
+      <text wrapMode="none">
+        <span style={{ fg: theme().textMuted }}>{label.padEnd(labelWidth, " ")} </span>
+        <span style={{ fg: theme().text }}>{value}</span>
+      </text>
+    )
+
+    const geminiStr = formatAntigravityBucket(snapshot.gemini5h, snapshot.geminiWeekly, now())
+    const claudeStr = formatAntigravityBucket(snapshot.claude5h, snapshot.claudeWeekly, now())
+    const accountStr = snapshot.email ?? snapshot.plan ?? "connected"
+
+    return {
+      gemini: geminiStr ? formatRow("Gemini", geminiStr) : undefined,
+      claude: claudeStr ? formatRow("Claude", claudeStr) : undefined,
+      account: formatRow("Account", accountStr),
+    }
+  })
+
   return (
     <box>
       <text fg={theme().text}>
@@ -354,6 +451,16 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
         {codexStats()?.usage}
         {codexStats()?.reset}
         {codexStats()?.account}
+      </Show>
+      <Show when={antigravityStats()}>
+        <box marginTop={1}>
+          <text fg={theme().text}>
+            <b>Antigravity Usage</b>
+          </text>
+        </box>
+        <Show when={antigravityStats()?.gemini}>{antigravityStats()?.gemini}</Show>
+        <Show when={antigravityStats()?.claude}>{antigravityStats()?.claude}</Show>
+        {antigravityStats()?.account}
       </Show>
     </box>
   )
