@@ -38,6 +38,7 @@ If any check fails, **STOP immediately** and report which check failed before pr
 ## Escalation
 
 Escalate when any condition is true:
+
 - no progress across two consecutive checkpoints
 - repeated failures with identical stack traces
 - cost drift outside budget window

@@ -134,17 +134,17 @@ Use `N/A` for dimensions that do not apply.
 
 ## Dimension Scores
 
-| Dimension | Score | Evidence | Revision priority |
-| --- | ---: | --- | --- |
-| Problem and question |  |  |  |
-| Literature and context |  |  |  |
-| Methodology |  |  |  |
-| Data and evidence |  |  |  |
-| Analysis |  |  |  |
-| Results and interpretation |  |  |  |
-| Limitations |  |  |  |
-| Writing and structure |  |  |  |
-| Citations |  |  |  |
+| Dimension                  | Score | Evidence | Revision priority |
+| -------------------------- | ----: | -------- | ----------------- |
+| Problem and question       |       |          |                   |
+| Literature and context     |       |          |                   |
+| Methodology                |       |          |                   |
+| Data and evidence          |       |          |                   |
+| Analysis                   |       |          |                   |
+| Results and interpretation |       |          |                   |
+| Limitations                |       |          |                   |
+| Writing and structure      |       |          |                   |
+| Citations                  |       |          |                   |
 
 ## Critical Issues
 

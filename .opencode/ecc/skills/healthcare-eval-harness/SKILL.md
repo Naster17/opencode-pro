@@ -89,13 +89,13 @@ echo "Integration pass rate: ${rate}% ($passed/$total)"
 
 ### Pass/Fail Matrix
 
-| Category | Threshold | On Failure |
-|----------|-----------|------------|
-| CDSS Accuracy | 100% | **BLOCK deployment** |
-| PHI Exposure | 100% | **BLOCK deployment** |
-| Data Integrity | 100% | **BLOCK deployment** |
-| Clinical Workflow | 95%+ | WARN, allow with review |
-| Integration | 95%+ | WARN, allow with review |
+| Category          | Threshold | On Failure              |
+| ----------------- | --------- | ----------------------- |
+| CDSS Accuracy     | 100%      | **BLOCK deployment**    |
+| PHI Exposure      | 100%      | **BLOCK deployment**    |
+| Data Integrity    | 100%      | **BLOCK deployment**    |
+| Clinical Workflow | 95%+      | WARN, allow with review |
+| Integration       | 95%+      | WARN, allow with review |
 
 ### CI/CD Integration
 
@@ -110,7 +110,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
       - run: npm ci
 
       # CRITICAL gates — 100% required, bail on first failure

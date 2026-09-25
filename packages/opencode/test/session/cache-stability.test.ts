@@ -23,7 +23,12 @@ describe("cache stability", () => {
   })
 
   test("splitTimestampFooter separates volatile footer from stable prefix", () => {
-    const text = ["You are helpful.", "Env: stable", "Current time: 2026-09-24 21:10 (local, Europe/Rome)", "Session started: 2026-09-24 20:55 (local)"].join("\n")
+    const text = [
+      "You are helpful.",
+      "Env: stable",
+      "Current time: 2026-09-24 21:10 (local, Europe/Rome)",
+      "Session started: 2026-09-24 20:55 (local)",
+    ].join("\n")
     const [prefix, footer] = splitTimestampFooter(text)
     expect(prefix).toBe("You are helpful.\nEnv: stable")
     expect(footer).toContain("Current time:")
@@ -44,7 +49,9 @@ describe("cache stability", () => {
   })
 
   test("isVolatileTimestampBlock detects footer-only content", () => {
-    expect(isVolatileTimestampBlock("Current time: 2026-09-24 21:10 (local)\nSession started: 2026-09-24 20:55 (local)")).toBe(true)
+    expect(
+      isVolatileTimestampBlock("Current time: 2026-09-24 21:10 (local)\nSession started: 2026-09-24 20:55 (local)"),
+    ).toBe(true)
     expect(isVolatileTimestampBlock("You are a helpful assistant.")).toBe(false)
     expect(isVolatileTimestampBlock("")).toBe(false)
   })

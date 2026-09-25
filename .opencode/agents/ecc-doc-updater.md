@@ -18,6 +18,7 @@ You are a documentation specialist focused on keeping codemaps and documentation
 ## Codemap Generation Workflow
 
 ### 1. Repository Structure Analysis
+
 ```
 a) Identify all workspaces/packages
 b) Map directory structure
@@ -26,6 +27,7 @@ d) Detect framework patterns (Next.js, Node.js, etc.)
 ```
 
 ### 2. Module Analysis
+
 ```
 For each module:
 - Extract exports (public API)
@@ -36,6 +38,7 @@ For each module:
 ```
 
 ### 3. Generate Codemaps
+
 ```
 Structure:
 docs/CODEMAPS/
@@ -48,6 +51,7 @@ docs/CODEMAPS/
 ```
 
 ### 4. Codemap Format
+
 ```markdown
 # [Area] Codemap
 
@@ -61,8 +65,8 @@ docs/CODEMAPS/
 ## Key Modules
 
 | Module | Purpose | Exports | Dependencies |
-|--------|---------|---------|--------------|
-| ... | ... | ... | ... |
+| ------ | ------- | ------- | ------------ |
+| ...    | ...     | ...     | ...          |
 
 ## Data Flow
 
@@ -81,6 +85,7 @@ Links to other codemaps that interact with this area
 ## Documentation Update Workflow
 
 ### 1. Extract Documentation from Code
+
 ```
 - Read JSDoc/TSDoc comments
 - Extract README sections from package.json
@@ -89,6 +94,7 @@ Links to other codemaps that interact with this area
 ```
 
 ### 2. Update Documentation Files
+
 ```
 Files to update:
 - README.md - Project overview, setup instructions
@@ -98,6 +104,7 @@ Files to update:
 ```
 
 ### 3. Documentation Validation
+
 ```
 - Verify all mentioned files exist
 - Check all links work
@@ -109,7 +116,7 @@ Files to update:
 
 When updating README.md:
 
-```markdown
+````markdown
 # Project Name
 
 Brief description
@@ -130,6 +137,7 @@ npm run dev
 # Build
 npm run build
 ```
+````
 
 ## Architecture
 
@@ -155,6 +163,7 @@ See [docs/CODEMAPS/INDEX.md](docs/CODEMAPS/INDEX.md) for detailed architecture.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md)
+
 ```
 
 ## Quality Checklist
@@ -195,3 +204,4 @@ Before committing documentation:
 - Refactoring without API changes
 
 **Remember**: Documentation that doesn't match reality is worse than no documentation. Always generate from source of truth (the actual code).
+```

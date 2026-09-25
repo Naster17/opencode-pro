@@ -31,7 +31,7 @@ async function sendEmail(to: string, subject: string, html: string) {
   const response = await fetch("https://send.api.mailtrap.io/api/send", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${process.env.MAILTRAP_API_TOKEN}`,
+      Authorization: `Bearer ${process.env.MAILTRAP_API_TOKEN}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -40,30 +40,31 @@ async function sendEmail(to: string, subject: string, html: string) {
       subject,
       html,
     }),
-  });
+  })
 
   if (!response.ok) {
-    throw new Error(`Email send failed: ${response.status}`);
+    throw new Error(`Email send failed: ${response.status}`)
   }
-  return response.json();
+  return response.json()
 }
 ```
 
 ```typescript
 // Same call, routed to Sandbox in non-production environments
-const MAILTRAP_ENDPOINT = process.env.NODE_ENV === "production"
-  ? "https://send.api.mailtrap.io/api/send"
-  : `https://sandbox.api.mailtrap.io/api/send/${process.env.MAILTRAP_INBOX_ID}`;
+const MAILTRAP_ENDPOINT =
+  process.env.NODE_ENV === "production"
+    ? "https://send.api.mailtrap.io/api/send"
+    : `https://sandbox.api.mailtrap.io/api/send/${process.env.MAILTRAP_INBOX_ID}`
 ```
 
 ## Anti-Patterns
 
-| Anti-Pattern | Why It's a Problem | Instead |
-| --- | --- | --- |
-| Using the production sending endpoint in dev/test | Real test emails reach real inboxes, risking spam complaints and leaked test data | Route non-production environments to the Sandbox endpoint |
-| Hardcoding API tokens in source | Credential leak risk if committed to version control | Load tokens from environment variables / secrets manager |
-| Sending before domain verification completes | Emails silently fail or land in spam | Verify SPF/DKIM/DMARC records before enabling production sending |
-| No retry/error handling on send failures | Silent notification failures (e.g., user never gets password reset email) | Check response status, log failures, surface actionable errors |
+| Anti-Pattern                                      | Why It's a Problem                                                                | Instead                                                          |
+| ------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Using the production sending endpoint in dev/test | Real test emails reach real inboxes, risking spam complaints and leaked test data | Route non-production environments to the Sandbox endpoint        |
+| Hardcoding API tokens in source                   | Credential leak risk if committed to version control                              | Load tokens from environment variables / secrets manager         |
+| Sending before domain verification completes      | Emails silently fail or land in spam                                              | Verify SPF/DKIM/DMARC records before enabling production sending |
+| No retry/error handling on send failures          | Silent notification failures (e.g., user never gets password reset email)         | Check response status, log failures, surface actionable errors   |
 
 ## Best Practices
 

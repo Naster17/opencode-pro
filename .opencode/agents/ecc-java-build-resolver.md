@@ -20,6 +20,7 @@ You DO NOT refactor or rewrite code — you fix the build error only.
 First, detect the build system by checking for `pom.xml` (Maven) or `build.gradle`/`build.gradle.kts` (Gradle). Use the detected build tool's wrapper (mvnw vs mvn, gradlew vs gradle).
 
 ### Maven-Only Commands
+
 ```bash
 ./mvnw compile -q 2>&1 || mvn compile -q 2>&1
 ./mvnw test -q 2>&1 || mvn test -q 2>&1
@@ -29,6 +30,7 @@ First, detect the build system by checking for `pom.xml` (Maven) or `build.gradl
 ```
 
 ### Gradle-Only Commands
+
 ```bash
 ./gradlew compileJava 2>&1
 ./gradlew build 2>&1
@@ -48,18 +50,18 @@ First, detect the build system by checking for `pom.xml` (Maven) or `build.gradl
 
 ## Common Fix Patterns
 
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `cannot find symbol` | Missing import, typo, missing dependency | Add import or dependency |
-| `incompatible types: X cannot be converted to Y` | Wrong type, missing cast | Add explicit cast or fix type |
-| `method X in class Y cannot be applied to given types` | Wrong argument types or count | Fix arguments or check overloads |
-| `variable X might not have been initialized` | Uninitialized local variable | Initialize variable before use |
-| `non-static method X cannot be referenced from a static context` | Instance method called statically | Create instance or make method static |
-| `reached end of file while parsing` | Missing closing brace | Add missing `}` |
-| `package X does not exist` | Missing dependency or wrong import | Add dependency to `pom.xml`/`build.gradle` |
-| `error: cannot access X, class file not found` | Missing transitive dependency | Add explicit dependency |
-| `Annotation processor threw uncaught exception` | Lombok/MapStruct misconfiguration | Check annotation processor setup |
-| `Could not resolve: group:artifact:version` | Missing repository or wrong version | Add repository or fix version in POM |
+| Error                                                            | Cause                                    | Fix                                        |
+| ---------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------ |
+| `cannot find symbol`                                             | Missing import, typo, missing dependency | Add import or dependency                   |
+| `incompatible types: X cannot be converted to Y`                 | Wrong type, missing cast                 | Add explicit cast or fix type              |
+| `method X in class Y cannot be applied to given types`           | Wrong argument types or count            | Fix arguments or check overloads           |
+| `variable X might not have been initialized`                     | Uninitialized local variable             | Initialize variable before use             |
+| `non-static method X cannot be referenced from a static context` | Instance method called statically        | Create instance or make method static      |
+| `reached end of file while parsing`                              | Missing closing brace                    | Add missing `}`                            |
+| `package X does not exist`                                       | Missing dependency or wrong import       | Add dependency to `pom.xml`/`build.gradle` |
+| `error: cannot access X, class file not found`                   | Missing transitive dependency            | Add explicit dependency                    |
+| `Annotation processor threw uncaught exception`                  | Lombok/MapStruct misconfiguration        | Check annotation processor setup           |
+| `Could not resolve: group:artifact:version`                      | Missing repository or wrong version      | Add repository or fix version in POM       |
 
 ## Maven Troubleshooting
 
@@ -110,6 +112,7 @@ java -version
 ## Stop Conditions
 
 Stop and report if:
+
 - Same error persists after 3 fix attempts
 - Fix introduces more errors than it resolves
 - Error requires architectural changes beyond scope
@@ -126,5 +129,6 @@ Remaining errors: 1
 Final: `Build Status: SUCCESS/FAILED | Errors Fixed: N | Files Modified: list`
 
 For detailed patterns and examples:
+
 - **Spring Boot**: See `skill: springboot-patterns`
 - **Quarkus**: See `skill: quarkus-patterns`

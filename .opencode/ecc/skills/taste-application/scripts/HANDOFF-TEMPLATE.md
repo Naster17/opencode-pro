@@ -7,15 +7,15 @@ a number appears, it came out of `mint.py` and is reproducible by re-running it.
 
 ## 1. What you have been given
 
-| File | What it is |
-|---|---|
-| `FINAL_v3.mp4` | Viewing copy. 33 shots, 14.12s, 1280x720 @ 24fps. **Do not grade this** — every cut is baked in. Passes all 7 verification checks. |
-| `FINAL_v3.fcpxml` | The same 33 cuts as a real timeline. **This is the working file.** |
-| `FINAL_v3.edl` | Same timeline, CMX3600, for anything that will not take FCPXML. |
-| `out/forge_work/` | The individual graded shot files the timeline points at. **Deleting this breaks the timeline** even though the mp4 still plays. |
-| `stylepacks/flashethereal/look.cube` | 33³ node LUT. Validated: 35,937 rows, in gamut, monotonic neutral axis. |
-| `stylepacks/flashethereal/plates/` | Screen-blend overlay elements on black. No keying needed. |
-| `stylepacks/flashethereal/stills/` | Full-res frames from the longest shots. |
+| File                                 | What it is                                                                                                                         |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `FINAL_v3.mp4`                       | Viewing copy. 33 shots, 14.12s, 1280x720 @ 24fps. **Do not grade this** — every cut is baked in. Passes all 7 verification checks. |
+| `FINAL_v3.fcpxml`                    | The same 33 cuts as a real timeline. **This is the working file.**                                                                 |
+| `FINAL_v3.edl`                       | Same timeline, CMX3600, for anything that will not take FCPXML.                                                                    |
+| `out/forge_work/`                    | The individual graded shot files the timeline points at. **Deleting this breaks the timeline** even though the mp4 still plays.    |
+| `stylepacks/flashethereal/look.cube` | 33³ node LUT. Validated: 35,937 rows, in gamut, monotonic neutral axis.                                                            |
+| `stylepacks/flashethereal/plates/`   | Screen-blend overlay elements on black. No keying needed.                                                                          |
+| `stylepacks/flashethereal/stills/`   | Full-res frames from the longest shots.                                                                                            |
 
 ## 2. DaVinci Resolve
 
@@ -56,24 +56,24 @@ will double-grade them.
 
 ### What the grade is
 
-| | Measured |
-|---|---|
-| Contrast (std L\*) | **34.55** |
-| Black point (1st pct) | **0.00** |
-| White point (99th pct) | **99.66** |
+|                                | Measured  |
+| ------------------------------ | --------- |
+| Contrast (std L\*)             | **34.55** |
+| Black point (1st pct)          | **0.00**  |
+| White point (99th pct)         | **99.66** |
 | Background (share below L\*10) | **26.3%** |
-| Grain sigma | 0.0071 |
+| Grain sigma                    | 0.0071    |
 
 Chroma by luminance zone — this is the whole identity, and it lives in the
 **lower midtones**, not globally:
 
-| Zone | a\* | b\* | chroma |
-|---|---|---|---|
-| L\*≈7.5 | −0.22 | −0.41 | 0.5 — neutral |
+| Zone       | a\*        | b\*        | chroma                                  |
+| ---------- | ---------- | ---------- | --------------------------------------- |
+| L\*≈7.5    | −0.22      | −0.41      | 0.5 — neutral                           |
 | **L\*≈25** | **+19.75** | **−14.20** | **24.3 — violet/orchid, the signature** |
-| L\*≈45 | +18.16 | −6.75 | 19.4 |
-| L\*≈65 | +2.03 | −4.22 | 4.7 |
-| L\*≈87.5 | +1.16 | −1.08 | 1.6 — neutral |
+| L\*≈45     | +18.16     | −6.75      | 19.4                                    |
+| L\*≈65     | +2.03      | −4.22      | 4.7                                     |
+| L\*≈87.5   | +1.16      | −1.08      | 1.6 — neutral                           |
 
 Near-neutral at both ends, violet through the shadows and low mids. If you pull
 a global tint you will destroy this — the ends are supposed to stay clean.
@@ -83,14 +83,14 @@ part of the cast.
 
 ### The cut
 
-| | Reference | Delivered cut |
-|---|---|---|
-| Shots | 77 | 33 |
-| Mean shot | 0.78s | 0.74s (5% off) |
-| Median shot | 0.47s | — |
-| p25 / p75 | 0.33s / 0.75s | — |
-| Cuts/min | 77 | 81 |
-| Rhythm variance (std/mean) | 1.06 | — |
+|                            | Reference     | Delivered cut  |
+| -------------------------- | ------------- | -------------- |
+| Shots                      | 77            | 33             |
+| Mean shot                  | 0.78s         | 0.74s (5% off) |
+| Median shot                | 0.47s         | —              |
+| p25 / p75                  | 0.33s / 0.75s | —              |
+| Cuts/min                   | 77            | 81             |
+| Rhythm variance (std/mean) | 1.06          | —              |
 
 Variance of 1.06 means this is **not metronomic** — long holds punctuated by
 very fast runs. If you retime, keep the variance; evenly spaced cuts at the same
@@ -167,7 +167,7 @@ python mint3d.py --genre flashethereal --plate \
     --prompt "a cracked chrome visor" --render
 ```
 
-`--plate` generates a clean single-object image first and meshes *that*. The
+`--plate` generates a clean single-object image first and meshes _that_. The
 endpoint's own guidance is "simple background, single object, object >50% of
 frame" — the pack's stills are glitch collages with several subjects, which is
 close to the worst possible input, so lifting a prop straight from them yields
@@ -187,12 +187,12 @@ an oversight to route around.
 
 ## 4. Things that will bite you
 
-| Don't | Why |
-|---|---|
-| Grade the delivered shots again | They are already graded; the LUT is for new material |
-| Apply a global tint | The signature is zone-local; both ends are meant to stay neutral |
-| Import at 23.976 or 30 fps | Resolve conforms silently and the cadence goes with it |
-| Delete `out/forge_work/` | The timeline references those files by absolute path |
-| Space the cuts evenly | Variance 1.06 is the rhythm; the average alone is not |
-| Screen the grain plate | Grain wants Overlay; Screen lifts the blacks you just protected |
-| Trust the mp4 as a master | It is a viewing copy with every cut baked in |
+| Don't                           | Why                                                              |
+| ------------------------------- | ---------------------------------------------------------------- |
+| Grade the delivered shots again | They are already graded; the LUT is for new material             |
+| Apply a global tint             | The signature is zone-local; both ends are meant to stay neutral |
+| Import at 23.976 or 30 fps      | Resolve conforms silently and the cadence goes with it           |
+| Delete `out/forge_work/`        | The timeline references those files by absolute path             |
+| Space the cuts evenly           | Variance 1.06 is the rhythm; the average alone is not            |
+| Screen the grain plate          | Grain wants Overlay; Screen lifts the blacks you just protected  |
+| Trust the mp4 as a master       | It is a viewing copy with every cut baked in                     |

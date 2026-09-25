@@ -24,14 +24,14 @@ decides on the exact text, and a delivery ledger proves what went out.
 
 ### Objects
 
-| Object | Meaning |
-| --- | --- |
-| Obligation | One thing we owe a counterparty. Status moves `drafted`, then `approved` or `rejected`, then `sent`. Carries `direction`, `counterparty`, `channel`, and an `updated_at` epoch. |
-| Draft | Sidecar row holding the exact draft text, a sha256 of that text, origin coordinates (platform, channel, thread, user), and priority (P0 to P3). One per obligation, replaced on re-file. |
-| Decision | An operator's approve or reject, recorded with the operator id, a nonce, and the draft epoch it was made against. |
-| Approval snapshot | Immutable text, hash, epoch and destination recorded by the already-authorized decision writer. Missing snapshots cannot grant dispatch. |
-| Claim | Durable reservation with a random token and state; at most one active claim per obligation. |
-| Delivery | Ledger row proving one send or notice for one (obligation, decision) pair. |
+| Object            | Meaning                                                                                                                                                                                  |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Obligation        | One thing we owe a counterparty. Status moves `drafted`, then `approved` or `rejected`, then `sent`. Carries `direction`, `counterparty`, `channel`, and an `updated_at` epoch.          |
+| Draft             | Sidecar row holding the exact draft text, a sha256 of that text, origin coordinates (platform, channel, thread, user), and priority (P0 to P3). One per obligation, replaced on re-file. |
+| Decision          | An operator's approve or reject, recorded with the operator id, a nonce, and the draft epoch it was made against.                                                                        |
+| Approval snapshot | Immutable text, hash, epoch and destination recorded by the already-authorized decision writer. Missing snapshots cannot grant dispatch.                                                 |
+| Claim             | Durable reservation with a random token and state; at most one active claim per obligation.                                                                                              |
+| Delivery          | Ledger row proving one send or notice for one (obligation, decision) pair.                                                                                                               |
 
 The reference schema is in [references/approval-ledger.sql](references/approval-ledger.sql).
 
@@ -134,12 +134,12 @@ can leave zero sends and a held claim. Releasing an unknown outcome for a new
 attempt would require fencing the original executor and verifying provider
 semantics; this reference deliberately provides no such retry operation.
 
-| Claim state | Allowed next states |
-| --- | --- |
-| claimed | dispatching or cancelled before dispatch |
-| dispatching | delivered or unknown |
-| unknown | delivered through trusted reconciliation only |
-| delivered, cancelled | terminal; decision key cannot be reused |
+| Claim state          | Allowed next states                           |
+| -------------------- | --------------------------------------------- |
+| claimed              | dispatching or cancelled before dispatch      |
+| dispatching          | delivered or unknown                          |
+| unknown              | delivered through trusted reconciliation only |
+| delivered, cancelled | terminal; decision key cannot be reused       |
 
 While a claim is active, database guards freeze obligation, draft and decision
 writes, including replacements. Snapshots and claims cannot be erased. Cancel a

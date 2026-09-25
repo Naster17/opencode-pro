@@ -46,14 +46,14 @@ VPNv4, or EVPN. Do not assume global IPv4 unicast.
 
 ## State Interpretation
 
-| State | First checks |
-| --- | --- |
-| Established with prefix count | Route exchange is up; inspect policy and table selection |
-| Established with zero prefixes | Check inbound policy, max-prefix, advertised routes, and AFI/SAFI |
-| Active | TCP session is not completing; check routing, source, ACLs, and peer reachability |
-| Connect | TCP connection is in progress; check path and remote listener |
-| OpenSent/OpenConfirm | TCP works; check ASN, authentication, timers, capabilities, and logs |
-| Idle | Neighbor may be disabled, missing config, blocked by policy, or backoff timer |
+| State                          | First checks                                                                      |
+| ------------------------------ | --------------------------------------------------------------------------------- |
+| Established with prefix count  | Route exchange is up; inspect policy and table selection                          |
+| Established with zero prefixes | Check inbound policy, max-prefix, advertised routes, and AFI/SAFI                 |
+| Active                         | TCP session is not completing; check routing, source, ACLs, and peer reachability |
+| Connect                        | TCP connection is in progress; check path and remote listener                     |
+| OpenSent/OpenConfirm           | TCP works; check ASN, authentication, timers, capabilities, and logs              |
+| Idle                           | Neighbor may be disabled, missing config, blocked by policy, or backoff timer     |
 
 ## Transport Checks
 

@@ -30,15 +30,15 @@ Treat every agent as a teammate with a narrow contract:
 
 Use agent Kanban when work must be visible across sessions.
 
-| Column | Meaning | Exit Criteria |
-| --- | --- | --- |
-| Backlog | Candidate work item, not yet shaped | Acceptance criteria written |
-| Ready | Shaped and assignable | Owner and branch/worktree assigned |
-| Running | Agent is actively working | Handoff artifact and changed files exist |
-| Review | Work is complete but not merged | Tests, diff review, and risk check pass |
-| Blocked | Needs external input or failed gate | Blocker has owner and next action |
-| Merged | Integrated into mainline | PR merged or local main updated |
-| Archived | No longer relevant | Reason recorded |
+| Column   | Meaning                             | Exit Criteria                            |
+| -------- | ----------------------------------- | ---------------------------------------- |
+| Backlog  | Candidate work item, not yet shaped | Acceptance criteria written              |
+| Ready    | Shaped and assignable               | Owner and branch/worktree assigned       |
+| Running  | Agent is actively working           | Handoff artifact and changed files exist |
+| Review   | Work is complete but not merged     | Tests, diff review, and risk check pass  |
+| Blocked  | Needs external input or failed gate | Blocker has owner and next action        |
+| Merged   | Integrated into mainline            | PR merged or local main updated          |
+| Archived | No longer relevant                  | Reason recorded                          |
 
 Each card should fit this schema:
 
@@ -50,11 +50,7 @@ Each card should fit this schema:
   "state": "running",
   "branch": "product/dynamic-workflow-team-orchestration",
   "worktree": ".",
-  "acceptance": [
-    "Skill exists",
-    "Tests cover required concepts",
-    "Content artifact contains video and article angles"
-  ],
+  "acceptance": ["Skill exists", "Tests cover required concepts", "Content artifact contains video and article angles"],
   "merge_gate": "lint, focused tests, and catalog check pass",
   "handoff": "path/to/handoff.md"
 }

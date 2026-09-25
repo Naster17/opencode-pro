@@ -18,28 +18,35 @@ Create a detailed implementation plan for: $ARGUMENTS
 ## Output Format
 
 ### Requirements Restatement
+
 [Clear, concise restatement of what will be built]
 
 ### Implementation Phases
+
 [Phase 1: Description]
+
 - Step 1.1
 - Step 1.2
-...
+  ...
 
 [Phase 2: Description]
+
 - Step 2.1
 - Step 2.2
-...
+  ...
 
 ### Dependencies
+
 [List external dependencies, APIs, services needed]
 
 ### Risks
+
 - HIGH: [Critical risks that could block implementation]
 - MEDIUM: [Moderate risks to address]
 - LOW: [Minor concerns]
 
 ### Estimated Complexity
+
 [HIGH/MEDIUM/LOW with time estimates]
 
 **WAITING FOR CONFIRMATION**: Proceed with this plan? (yes/no/modify)

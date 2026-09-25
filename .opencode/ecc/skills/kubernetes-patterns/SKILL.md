@@ -42,13 +42,13 @@ This skill provides **copy-pasteable, production-grade YAML patterns** and **kub
 
 See the sections below for complete, runnable examples. Quick references:
 
-| Task | Jump to |
-|------|---------|
-| Full production Deployment YAML | [Core Workload Patterns](#core-workload-patterns) |
-| Probe configuration | [Probes](#probes--liveness-readiness-startup) |
-| RBAC least-privilege setup | [RBAC](#rbac--roles-and-serviceaccounts) |
-| Debug a CrashLoopBackOff | [kubectl Debugging Cheatsheet](#kubectl-debugging-cheatsheet) |
-| Autoscaling | [HPA](#horizontal-pod-autoscaler-hpa) |
+| Task                            | Jump to                                                       |
+| ------------------------------- | ------------------------------------------------------------- |
+| Full production Deployment YAML | [Core Workload Patterns](#core-workload-patterns)             |
+| Probe configuration             | [Probes](#probes--liveness-readiness-startup)                 |
+| RBAC least-privilege setup      | [RBAC](#rbac--roles-and-serviceaccounts)                      |
+| Debug a CrashLoopBackOff        | [kubectl Debugging Cheatsheet](#kubectl-debugging-cheatsheet) |
+| Autoscaling                     | [HPA](#horizontal-pod-autoscaler-hpa)                         |
 
 ---
 
@@ -73,8 +73,8 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 1          # Allow 1 extra pod during update
-      maxUnavailable: 0    # Never reduce below desired count
+      maxSurge: 1 # Allow 1 extra pod during update
+      maxUnavailable: 0 # Never reduce below desired count
   template:
     metadata:
       labels:
@@ -92,7 +92,7 @@ spec:
 
       containers:
         - name: my-app
-          image: ghcr.io/org/my-app:1.0.0   # Never use :latest
+          image: ghcr.io/org/my-app:1.0.0 # Never use :latest
           imagePullPolicy: IfNotPresent
 
           ports:
@@ -165,11 +165,11 @@ spec:
 
 Understanding when to use each probe is critical:
 
-| Probe | Failure Action | Use For |
-|-------|---------------|---------|
-| `startupProbe` | Kills container if slow to start | Slow-starting apps (JVM, Python) |
-| `livenessProbe` | Restarts container | Deadlock / hung process detection |
-| `readinessProbe` | Removes from Service endpoints | Temporary unavailability (DB reconnect) |
+| Probe            | Failure Action                   | Use For                                 |
+| ---------------- | -------------------------------- | --------------------------------------- |
+| `startupProbe`   | Kills container if slow to start | Slow-starting apps (JVM, Python)        |
+| `livenessProbe`  | Restarts container               | Deadlock / hung process detection       |
+| `readinessProbe` | Removes from Service endpoints   | Temporary unavailability (DB reconnect) |
 
 ```yaml
 # Correct pattern: startupProbe covers slow startup,
@@ -178,7 +178,7 @@ startupProbe:
   httpGet:
     path: /health
     port: 8080
-  failureThreshold: 30  # 30 * 5s = 150s max startup time
+  failureThreshold: 30 # 30 * 5s = 150s max startup time
   periodSeconds: 5
 
 livenessProbe:
@@ -186,11 +186,11 @@ livenessProbe:
     path: /health
     port: 8080
   periodSeconds: 30
-  failureThreshold: 3   # 3 * 30s = 90s before restart
+  failureThreshold: 3 # 3 * 30s = 90s before restart
 
 readinessProbe:
   httpGet:
-    path: /ready         # Separate endpoint: checks DB, cache, etc.
+    path: /ready # Separate endpoint: checks DB, cache, etc.
     port: 8080
   periodSeconds: 10
   failureThreshold: 2
@@ -203,7 +203,7 @@ livenessProbe:
   httpGet:
     path: /health
     port: 8080
-  initialDelaySeconds: 60   # BAD: Arbitrary wait, race condition
+  initialDelaySeconds: 60 # BAD: Arbitrary wait, race condition
 ```
 
 ---
@@ -325,7 +325,7 @@ metadata:
 type: Opaque
 # Values are base64-encoded (NOT encrypted — use Sealed Secrets or ESO for real encryption)
 data:
-  db-password: czNjcjN0  # base64 of 's3cr3t'
+  db-password: czNjcjN0 # base64 of 's3cr3t'
 ```
 
 > **Important:** Raw Kubernetes Secrets are only base64-encoded, not encrypted at rest unless your cluster has encryption configured. Use [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets) or [External Secrets Operator](https://external-secrets.io) for production.
@@ -336,22 +336,22 @@ data:
 
 ```yaml
 resources:
-  requests:       # Scheduler uses this to place the pod
-    cpu: "100m"   # 100 millicores = 0.1 CPU
+  requests: # Scheduler uses this to place the pod
+    cpu: "100m" # 100 millicores = 0.1 CPU
     memory: "128Mi"
-  limits:         # Container is killed/throttled above this
+  limits: # Container is killed/throttled above this
     cpu: "500m"
     memory: "256Mi"
 ```
 
 **Rules of thumb:**
 
-| Workload Type | CPU Request | Memory Request | Notes |
-|---------------|-------------|----------------|-------|
-| Web API | 100–250m | 128–256Mi | Set limits 2-4x requests |
-| Worker/consumer | 250–500m | 256–512Mi | Memory limit = request for predictability |
-| JVM app | 500m–1 | 512Mi–2Gi | Allow headroom above `-Xmx` for JVM overhead |
-| Sidecar | 10–50m | 32–64Mi | Keep minimal |
+| Workload Type   | CPU Request | Memory Request | Notes                                        |
+| --------------- | ----------- | -------------- | -------------------------------------------- |
+| Web API         | 100–250m    | 128–256Mi      | Set limits 2-4x requests                     |
+| Worker/consumer | 250–500m    | 256–512Mi      | Memory limit = request for predictability    |
+| JVM app         | 500m–1      | 512Mi–2Gi      | Allow headroom above `-Xmx` for JVM overhead |
+| Sidecar         | 10–50m      | 32–64Mi        | Keep minimal                                 |
 
 ```yaml
 # WRONG: No requests or limits — unpredictable scheduling, OOM evictions
@@ -387,7 +387,7 @@ kind: ServiceAccount
 metadata:
   name: my-app-sa
   namespace: my-namespace
-automountServiceAccountToken: false   # No K8s API token injected into pods
+automountServiceAccountToken: false # No K8s API token injected into pods
 ```
 
 ```yaml
@@ -396,7 +396,7 @@ spec:
   template:
     spec:
       serviceAccountName: my-app-sa
-      automountServiceAccountToken: false   # Belt-and-suspenders: also set at pod level
+      automountServiceAccountToken: false # Belt-and-suspenders: also set at pod level
 ```
 
 #### Pattern B — App DOES need the Kubernetes API (operators, controllers, config watchers)
@@ -410,7 +410,7 @@ kind: ServiceAccount
 metadata:
   name: my-app-sa
   namespace: my-namespace
-automountServiceAccountToken: true    # Token required: app calls K8s API
+automountServiceAccountToken: true # Token required: app calls K8s API
 ```
 
 ```yaml
@@ -423,10 +423,10 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs: ["get", "list", "watch"]    # Read-only, specific resource
+    verbs: ["get", "list", "watch"] # Read-only, specific resource
   - apiGroups: [""]
     resources: ["secrets"]
-    resourceNames: ["my-app-secrets"]  # Restrict to specific secret by name
+    resourceNames: ["my-app-secrets"] # Restrict to specific secret by name
     verbs: ["get"]
 ```
 
@@ -471,7 +471,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: my-app
-  minReplicas: 2      # Always at least 2 for HA
+  minReplicas: 2 # Always at least 2 for HA
   maxReplicas: 10
   metrics:
     - type: Resource
@@ -479,7 +479,7 @@ spec:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 70    # Scale up when avg CPU > 70%
+          averageUtilization: 70 # Scale up when avg CPU > 70%
     - type: Resource
       resource:
         name: memory
@@ -503,7 +503,7 @@ metadata:
   name: my-app-pdb
   namespace: my-namespace
 spec:
-  minAvailable: 2           # OR use maxUnavailable: 1
+  minAvailable: 2 # OR use maxUnavailable: 1
   selector:
     matchLabels:
       app: my-app
@@ -546,11 +546,11 @@ metadata:
   name: db-migrate
   namespace: my-namespace
 spec:
-  backoffLimit: 3          # Retry up to 3 times on failure
-  ttlSecondsAfterFinished: 3600   # Auto-delete after 1h
+  backoffLimit: 3 # Retry up to 3 times on failure
+  ttlSecondsAfterFinished: 3600 # Auto-delete after 1h
   template:
     spec:
-      restartPolicy: OnFailure    # Never for Jobs (not Always)
+      restartPolicy: OnFailure # Never for Jobs (not Always)
       containers:
         - name: migrate
           image: ghcr.io/org/my-app:1.0.0
@@ -569,8 +569,8 @@ metadata:
   name: cleanup-job
   namespace: my-namespace
 spec:
-  schedule: "0 2 * * *"         # 2am daily
-  concurrencyPolicy: Forbid      # Don't run if previous still running
+  schedule: "0 2 * * *" # 2am daily
+  concurrencyPolicy: Forbid # Don't run if previous still running
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1
   jobTemplate:
@@ -724,6 +724,7 @@ spec:
 ## Best Practices Checklist
 
 ### Security
+
 - [ ] Container runs as non-root (`runAsNonRoot: true`, `runAsUser` set)
 - [ ] `readOnlyRootFilesystem: true` with `emptyDir` for writable paths
 - [ ] `allowPrivilegeEscalation: false`
@@ -734,6 +735,7 @@ spec:
 - [ ] Secrets managed via Sealed Secrets or External Secrets Operator
 
 ### Reliability
+
 - [ ] All 3 probe types configured (startup + liveness + readiness)
 - [ ] Resource requests AND limits set on every container
 - [ ] `minReplicas: 2+` for any production workload
@@ -742,6 +744,7 @@ spec:
 - [ ] HPA configured for variable-load services
 
 ### Observability
+
 - [ ] App exposes `/health` (liveness) and `/ready` (readiness) endpoints
 - [ ] Structured JSON logging (no PII in logs)
 - [ ] Resource labels: `app`, `version`, `environment`

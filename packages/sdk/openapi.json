@@ -587,6 +587,92 @@
         ]
       }
     },
+    "/config/permission": {
+      "patch": {
+        "tags": ["config"],
+        "operationId": "config.permission.update",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tool permissions persisted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [true]
+                    }
+                  },
+                  "required": ["success"],
+                  "additionalProperties": false,
+                  "description": "Tool permissions persisted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Persist per-tool allow/ask/deny rules to local project or global config.",
+        "summary": "Update tool permissions",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "enum": ["local", "global"]
+                  },
+                  "permission": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "$ref": "#/components/schemas/PermissionRuleConfig"
+                    }
+                  }
+                },
+                "required": ["scope", "permission"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.config.permission.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/config/providers": {
       "get": {
         "tags": ["config"],
@@ -2456,6 +2542,54 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.mcp.add({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/mcp/tools": {
+      "get": {
+        "tags": ["mcp"],
+        "operationId": "mcp.tools",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MCP tools",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MCPToolDefinition"
+                  },
+                  "description": "MCP tools"
+                }
+              }
+            }
+          }
+        },
+        "description": "Get the list of tools exposed by connected Model Context Protocol (MCP) servers.",
+        "summary": "List MCP tools",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.mcp.tools({\n  ...\n})"
           }
         ]
       }
@@ -13958,6 +14092,25 @@
             "$ref": "#/components/schemas/MCPStatusNeedsClientRegistration"
           }
         ]
+      },
+      "MCPToolDefinition": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "client": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "client", "name", "description"],
+        "additionalProperties": false
       },
       "McpUnsupportedOAuthError": {
         "type": "object",

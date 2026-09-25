@@ -38,15 +38,15 @@ Your test (Python)
 
 **UIA quality by framework:**
 
-| Framework | AutomationId | Reliability | Notes |
-|-----------|-------------|-------------|-------|
-| WPF | 5/5 | Excellent | `x:Name` maps directly to AutomationId |
-| WinForms | 4/5 | Good | `AccessibleName` = AutomationId |
-| UWP / WinUI 3 | 5/5 | Excellent | Full Microsoft support |
-| Qt 6.x | 5/5 | Excellent | Accessibility enabled by default; class names change to `Qt6*` |
-| Qt 5.15+ | 4/5 | Good | Improved Accessibility module |
-| Qt 5.7–5.14 | 3/5 | Fair | Needs `QT_ACCESSIBILITY=1`; objectName manual |
-| Win32 / MFC | 3/5 | Fair | Control IDs accessible; text matching common |
+| Framework     | AutomationId | Reliability | Notes                                                          |
+| ------------- | ------------ | ----------- | -------------------------------------------------------------- |
+| WPF           | 5/5          | Excellent   | `x:Name` maps directly to AutomationId                         |
+| WinForms      | 4/5          | Good        | `AccessibleName` = AutomationId                                |
+| UWP / WinUI 3 | 5/5          | Excellent   | Full Microsoft support                                         |
+| Qt 6.x        | 5/5          | Excellent   | Accessibility enabled by default; class names change to `Qt6*` |
+| Qt 5.15+      | 4/5          | Good        | Improved Accessibility module                                  |
+| Qt 5.7–5.14   | 3/5          | Fair        | Needs `QT_ACCESSIBILITY=1`; objectName manual                  |
+| Win32 / MFC   | 3/5          | Fair        | Control IDs accessible; text matching common                   |
 
 ## Setup & Prerequisites
 
@@ -440,15 +440,15 @@ def test_heavy_load(self, app): ...
 
 Common causes and fixes:
 
-| Cause | Fix |
-|-------|-----|
-| Control not ready | Replace `time.sleep` with `wait_visible` |
-| Window not focused | Add `win.set_focus()` before interactions |
-| Animation in progress | `wait_until(lambda: not loading_indicator.exists())` |
-| Dialog timing | `wait_window(title, timeout=15)` |
-| CI display not ready | Set `DISPLAY` or use virtual desktop in CI |
-| `set_edit_text` raises NotImplementedError | UIA ValuePattern missing (common on Qt 5.x) — `BasePage.type_text` already falls back to `keyboard.send_keys` |
-| Control exists but `wait_visible` times out | Window minimised or off-screen — call `win.restore()` + `win.set_focus()` before waiting |
+| Cause                                       | Fix                                                                                                           |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Control not ready                           | Replace `time.sleep` with `wait_visible`                                                                      |
+| Window not focused                          | Add `win.set_focus()` before interactions                                                                     |
+| Animation in progress                       | `wait_until(lambda: not loading_indicator.exists())`                                                          |
+| Dialog timing                               | `wait_window(title, timeout=15)`                                                                              |
+| CI display not ready                        | Set `DISPLAY` or use virtual desktop in CI                                                                    |
+| `set_edit_text` raises NotImplementedError  | UIA ValuePattern missing (common on Qt 5.x) — `BasePage.type_text` already falls back to `keyboard.send_keys` |
+| Control exists but `wait_visible` times out | Window minimised or off-screen — call `win.restore()` + `win.set_focus()` before waiting                      |
 
 ## Test Isolation & Sandbox
 
@@ -621,11 +621,11 @@ Launch: `WindowsSandbox.exe e2e-sandbox.wsb`
 
 ### Tier comparison
 
-| Tier | Isolation | Setup cost | Works on CI | Use when |
-|------|-----------|-----------|-------------|----------|
-| 1 — `tmp_path` env redirect | Filesystem | Zero | Always | Default for all tests |
-| 2 — Job Object | Process tree | Low | Always | Prevent child-process escape |
-| 3 — Windows Sandbox | Full OS | Medium | Needs Pro/Enterprise image | Nightly clean-room runs |
+| Tier                        | Isolation    | Setup cost | Works on CI                | Use when                     |
+| --------------------------- | ------------ | ---------- | -------------------------- | ---------------------------- |
+| 1 — `tmp_path` env redirect | Filesystem   | Zero       | Always                     | Default for all tests        |
+| 2 — Job Object              | Process tree | Low        | Always                     | Prevent child-process escape |
+| 3 — Windows Sandbox         | Full OS      | Medium     | Needs Pro/Enterprise image | Nightly clean-room runs      |
 
 ### Prevent hanging tests
 
@@ -640,7 +640,7 @@ on: [push, pull_request]
 
 jobs:
   e2e:
-    runs-on: windows-latest   # real GUI environment, no Xvfb needed
+    runs-on: windows-latest # real GUI environment, no Xvfb needed
     steps:
       - uses: actions/checkout@v4
 
@@ -651,7 +651,7 @@ jobs:
         run: pip install pywinauto pytest pytest-html Pillow
 
       - name: Build app
-        run: cmake --build build --config Release  # adjust to your build system
+        run: cmake --build build --config Release # adjust to your build system
 
       - name: Run E2E
         env:

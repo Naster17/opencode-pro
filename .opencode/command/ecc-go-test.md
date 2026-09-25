@@ -20,6 +20,7 @@ Apply test-driven development with Go idioms:
 ## TDD Cycle for Go
 
 ### Step 1: Define Interface
+
 ```go
 type Calculator interface {
     Calculate(input Input) (Output, error)
@@ -35,6 +36,7 @@ type Output struct {
 ```
 
 ### Step 2: Table-Driven Tests
+
 ```go
 func TestCalculate(t *testing.T) {
     tests := []struct {
@@ -71,11 +73,13 @@ func TestCalculate(t *testing.T) {
 ```
 
 ### Step 3: Run Tests (RED)
+
 ```bash
 go test -v ./...
 ```
 
 ### Step 4: Implement (GREEN)
+
 ```go
 func Calculate(input Input) (Output, error) {
     // Minimal implementation
@@ -83,6 +87,7 @@ func Calculate(input Input) (Output, error) {
 ```
 
 ### Step 5: Benchmark
+
 ```go
 func BenchmarkCalculate(b *testing.B) {
     input := Input{...}

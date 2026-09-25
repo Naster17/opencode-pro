@@ -39,7 +39,7 @@ async function loadChangedFilesStore(): Promise<ChangedFilesStore> {
           "This usually means the ~/.opencode/plugins directory is missing or incomplete " +
           "(an interrupted or partial ECC install can leave tools/ populated without plugins/). " +
           "Run `node scripts/repair.js --target opencode` (or `ecc repair --target opencode`) " +
-          "from the ECC repo to restore the missing files."
+          "from the ECC repo to restore the missing files.",
       )
     })
   }
@@ -76,12 +76,10 @@ const changedFilesTool: ToolDefinition = tool({
           changed: true,
           filter: filter ?? "all",
           files: paths.map((p) => ({ path: p.path, changeType: p.changeType })),
-          diffCommands: paths
-            .filter((p) => p.changeType !== "added")
-            .map((p) => `git diff ${p.path}`),
+          diffCommands: paths.filter((p) => p.changeType !== "added").map((p) => `git diff ${p.path}`),
         },
         null,
-        2
+        2,
       )
     }
 

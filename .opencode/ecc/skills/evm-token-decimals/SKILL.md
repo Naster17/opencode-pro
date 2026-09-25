@@ -99,20 +99,14 @@ function normalizeToWad(address token, uint256 amount) internal view returns (ui
 ### TypeScript with ethers
 
 ```typescript
-import { Contract, formatUnits } from 'ethers';
+import { Contract, formatUnits } from "ethers"
 
-const ERC20_ABI = [
-  'function decimals() view returns (uint8)',
-  'function balanceOf(address) view returns (uint256)',
-];
+const ERC20_ABI = ["function decimals() view returns (uint8)", "function balanceOf(address) view returns (uint256)"]
 
 async function getBalance(provider: any, tokenAddress: string, wallet: string): Promise<string> {
-  const token = new Contract(tokenAddress, ERC20_ABI, provider);
-  const [decimals, raw] = await Promise.all([
-    token.decimals(),
-    token.balanceOf(wallet),
-  ]);
-  return formatUnits(raw, decimals);
+  const token = new Contract(tokenAddress, ERC20_ABI, provider)
+  const [decimals, raw] = await Promise.all([token.decimals(), token.balanceOf(wallet)])
+  return formatUnits(raw, decimals)
 }
 ```
 

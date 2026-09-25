@@ -73,12 +73,14 @@ export function buildTree(filter?: ChangeType): TreeNode[] {
   }
 
   function sortNodes(nodes: TreeNode[]): TreeNode[] {
-    return [...nodes].sort((a, b) => {
-      const aIsFile = a.changeType !== undefined
-      const bIsFile = b.changeType !== undefined
-      if (aIsFile !== bIsFile) return aIsFile ? 1 : -1
-      return a.name.localeCompare(b.name)
-    }).map((n) => ({ ...n, children: sortNodes(n.children) }))
+    return [...nodes]
+      .sort((a, b) => {
+        const aIsFile = a.changeType !== undefined
+        const bIsFile = b.changeType !== undefined
+        if (aIsFile !== bIsFile) return aIsFile ? 1 : -1
+        return a.name.localeCompare(b.name)
+      })
+      .map((n) => ({ ...n, children: sortNodes(n.children) }))
   }
   return sortNodes(root)
 }

@@ -24,14 +24,8 @@ const lintCheckTool: ToolDefinition = tool({
   description:
     "Detect linter for a target path and return command for check/fix runs. Supports cross-platform command generation.",
   args: {
-    target: tool.schema
-      .string()
-      .optional()
-      .describe("File or directory to lint (default: current directory)"),
-    fix: tool.schema
-      .boolean()
-      .optional()
-      .describe("Enable auto-fix mode"),
+    target: tool.schema.string().optional().describe("File or directory to lint (default: current directory)"),
+    fix: tool.schema.boolean().optional().describe("Enable auto-fix mode"),
     linter: tool.schema
       .enum(["biome", "eslint", "ruff", "pylint", "golangci-lint"])
       .optional()
@@ -73,13 +67,7 @@ function detectLinter(cwd: string): Linter {
   }
 
   // Check for ESLint config
-  const eslintConfigs = [
-    ".eslintrc.json",
-    ".eslintrc.js",
-    ".eslintrc.cjs",
-    "eslint.config.js",
-    "eslint.config.mjs",
-  ]
+  const eslintConfigs = [".eslintrc.json", ".eslintrc.js", ".eslintrc.cjs", "eslint.config.js", "eslint.config.mjs"]
   if (eslintConfigs.some((name) => fs.existsSync(path.join(cwd, name)))) {
     return "eslint"
   }
@@ -108,7 +96,7 @@ function detectLinter(cwd: string): Linter {
 function buildLintCommand(linter: Linter, target: string, fix: boolean): string {
   // Normalize target path for cross-platform compatibility
   const normalizedTarget = path.normalize(target)
-  
+
   // Build command based on linter and platform
   const commands: Record<Linter, string> = {
     biome: `npx @biomejs/biome lint${fix ? " --write" : ""} ${normalizedTarget}`,

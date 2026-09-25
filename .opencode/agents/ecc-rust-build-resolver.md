@@ -41,15 +41,15 @@ if command -v cargo-audit >/dev/null; then cargo audit; else echo "cargo-audit n
 
 ## Common Fix Patterns
 
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `cannot borrow as mutable` | Immutable borrow active | Restructure to end immutable borrow first, or use `Cell`/`RefCell` |
-| `does not live long enough` | Value dropped while still borrowed | Extend lifetime scope, use owned type, or add lifetime annotation |
-| `cannot move out of` | Moving from behind a reference | Use `.clone()`, `.to_owned()`, or restructure to take ownership |
-| `mismatched types` | Wrong type or missing conversion | Add `.into()`, `as`, or explicit type conversion |
-| `trait X is not implemented for Y` | Missing impl or derive | Add `#[derive(Trait)]` or implement trait manually |
-| `unresolved import` | Missing dependency or wrong path | Add to Cargo.toml or fix `use` path |
-| `unused variable` / `unused import` | Dead code | Remove or prefix with `_` |
+| Error                               | Cause                              | Fix                                                                |
+| ----------------------------------- | ---------------------------------- | ------------------------------------------------------------------ |
+| `cannot borrow as mutable`          | Immutable borrow active            | Restructure to end immutable borrow first, or use `Cell`/`RefCell` |
+| `does not live long enough`         | Value dropped while still borrowed | Extend lifetime scope, use owned type, or add lifetime annotation  |
+| `cannot move out of`                | Moving from behind a reference     | Use `.clone()`, `.to_owned()`, or restructure to take ownership    |
+| `mismatched types`                  | Wrong type or missing conversion   | Add `.into()`, `as`, or explicit type conversion                   |
+| `trait X is not implemented for Y`  | Missing impl or derive             | Add `#[derive(Trait)]` or implement trait manually                 |
+| `unresolved import`                 | Missing dependency or wrong path   | Add to Cargo.toml or fix `use` path                                |
+| `unused variable` / `unused import` | Dead code                          | Remove or prefix with `_`                                          |
 
 ## Borrow Checker Troubleshooting
 
@@ -81,6 +81,7 @@ fn get_name() -> String {
 ## Stop Conditions
 
 Stop and report if:
+
 - Same error persists after 3 fix attempts
 - Fix introduces more errors than it resolves
 - Error requires architectural changes beyond scope

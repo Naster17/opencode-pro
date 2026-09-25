@@ -57,28 +57,28 @@ This skill produces:
 
 ### Choosing the right advanced API
 
-| Scenario | API |
-| ------------------------------ | -------------------------------- |
-| Drag with physics on release | `drag` + `dragTransition: springs.release` |
-| Ordered drag-to-reorder list | `Reorder.Group` + `Reorder.Item` |
-| Dismiss on drag offset | `drag="y"` + `onDragEnd` offset check |
-| Swipe left/right | `drag="x"` + `onDragEnd` offset check |
-| Long press | `useLongPress` hook |
-| Value smoothed over time | `useSpring` |
-| Value derived from another | `useTransform` |
-| Multi-step sequence | `useAnimate` with `async/await` |
-| One-shot imperative animation | `animate()` from `motion` |
-| Text entering word by word | Stagger on `inline-block` spans |
-| SVG drawing on | `pathLength` 0 → 1 |
-| SVG morph | `d` attribute tween (equal commands) |
-| Circular progress | `strokeDashoffset` tween |
+| Scenario                      | API                                        |
+| ----------------------------- | ------------------------------------------ |
+| Drag with physics on release  | `drag` + `dragTransition: springs.release` |
+| Ordered drag-to-reorder list  | `Reorder.Group` + `Reorder.Item`           |
+| Dismiss on drag offset        | `drag="y"` + `onDragEnd` offset check      |
+| Swipe left/right              | `drag="x"` + `onDragEnd` offset check      |
+| Long press                    | `useLongPress` hook                        |
+| Value smoothed over time      | `useSpring`                                |
+| Value derived from another    | `useTransform`                             |
+| Multi-step sequence           | `useAnimate` with `async/await`            |
+| One-shot imperative animation | `animate()` from `motion`                  |
+| Text entering word by word    | Stagger on `inline-block` spans            |
+| SVG drawing on                | `pathLength` 0 → 1                         |
+| SVG morph                     | `d` attribute tween (equal commands)       |
+| Circular progress             | `strokeDashoffset` tween                   |
 
 ### When to use `useSpring` vs a spring transition
 
-| | `useSpring` | `transition: springs.*` |
-| -------------- | ---------------------------------------- | ----------------------- |
-| Use for | Cursor follower, pointer-tracked values | Discrete state changes |
-| Updates | Continuous, on every frame | Triggered by state change |
+|           | `useSpring`                             | `transition: springs.*`     |
+| --------- | --------------------------------------- | --------------------------- |
+| Use for   | Cursor follower, pointer-tracked values | Discrete state changes      |
+| Updates   | Continuous, on every frame              | Triggered by state change   |
 | Interrupt | Smooth — physics picks up from velocity | Restarts from current value |
 
 ## Core Concepts
@@ -103,8 +103,8 @@ const [scope, animate] = useAnimate()
 
 async function play() {
   await animate(".step-1", { opacity: 1 }, { duration: 0.3 })
-  await animate(".step-2", { x: 0 },       { duration: 0.4 })
-        animate(".step-3", { scale: 1 },    { duration: 0.25 })  // fire and forget
+  await animate(".step-2", { x: 0 }, { duration: 0.4 })
+  animate(".step-3", { scale: 1 }, { duration: 0.25 }) // fire and forget
 }
 
 return <div ref={scope}>...</div>
@@ -119,7 +119,7 @@ return <div ref={scope}>...</div>
 import { motion } from "motion/react"
 import { springs, motionTokens } from "@/lib/motion-tokens"
 
-<motion.div
+;<motion.div
   drag
   dragConstraints={{ left: -100, right: 100, top: -100, bottom: 100 }}
   dragElastic={0.1}
@@ -204,8 +204,10 @@ import { useRef } from "react"
 export function useLongPress(callback: () => void, ms = 600) {
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
   return {
-    onPointerDown:  () => { timerRef.current = setTimeout(callback, ms) },
-    onPointerUp:    () => clearTimeout(timerRef.current),
+    onPointerDown: () => {
+      timerRef.current = setTimeout(callback, ms)
+    },
+    onPointerUp: () => clearTimeout(timerRef.current),
     onPointerLeave: () => clearTimeout(timerRef.current),
   }
 }
@@ -220,17 +222,13 @@ import { springs } from "@/lib/motion-tokens"
 
 export function AnimatedText({ text }: { text: string }) {
   return (
-    <motion.p
-      variants={{ visible: { transition: { staggerChildren: 0.05 } } }}
-      initial="hidden"
-      animate="visible"
-    >
+    <motion.p variants={{ visible: { transition: { staggerChildren: 0.05 } } }} initial="hidden" animate="visible">
       {text.split(" ").map((word, i) => (
         <motion.span
           key={i}
           className="inline-block mr-1"
           variants={{
-            hidden:  { opacity: 0, y: 12 },
+            hidden: { opacity: 0, y: 12 },
             visible: { opacity: 1, y: 0, transition: springs.gentle },
           }}
         >
@@ -261,7 +259,7 @@ export function Counter({ to }: { to: number }) {
         if (nodeRef.current) nodeRef.current.textContent = Math.round(v).toString()
       },
     })
-    return controls.stop   // Rule 7: cleanup
+    return controls.stop // Rule 7: cleanup
   }, [to])
 
   return <span ref={nodeRef} />
@@ -275,7 +273,7 @@ export function Counter({ to }: { to: number }) {
 import { motion } from "motion/react"
 import { motionTokens } from "@/lib/motion-tokens"
 
-<motion.path
+;<motion.path
   d="M 0 100 Q 50 0 100 100"
   initial={{ pathLength: 0, opacity: 0 }}
   animate={{ pathLength: 1, opacity: 1 }}
@@ -290,15 +288,19 @@ import { motionTokens } from "@/lib/motion-tokens"
 import { motion } from "motion/react"
 import { motionTokens } from "@/lib/motion-tokens"
 
-const CIRCUMFERENCE = 2 * Math.PI * 40   // r=40
+const CIRCUMFERENCE = 2 * Math.PI * 40 // r=40
 
 export function ProgressRing({ progress }: { progress: number }) {
   return (
     <svg width="100" height="100" viewBox="0 0 100 100">
       <circle cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" strokeWidth="8" />
       <motion.circle
-        cx="50" cy="50" r="40"
-        fill="none" stroke="#6366f1" strokeWidth="8"
+        cx="50"
+        cy="50"
+        r="40"
+        fill="none"
+        stroke="#6366f1"
+        strokeWidth="8"
         strokeLinecap="round"
         strokeDasharray={CIRCUMFERENCE}
         animate={{ strokeDashoffset: CIRCUMFERENCE - (progress / 100) * CIRCUMFERENCE }}
@@ -346,9 +348,12 @@ export function CursorFollower() {
   const sy = useSpring(y, springs.gentle)
 
   useEffect(() => {
-    const move = (e: MouseEvent) => { x.set(e.clientX); y.set(e.clientY) }
+    const move = (e: MouseEvent) => {
+      x.set(e.clientX)
+      y.set(e.clientY)
+    }
     window.addEventListener("mousemove", move)
-    return () => window.removeEventListener("mousemove", move)   // Rule 7
+    return () => window.removeEventListener("mousemove", move) // Rule 7
   }, [])
 
   return (
@@ -415,15 +420,7 @@ export function ShimmerSkeleton({ className = "" }: { className?: string }) {
 import { motion, AnimatePresence } from "motion/react"
 import { motionTokens, springs } from "@/lib/motion-tokens"
 
-export function LoadingButton({
-  loading,
-  label,
-  onClick,
-}: {
-  loading: boolean
-  label: string
-  onClick: () => void
-}) {
+export function LoadingButton({ loading, label, onClick }: { loading: boolean; label: string; onClick: () => void }) {
   return (
     <motion.button
       onClick={onClick}
@@ -436,7 +433,9 @@ export function LoadingButton({
         {loading ? (
           <motion.span
             key="loading"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: motionTokens.duration.fast }}
           >
             …
@@ -444,7 +443,9 @@ export function LoadingButton({
         ) : (
           <motion.span
             key="label"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: motionTokens.duration.fast }}
           >
             {label}
@@ -558,7 +559,9 @@ export function DismissibleSheet({
                 <ShimmerSkeleton className="h-4 w-1/2" />
                 <ShimmerSkeleton className="h-20 w-full" />
               </div>
-            ) : children}
+            ) : (
+              children
+            )}
           </motion.div>
         </>
       )}
@@ -580,16 +583,16 @@ This skill does **not** cover:
 
 ## Anti-Patterns
 
-| Anti-pattern | Rule violated | Fix |
-| ---------------------------------------------- | ------- | ------------------------------------------------ |
-| `drag` tested only on desktop | Rule 1 | Test on touch emulator and real device |
-| `animate={{ repeat: Infinity }}` with no pause | Rule 2 | Add `visibilitychange` listener |
-| `onDragEnd` checking only offset, not velocity | Rule 3 | Check both `info.offset` and `info.velocity` |
-| `animate(scope, ...)` before `useEffect` | Rule 4 | Call `animate()` only after mount |
-| `const x = new MotionValue(0)` in render | Rule 5 | Use `const x = useMotionValue(0)` |
-| `transition={{ duration: 1.2 }}` inline | Rule 6 | Use `motionTokens.duration.crawl` |
-| `useEffect` without cleanup | Rule 7 | Return `removeEventListener` / `controls.stop` |
-| SVG morph between paths with different commands | Rule 8 | Normalize path commands before animating |
+| Anti-pattern                                    | Rule violated | Fix                                            |
+| ----------------------------------------------- | ------------- | ---------------------------------------------- |
+| `drag` tested only on desktop                   | Rule 1        | Test on touch emulator and real device         |
+| `animate={{ repeat: Infinity }}` with no pause  | Rule 2        | Add `visibilitychange` listener                |
+| `onDragEnd` checking only offset, not velocity  | Rule 3        | Check both `info.offset` and `info.velocity`   |
+| `animate(scope, ...)` before `useEffect`        | Rule 4        | Call `animate()` only after mount              |
+| `const x = new MotionValue(0)` in render        | Rule 5        | Use `const x = useMotionValue(0)`              |
+| `transition={{ duration: 1.2 }}` inline         | Rule 6        | Use `motionTokens.duration.crawl`              |
+| `useEffect` without cleanup                     | Rule 7        | Return `removeEventListener` / `controls.stop` |
+| SVG morph between paths with different commands | Rule 8        | Normalize path commands before animating       |
 
 ## Related Skills
 

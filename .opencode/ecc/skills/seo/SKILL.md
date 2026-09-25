@@ -12,6 +12,7 @@ Improve search visibility through technical correctness, performance, and conten
 ## When to Use
 
 Use this skill when:
+
 - auditing crawlability, indexability, canonicals, or redirects
 - improving title tags, meta descriptions, and heading structure
 - adding or validating structured data
@@ -139,13 +140,13 @@ Fix: Generate a unique title per product using the product name and primary cate
 
 ## Anti-Patterns
 
-| Anti-pattern | Fix |
-| --- | --- |
-| keyword stuffing | write for users first |
-| thin near-duplicate pages | consolidate or differentiate them |
-| schema for content that is not actually present | match schema to reality |
-| content advice without checking the actual page | read the real page first |
-| generic “improve SEO” outputs | tie every recommendation to a page or asset |
+| Anti-pattern                                    | Fix                                         |
+| ----------------------------------------------- | ------------------------------------------- |
+| keyword stuffing                                | write for users first                       |
+| thin near-duplicate pages                       | consolidate or differentiate them           |
+| schema for content that is not actually present | match schema to reality                     |
+| content advice without checking the actual page | read the real page first                    |
+| generic “improve SEO” outputs                   | tie every recommendation to a page or asset |
 
 ## Related Skills
 

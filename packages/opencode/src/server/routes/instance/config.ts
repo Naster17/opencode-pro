@@ -113,10 +113,12 @@ export const ConfigRoutes = lazy(() =>
           Effect.gen(function* () {
             const body = c.req.valid("json")
             const cfg = yield* Config.Service
-            yield* cfg.updatePermission(body as {
-              scope: "local" | "global"
-              permission: Record<string, ConfigPermission.Rule>
-            })
+            yield* cfg.updatePermission(
+              body as {
+                scope: "local" | "global"
+                permission: Record<string, ConfigPermission.Rule>
+              },
+            )
             return { ctx: yield* InstanceState.context }
           }),
         )

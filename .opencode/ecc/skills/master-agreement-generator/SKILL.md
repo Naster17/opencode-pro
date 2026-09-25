@@ -33,15 +33,15 @@ Replace its generic sentences with your counsel-approved clauses.
 
 Placeholders the reference script fills:
 
-| Placeholder | Source |
-| --- | --- |
-| `{{DATE}}` | `spec.date`, default today |
-| `{{CP_SHORT}}` | `spec.short` |
-| `{{CP_LEGAL}}`, `{{CP_JURIS}}`, `{{CP_ADDR}}` | spec fields, or a blank line when the counterparty completes them at signing |
-| `{{ROLE_CLAUSE}}`, `{{FEE_TITLE}}`, `{{FEE_CLAUSE}}` | selected by `spec.role` from the role table |
-| `{{SCHEDULE_ROWS}}` | `spec.schedule`, or one "no entries at signing" row |
-| `{{SUPPLEMENT_CLAUSE}}` | `spec.supplement`, rendered with a trailing separator or empty |
-| `{{CP_SIGBLOCK}}`, `{{CP_SIGNER}}`, `{{CP_TITLE}}`, `{{CP_EMAIL}}` | signature block fields, blanks when unknown |
+| Placeholder                                                        | Source                                                                       |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `{{DATE}}`                                                         | `spec.date`, default today                                                   |
+| `{{CP_SHORT}}`                                                     | `spec.short`                                                                 |
+| `{{CP_LEGAL}}`, `{{CP_JURIS}}`, `{{CP_ADDR}}`                      | spec fields, or a blank line when the counterparty completes them at signing |
+| `{{ROLE_CLAUSE}}`, `{{FEE_TITLE}}`, `{{FEE_CLAUSE}}`               | selected by `spec.role` from the role table                                  |
+| `{{SCHEDULE_ROWS}}`                                                | `spec.schedule`, or one "no entries at signing" row                          |
+| `{{SUPPLEMENT_CLAUSE}}`                                            | `spec.supplement`, rendered with a trailing separator or empty               |
+| `{{CP_SIGBLOCK}}`, `{{CP_SIGNER}}`, `{{CP_TITLE}}`, `{{CP_EMAIL}}` | signature block fields, blanks when unknown                                  |
 
 ### Spec
 
@@ -94,11 +94,11 @@ columns; malformed input is never silently replaced with an empty schedule.
 `spec.role` selects three strings: the standing-arrangement clause, the fee
 section title, and the fee clause opener.
 
-| Role | Who pays | Shape of the clause |
-| --- | --- | --- |
-| buyer | The counterparty pays on transactions with introduced parties | Counterparty appoints us on a non-exclusive basis to source and introduce |
-| supplier | The counterparty pays on transactions with introduced parties; where we buy as principal we contract on the schedule terms | Counterparty offers capacity to us and to buyers we introduce |
-| mutual | Whoever closes with the other's introduction pays | Each party may introduce; the closing party pays |
+| Role     | Who pays                                                                                                                   | Shape of the clause                                                       |
+| -------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| buyer    | The counterparty pays on transactions with introduced parties                                                              | Counterparty appoints us on a non-exclusive basis to source and introduce |
+| supplier | The counterparty pays on transactions with introduced parties; where we buy as principal we contract on the schedule terms | Counterparty offers capacity to us and to buyers we introduce             |
+| mutual   | Whoever closes with the other's introduction pays                                                                          | Each party may introduce; the closing party pays                          |
 
 Unknown roles are rejected at build time.
 

@@ -146,10 +146,10 @@ For patent or trademark ownership:
 Every USPTO research pass should include a log table:
 
 ```markdown
-| Source | Date searched | Identifier/query | Filters | Results | Notes |
-| --- | --- | --- | --- | ---: | --- |
-| PatentSearch | 2026-05-11 | `assignee=Alphabet AND date>=2024` | patent endpoint | 118 | API docs checked before run |
-| TSDR | 2026-05-11 | `serial=90000000` | status only | 1 | API-key flow, no document bulk pull |
+| Source       | Date searched | Identifier/query                   | Filters         | Results | Notes                               |
+| ------------ | ------------- | ---------------------------------- | --------------- | ------: | ----------------------------------- |
+| PatentSearch | 2026-05-11    | `assignee=Alphabet AND date>=2024` | patent endpoint |     118 | API docs checked before run         |
+| TSDR         | 2026-05-11    | `serial=90000000`                  | status only     |       1 | API-key flow, no document bulk pull |
 ```
 
 For final writeups, separate:

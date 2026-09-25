@@ -39,13 +39,13 @@ Clients and IoT        DHCP pools, isolated later if VLANs are available
 
 Pick a gateway that matches the operator, not just the feature checklist:
 
-| Option | Best fit | Notes |
-| --- | --- | --- |
-| ISP router | Basic internet only | Limited control and often poor VLAN support |
-| UniFi gateway | Managed home network | Good UI, ecosystem lock-in |
-| OPNsense or pfSense | Flexible homelab | Strong VLAN, firewall, VPN, and DNS control |
-| MikroTik | Advanced network users | Powerful, but easy to misconfigure |
-| Linux router | Tinkerers | Document rollback before using as primary gateway |
+| Option              | Best fit               | Notes                                             |
+| ------------------- | ---------------------- | ------------------------------------------------- |
+| ISP router          | Basic internet only    | Limited control and often poor VLAN support       |
+| UniFi gateway       | Managed home network   | Good UI, ecosystem lock-in                        |
+| OPNsense or pfSense | Flexible homelab       | Strong VLAN, firewall, VPN, and DNS control       |
+| MikroTik            | Advanced network users | Powerful, but easy to misconfigure                |
+| Linux router        | Tinkerers              | Document rollback before using as primary gateway |
 
 ## IP Plan
 

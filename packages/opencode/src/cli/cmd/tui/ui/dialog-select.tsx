@@ -182,19 +182,16 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   // the only case that needs an automatic scroll to the selection.
   const optionCount = () => flat().length
   createEffect(
-    on(
-      [() => store.filter, () => props.initialID, () => props.initial ?? props.current, optionCount],
-      ([filter]) => {
-        setTimeout(() => {
-          if (filter.length > 0) {
-            moveTo(0, true)
-            return
-          }
-          const index = initialIndex()
-          if (index >= 0) moveTo(index, true)
-        }, 0)
-      },
-    ),
+    on([() => store.filter, () => props.initialID, () => props.initial ?? props.current, optionCount], ([filter]) => {
+      setTimeout(() => {
+        if (filter.length > 0) {
+          moveTo(0, true)
+          return
+        }
+        const index = initialIndex()
+        if (index >= 0) moveTo(index, true)
+      }, 0)
+    }),
   )
 
   function move(direction: number) {

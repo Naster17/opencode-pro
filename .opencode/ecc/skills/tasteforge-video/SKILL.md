@@ -48,16 +48,16 @@ example project that consumes the packaged ECC engine.
 This boundary is the core of this compatibility skill. Its operations are
 **local, deterministic, and offline**:
 
-| Operation | Deterministic? | ECC may run |
-|---|---|---|
-| Taste interview → profile | yes (offline) | yes |
-| Pack inspect / validate against schemas | yes | yes |
-| Distill profile (+ measured grounding) → spec | yes (dry-run semantics) | yes |
-| Apply pack cadence to local media → report + timeline | yes | yes |
-| Export EDL (CMX3600) / FCPXML 1.9 | yes | yes |
-| Provenance / lineage report | yes | yes |
-| Vision-model distillation of stills | **provider generation** | **no** |
-| Reference-to-video, image-to-3D, hosted compose | **provider generation** | **no** |
+| Operation                                             | Deterministic?          | ECC may run |
+| ----------------------------------------------------- | ----------------------- | ----------- |
+| Taste interview → profile                             | yes (offline)           | yes         |
+| Pack inspect / validate against schemas               | yes                     | yes         |
+| Distill profile (+ measured grounding) → spec         | yes (dry-run semantics) | yes         |
+| Apply pack cadence to local media → report + timeline | yes                     | yes         |
+| Export EDL (CMX3600) / FCPXML 1.9                     | yes                     | yes         |
+| Provenance / lineage report                           | yes                     | yes         |
+| Vision-model distillation of stills                   | **provider generation** | **no**      |
+| Reference-to-video, image-to-3D, hosted compose       | **provider generation** | **no**      |
 
 **Provider generation must fail closed in ECC.** Any live Fal (or other
 provider) call — generating shots, minting prop meshes, hosted VLM
@@ -107,13 +107,13 @@ prove that the selected Python checkout implements this contract.
 
 ## Chaining the Creative Skills
 
-| Stage | Owner | Reviewable result |
-|---|---|---|
-| Creative direction | `taste` | Named genres, reference observations, chosen look and avoid list |
-| Distillation and planning | `tasteforge-video` | Measured evidence, separate genre specs, dry-run manifests and cadence plan |
-| Editing and effects | `video-editing`, with the chosen renderer such as Remotion, Manim, or Fusion | Applied footage, actual tracks, editable effects and timeline |
-| Optional generated assets or voice | `fal-ai-media` or the selected audio workflow, under its own authorization | Provider receipt and inspected output |
-| Delivery | Editing workflow, then `content-engine` when requested | Reviewed exact export and distribution copy |
+| Stage                              | Owner                                                                        | Reviewable result                                                           |
+| ---------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Creative direction                 | `taste`                                                                      | Named genres, reference observations, chosen look and avoid list            |
+| Distillation and planning          | `tasteforge-video`                                                           | Measured evidence, separate genre specs, dry-run manifests and cadence plan |
+| Editing and effects                | `video-editing`, with the chosen renderer such as Remotion, Manim, or Fusion | Applied footage, actual tracks, editable effects and timeline               |
+| Optional generated assets or voice | `fal-ai-media` or the selected audio workflow, under its own authorization   | Provider receipt and inspected output                                       |
+| Delivery                           | Editing workflow, then `content-engine` when requested                       | Reviewed exact export and distribution copy                                 |
 
 Use only the stages the project needs. The `taste` skill's historical
 angelcore/cloud-trance palette and beat grammar are optional creative examples;

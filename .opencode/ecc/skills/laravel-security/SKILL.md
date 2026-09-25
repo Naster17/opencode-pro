@@ -468,23 +468,23 @@ class VerifyCsrfToken extends Middleware
 ### CSRF with JavaScript
 
 ```html
-<meta name="csrf-token" content="{{ csrf_token() }}">
+<meta name="csrf-token" content="{{ csrf_token() }}" />
 
 <script>
-// Axios example (Laravel ships with Axios)
-axios.defaults.headers.common['X-CSRF-TOKEN'] = document.querySelector(
-    'meta[name="csrf-token"]'
-).getAttribute('content');
+  // Axios example (Laravel ships with Axios)
+  axios.defaults.headers.common["X-CSRF-TOKEN"] = document
+    .querySelector('meta[name="csrf-token"]')
+    .getAttribute("content")
 
-// Fetch example
-fetch('/posts', {
-    method: 'POST',
+  // Fetch example
+  fetch("/posts", {
+    method: "POST",
     headers: {
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-        'Content-Type': 'application/json',
+      "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]').getAttribute("content"),
+      "Content-Type": "application/json",
     },
     body: JSON.stringify(data),
-});
+  })
 </script>
 ```
 
@@ -923,23 +923,23 @@ SecurityLogger::log('suspicious_activity', ['reason' => 'multiple_attempts_from_
 
 ## Quick Security Checklist
 
-| Check | Description |
-|-------|-------------|
-| `APP_DEBUG=false` | Never run with debug enabled in production |
-| `APP_KEY` set | Always run `php artisan key:generate` |
-| HTTPS enforced | Force HTTPS in production via middleware or proxy |
-| `$fillable` whitelisted | Never use `$guarded = []` |
-| CSRF active | `@csrf` on all state-changing forms |
-| Sanctum/Passport configured | API authentication with token abilities/scopes |
-| Rate limiting applied | Throttle API and auth endpoints |
-| Input validation | FormRequest with specific rules, never `$request->all()` |
-| File upload restrictions | Validate MIME types, size, dimensions |
-| `composer audit` in CI | Check dependencies for known vulnerabilities |
-| `password_hash` / `password_verify` | Use Laravel's built-in hashing (bcrypt/Argon2) |
-| Session regeneration on login | Call `$request->session()->regenerate()` |
-| Security headers middleware | CSP, X-Frame-Options, X-Content-Type-Options |
-| Logged security events | Audit log for auth failures, role changes, suspicious activity |
-| `.env` not committed | Verify `.gitignore` includes `.env` |
+| Check                               | Description                                                    |
+| ----------------------------------- | -------------------------------------------------------------- |
+| `APP_DEBUG=false`                   | Never run with debug enabled in production                     |
+| `APP_KEY` set                       | Always run `php artisan key:generate`                          |
+| HTTPS enforced                      | Force HTTPS in production via middleware or proxy              |
+| `$fillable` whitelisted             | Never use `$guarded = []`                                      |
+| CSRF active                         | `@csrf` on all state-changing forms                            |
+| Sanctum/Passport configured         | API authentication with token abilities/scopes                 |
+| Rate limiting applied               | Throttle API and auth endpoints                                |
+| Input validation                    | FormRequest with specific rules, never `$request->all()`       |
+| File upload restrictions            | Validate MIME types, size, dimensions                          |
+| `composer audit` in CI              | Check dependencies for known vulnerabilities                   |
+| `password_hash` / `password_verify` | Use Laravel's built-in hashing (bcrypt/Argon2)                 |
+| Session regeneration on login       | Call `$request->session()->regenerate()`                       |
+| Security headers middleware         | CSP, X-Frame-Options, X-Content-Type-Options                   |
+| Logged security events              | Audit log for auth failures, role changes, suspicious activity |
+| `.env` not committed                | Verify `.gitignore` includes `.env`                            |
 
 ## Related Skills
 

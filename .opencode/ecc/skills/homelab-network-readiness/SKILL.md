@@ -45,29 +45,29 @@ rollback path, console access, and maintenance window are all known.
 
 Collect this before giving implementation steps:
 
-| Area | Questions |
-| --- | --- |
-| Internet edge | What is the modem or ONT? Is the ISP router bridged or still routing? |
-| Gateway | What routes, firewalls, handles DHCP, and terminates VPNs? |
-| Switching | Which switch ports are uplinks, access ports, trunks, or unmanaged? |
-| Wi-Fi | Which SSIDs map to which networks, and are APs wired or mesh? |
-| Addressing | What subnets exist today, and which ranges conflict with VPN sites? |
-| DNS/DHCP | Which service currently hands out leases and resolver addresses? |
-| Management | How will the operator reach the gateway, switch, and AP after changes? |
-| Recovery | What can be reverted locally if DNS, DHCP, VLANs, or VPN routes break? |
+| Area          | Questions                                                              |
+| ------------- | ---------------------------------------------------------------------- |
+| Internet edge | What is the modem or ONT? Is the ISP router bridged or still routing?  |
+| Gateway       | What routes, firewalls, handles DHCP, and terminates VPNs?             |
+| Switching     | Which switch ports are uplinks, access ports, trunks, or unmanaged?    |
+| Wi-Fi         | Which SSIDs map to which networks, and are APs wired or mesh?          |
+| Addressing    | What subnets exist today, and which ranges conflict with VPN sites?    |
+| DNS/DHCP      | Which service currently hands out leases and resolver addresses?       |
+| Management    | How will the operator reach the gateway, switch, and AP after changes? |
+| Recovery      | What can be reverted locally if DNS, DHCP, VLANs, or VPN routes break? |
 
 ## VLAN And Trust-Zone Plan
 
 Start with intent rather than vendor syntax.
 
-| Zone | Typical contents | Default policy |
-| --- | --- | --- |
-| Trusted | Laptops, phones, admin workstations | Can reach shared services and management only when needed |
-| Servers | NAS, Home Assistant, lab hosts, DNS resolver | Accepts narrow inbound flows from trusted clients |
-| IoT | TVs, smart plugs, cameras, speakers | Internet access plus explicit exceptions only |
-| Guest | Visitor devices | Internet-only, no LAN reachability |
-| Management | Gateway, switches, APs, controllers | Reachable only from trusted admin devices |
-| VPN | Remote clients | Same or narrower access than trusted clients |
+| Zone       | Typical contents                             | Default policy                                            |
+| ---------- | -------------------------------------------- | --------------------------------------------------------- |
+| Trusted    | Laptops, phones, admin workstations          | Can reach shared services and management only when needed |
+| Servers    | NAS, Home Assistant, lab hosts, DNS resolver | Accepts narrow inbound flows from trusted clients         |
+| IoT        | TVs, smart plugs, cameras, speakers          | Internet access plus explicit exceptions only             |
+| Guest      | Visitor devices                              | Internet-only, no LAN reachability                        |
+| Management | Gateway, switches, APs, controllers          | Reachable only from trusted admin devices                 |
+| VPN        | Remote clients                               | Same or narrower access than trusted clients              |
 
 Before recommending VLAN IDs or subnets, confirm:
 
@@ -106,12 +106,12 @@ Gateway and DNS admin interfaces are not reachable from guest or IoT networks
 For WireGuard-style access, decide what the VPN is allowed to reach before
 generating keys or opening ports.
 
-| Mode | Use when | Risk notes |
-| --- | --- | --- |
-| Split tunnel to one subnet | Remote admin for NAS or lab hosts | Keep route list narrow |
-| Split tunnel to trusted services | Access selected apps by IP or DNS | Requires precise firewall rules |
-| Full tunnel | Untrusted networks or travel | More bandwidth and DNS responsibility |
-| Overlay VPN | Simpler remote access with identity controls | Still needs ACL review |
+| Mode                             | Use when                                     | Risk notes                            |
+| -------------------------------- | -------------------------------------------- | ------------------------------------- |
+| Split tunnel to one subnet       | Remote admin for NAS or lab hosts            | Keep route list narrow                |
+| Split tunnel to trusted services | Access selected apps by IP or DNS            | Requires precise firewall rules       |
+| Full tunnel                      | Untrusted networks or travel                 | More bandwidth and DNS responsibility |
+| Overlay VPN                      | Simpler remote access with identity controls | Still needs ACL review                |
 
 Do not recommend port forwarding until the operator confirms:
 

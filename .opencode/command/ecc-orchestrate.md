@@ -18,53 +18,61 @@ Orchestrate multiple specialized agents for this complex task: $ARGUMENTS
 
 ## Available Agents
 
-| Agent | Specialty | Use For |
-|-------|-----------|---------|
-| planner | Implementation planning | Complex feature design |
-| architect | System design | Architectural decisions |
-| code-reviewer | Code quality | Review changes |
-| security-reviewer | Security analysis | Vulnerability detection |
-| tdd-guide | Test-driven dev | Feature implementation |
-| build-error-resolver | Build fixes | TypeScript/build errors |
-| e2e-runner | E2E testing | User flow testing |
-| doc-updater | Documentation | Updating docs |
-| refactor-cleaner | Code cleanup | Dead code removal |
-| go-reviewer | Go code | Go-specific review |
-| go-build-resolver | Go builds | Go build errors |
-| database-reviewer | Database | Query optimization |
+| Agent                | Specialty               | Use For                 |
+| -------------------- | ----------------------- | ----------------------- |
+| planner              | Implementation planning | Complex feature design  |
+| architect            | System design           | Architectural decisions |
+| code-reviewer        | Code quality            | Review changes          |
+| security-reviewer    | Security analysis       | Vulnerability detection |
+| tdd-guide            | Test-driven dev         | Feature implementation  |
+| build-error-resolver | Build fixes             | TypeScript/build errors |
+| e2e-runner           | E2E testing             | User flow testing       |
+| doc-updater          | Documentation           | Updating docs           |
+| refactor-cleaner     | Code cleanup            | Dead code removal       |
+| go-reviewer          | Go code                 | Go-specific review      |
+| go-build-resolver    | Go builds               | Go build errors         |
+| database-reviewer    | Database                | Query optimization      |
 
 ## Orchestration Patterns
 
 ### Sequential Execution
+
 ```
 planner → tdd-guide → code-reviewer → security-reviewer
 ```
+
 Use when: Later tasks depend on earlier results
 
 ### Parallel Execution
+
 ```
 ┌→ security-reviewer
 planner →├→ code-reviewer
 └→ architect
 ```
+
 Use when: Tasks are independent
 
 ### Fan-Out/Fan-In
+
 ```
          ┌→ agent-1 ─┐
 planner →├→ agent-2 ─┼→ synthesizer
          └→ agent-3 ─┘
 ```
+
 Use when: Multiple perspectives needed
 
 ## Execution Plan Format
 
 ### Phase 1: [Name]
+
 - Agent: [agent-name]
 - Task: [specific task]
 - Depends on: [none or previous phase]
 
 ### Phase 2: [Name] (parallel)
+
 - Agent A: [agent-name]
   - Task: [specific task]
 - Agent B: [agent-name]
@@ -72,6 +80,7 @@ Use when: Multiple perspectives needed
 - Depends on: Phase 1
 
 ### Phase 3: Synthesis
+
 - Combine results from Phase 2
 - Generate unified output
 

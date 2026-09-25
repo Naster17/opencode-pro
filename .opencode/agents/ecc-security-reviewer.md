@@ -21,6 +21,7 @@ You are an expert security specialist focused on identifying and remediating vul
 ## Tools at Your Disposal
 
 ### Security Analysis Tools
+
 - **npm audit** - Check for vulnerable dependencies
 - **eslint-plugin-security** - Static analysis for security issues
 - **git-secrets** - Prevent committing secrets
@@ -28,6 +29,7 @@ You are an expert security specialist focused on identifying and remediating vul
 - **semgrep** - Pattern-based security scanning
 
 ### Analysis Commands
+
 ```bash
 # Check for vulnerable dependencies
 npm audit
@@ -107,7 +109,7 @@ const password = "admin123"
 // GOOD: Environment variables
 const apiKey = process.env.OPENAI_API_KEY
 if (!apiKey) {
-  throw new Error('OPENAI_API_KEY not configured')
+  throw new Error("OPENAI_API_KEY not configured")
 }
 ```
 
@@ -118,17 +120,14 @@ if (!apiKey) {
 const query = `SELECT * FROM users WHERE id = ${userId}`
 
 // GOOD: Parameterized queries
-const { data } = await supabase
-  .from('users')
-  .select('*')
-  .eq('id', userId)
+const { data } = await supabase.from("users").select("*").eq("id", userId)
 ```
 
 ### 3. Cross-Site Scripting (XSS) (HIGH)
 
 ```javascript
 // BAD: XSS vulnerability - never set inner HTML directly with user input
-document.body.textContent = userInput  // Safe for text
+document.body.textContent = userInput // Safe for text
 // For HTML content, always sanitize with DOMPurify first
 ```
 
@@ -143,18 +142,16 @@ if (balance >= amount) {
 
 // GOOD: Atomic transaction with lock
 await db.transaction(async (trx) => {
-  const balance = await trx('balances')
+  const balance = await trx("balances")
     .where({ user_id: userId })
     .forUpdate() // Lock row
     .first()
 
   if (balance.amount < amount) {
-    throw new Error('Insufficient balance')
+    throw new Error("Insufficient balance")
   }
 
-  await trx('balances')
-    .where({ user_id: userId })
-    .decrement('amount', amount)
+  await trx("balances").where({ user_id: userId }).decrement("amount", amount)
 })
 ```
 
@@ -178,6 +175,7 @@ await db.transaction(async (trx) => {
 ## Critical Issues (Fix Immediately)
 
 ### 1. [Issue Title]
+
 **Severity:** CRITICAL
 **Category:** SQL Injection / XSS / Authentication / etc.
 **Location:** `file.ts:123`

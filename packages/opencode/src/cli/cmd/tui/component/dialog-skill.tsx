@@ -103,7 +103,9 @@ export function DialogSkill(props: { onSelect: (skill: string) => void }) {
 
   const currentAgent = (session: Session | undefined) => {
     const agents: Agent[] = sync.data.agent
-    return agents.find((item) => item.name === session?.agent) ?? agents.find((item) => item.name === "build") ?? agents[0]
+    return (
+      agents.find((item) => item.name === session?.agent) ?? agents.find((item) => item.name === "build") ?? agents[0]
+    )
   }
 
   const rulesets = createMemo<PermissionRuleset[]>(() => {
@@ -132,7 +134,11 @@ export function DialogSkill(props: { onSelect: (skill: string) => void }) {
     })
   }
 
-  const persist = async (permission: Record<string, ToolAction | Record<string, ToolAction>>, target: ToolAction, name?: string) => {
+  const persist = async (
+    permission: Record<string, ToolAction | Record<string, ToolAction>>,
+    target: ToolAction,
+    name?: string,
+  ) => {
     setLock(true)
     try {
       // Config-first write: the server disposes the instance on persist, so
@@ -236,8 +242,8 @@ export function DialogSkill(props: { onSelect: (skill: string) => void }) {
           <span style={{ fg: colors.text }}>{"↑↓"}</span> navigate
           <span style={{ fg: colors.textMuted }}>
             {" "}
-            · scope: {global() ? "global" : "local"} ({Keybind.toString(scopeKey)} toggle) · disabled = removed from
-            LLM context
+            · scope: {global() ? "global" : "local"} ({Keybind.toString(scopeKey)} toggle) · disabled = removed from LLM
+            context
           </span>
         </>
       }

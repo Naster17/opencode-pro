@@ -22,20 +22,20 @@ Upstream: <https://github.com/mturac/recsys-pipeline-architect>
 
 ## When NOT to Use
 
-- Model architecture work (transformer design, two-tower retrieval, embedding training) — this skill is plumbing *around* the model, not the model itself
+- Model architecture work (transformer design, two-tower retrieval, embedding training) — this skill is plumbing _around_ the model, not the model itself
 - Pure ML training pipelines — the scoring function is the user's responsibility
 - Operating a deployed pipeline (monitoring, autoscaling) — out of scope
 
 ## The six-stage framework
 
-| # | Stage | Job | Parallel? |
-|---|---|---|---|
-| 1 | **Source** | Fetch candidates from one or more origins | Yes — multiple sources run in parallel |
-| 2 | **Hydrator** | Enrich each candidate with metadata needed for filtering and scoring | Yes — independent hydrators run in parallel |
-| 3 | **Filter** | Drop candidates that should never be shown (blocked, expired, duplicate, ineligible) | Sequential — each filter sees fewer items |
-| 4 | **Scorer** | Assign each surviving candidate one or more scores | Sequential — later scorers see earlier scores |
-| 5 | **Selector** | Sort by final score, return top K | Single op |
-| 6 | **SideEffect** | Cache served IDs, log impressions, emit events, update counters | Async — must never block the response |
+| #   | Stage          | Job                                                                                  | Parallel?                                     |
+| --- | -------------- | ------------------------------------------------------------------------------------ | --------------------------------------------- |
+| 1   | **Source**     | Fetch candidates from one or more origins                                            | Yes — multiple sources run in parallel        |
+| 2   | **Hydrator**   | Enrich each candidate with metadata needed for filtering and scoring                 | Yes — independent hydrators run in parallel   |
+| 3   | **Filter**     | Drop candidates that should never be shown (blocked, expired, duplicate, ineligible) | Sequential — each filter sees fewer items     |
+| 4   | **Scorer**     | Assign each surviving candidate one or more scores                                   | Sequential — later scorers see earlier scores |
+| 5   | **Selector**   | Sort by final score, return top K                                                    | Single op                                     |
+| 6   | **SideEffect** | Cache served IDs, log impressions, emit events, update counters                      | Async — must never block the response         |
 
 ### Why this exact order
 

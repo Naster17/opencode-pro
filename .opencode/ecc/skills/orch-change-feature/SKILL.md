@@ -23,7 +23,7 @@ shared engine in [`orch-pipeline`](../orch-pipeline/SKILL.md).
 - **Default size floor:** small — most tweaks are a function or two.
 - **Phase mask:** 0 → (1 only if the new behavior needs research) → light 2 →
   4 → 5 → 6.
-- **First move (phase 4):** update the *existing* tests to express the new
+- **First move (phase 4):** update the _existing_ tests to express the new
   desired behavior, then change the implementation until they pass. Changing the
   tests first is what separates a tweak from a fix.
 

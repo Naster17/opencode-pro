@@ -13,22 +13,10 @@ const runTestsTool: ToolDefinition = tool({
   description:
     "Run the test suite with optional coverage, watch mode, or specific test patterns. Automatically detects package manager (npm, pnpm, yarn, bun) and test framework.",
   args: {
-    pattern: tool.schema
-      .string()
-      .optional()
-      .describe("Test file pattern or specific test name to run"),
-    coverage: tool.schema
-      .boolean()
-      .optional()
-      .describe("Run with coverage reporting (default: false)"),
-    watch: tool.schema
-      .boolean()
-      .optional()
-      .describe("Run in watch mode for continuous testing (default: false)"),
-    updateSnapshots: tool.schema
-      .boolean()
-      .optional()
-      .describe("Update Jest/Vitest snapshots (default: false)"),
+    pattern: tool.schema.string().optional().describe("Test file pattern or specific test name to run"),
+    coverage: tool.schema.boolean().optional().describe("Run with coverage reporting (default: false)"),
+    watch: tool.schema.boolean().optional().describe("Run in watch mode for continuous testing (default: false)"),
+    updateSnapshots: tool.schema.boolean().optional().describe("Update Jest/Vitest snapshots (default: false)"),
   },
   async execute(args, context) {
     const { pattern, coverage, watch, updateSnapshots } = args

@@ -7,9 +7,7 @@
       "node-xfirst": {
         "type": "run",
         "id": "node-xfirst",
-        "depends": [
-          "input"
-        ],
+        "depends": ["input"],
         "metadata": {
           "position": {
             "x": 340,
@@ -25,10 +23,7 @@
       "node-gen1": {
         "type": "run",
         "id": "node-gen1",
-        "depends": [
-          "input",
-          "node-xfirst"
-        ],
+        "depends": ["input", "node-xfirst"],
         "metadata": {
           "position": {
             "x": 760,
@@ -38,9 +33,7 @@
         "app": "bytedance/seedance-2.5/reference-to-video",
         "input": {
           "prompt": "$input.compiled_prompt",
-          "image_urls": [
-            "$node-xfirst.images.0.url"
-          ],
+          "image_urls": ["$node-xfirst.images.0.url"],
           "duration": "5",
           "resolution": "720p",
           "audio_urls": [],
@@ -50,9 +43,7 @@
       "node-xmid": {
         "type": "run",
         "id": "node-xmid",
-        "depends": [
-          "input"
-        ],
+        "depends": ["input"],
         "metadata": {
           "position": {
             "x": 340,
@@ -68,10 +59,7 @@
       "node-gen2": {
         "type": "run",
         "id": "node-gen2",
-        "depends": [
-          "input",
-          "node-xmid"
-        ],
+        "depends": ["input", "node-xmid"],
         "metadata": {
           "position": {
             "x": 760,
@@ -81,9 +69,7 @@
         "app": "bytedance/seedance-2.5/reference-to-video",
         "input": {
           "prompt": "$input.compiled_prompt",
-          "image_urls": [
-            "$node-xmid.images.0.url"
-          ],
+          "image_urls": ["$node-xmid.images.0.url"],
           "duration": "5",
           "resolution": "720p",
           "audio_urls": [],
@@ -93,9 +79,7 @@
       "node-xlast": {
         "type": "run",
         "id": "node-xlast",
-        "depends": [
-          "input"
-        ],
+        "depends": ["input"],
         "metadata": {
           "position": {
             "x": 340,
@@ -111,10 +95,7 @@
       "node-gen3": {
         "type": "run",
         "id": "node-gen3",
-        "depends": [
-          "input",
-          "node-xlast"
-        ],
+        "depends": ["input", "node-xlast"],
         "metadata": {
           "position": {
             "x": 760,
@@ -124,9 +105,7 @@
         "app": "bytedance/seedance-2.5/reference-to-video",
         "input": {
           "prompt": "$input.compiled_prompt",
-          "image_urls": [
-            "$node-xlast.images.0.url"
-          ],
+          "image_urls": ["$node-xlast.images.0.url"],
           "duration": "5",
           "resolution": "720p",
           "audio_urls": [],
@@ -136,11 +115,7 @@
       "node-merge": {
         "type": "run",
         "id": "node-merge",
-        "depends": [
-          "node-gen1",
-          "node-gen2",
-          "node-gen3"
-        ],
+        "depends": ["node-gen1", "node-gen2", "node-gen3"],
         "metadata": {
           "position": {
             "x": 1180,
@@ -149,20 +124,14 @@
         },
         "app": "fal-ai/ffmpeg-api/merge-videos",
         "input": {
-          "video_urls": [
-            "$node-gen1.video.url",
-            "$node-gen2.video.url",
-            "$node-gen3.video.url"
-          ],
+          "video_urls": ["$node-gen1.video.url", "$node-gen2.video.url", "$node-gen3.video.url"],
           "target_fps": 30
         }
       },
       "output": {
         "type": "display",
         "id": "output",
-        "depends": [
-          "node-merge"
-        ],
+        "depends": ["node-merge"],
         "input": {},
         "metadata": {
           "position": {

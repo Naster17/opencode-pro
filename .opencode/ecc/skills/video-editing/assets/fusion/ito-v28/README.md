@@ -18,13 +18,13 @@ The installer writes to your user Fusion/Macros/ITO_V28 folder, verifies exact b
 
 The verified host API route is TimelineItem.ImportFusionComp with the actual .setting path. These files are tool-graph snippets, not complete footage compositions or one-click tracked effects. Connect the clip's MediaIn output to the first image tool, then the last image tool to MediaOut. Preserve the serialized internal links.
 
-| Setting | External image chain |
-|---|---|
-| FlashEtherealBloom | MediaIn → ITO_V28_FlashGain → FlashBloom → FlashColor → MediaOut |
-| RGBDisplacement | MediaIn → ITO_V28_RGBBase → RGBShift → RGBSmear → MediaOut |
-| SubjectHalo | MediaIn → ITO_V28_SubjectGlow → SubjectFrame → MediaOut; SubjectRect connects to SubjectGlow's EffectMask |
+| Setting            | External image chain                                                                                      |
+| ------------------ | --------------------------------------------------------------------------------------------------------- |
+| FlashEtherealBloom | MediaIn → ITO_V28_FlashGain → FlashBloom → FlashColor → MediaOut                                          |
+| RGBDisplacement    | MediaIn → ITO_V28_RGBBase → RGBShift → RGBSmear → MediaOut                                                |
+| SubjectHalo        | MediaIn → ITO_V28_SubjectGlow → SubjectFrame → MediaOut; SubjectRect connects to SubjectGlow's EffectMask |
 
-Names after the first node in the table also carry the ITO_V28_ prefix. Use a new composition or duplicate clip when trying these effects, so the existing composition stays available.
+Names after the first node in the table also carry the ITO*V28* prefix. Use a new composition or duplicate clip when trying these effects, so the existing composition stays available.
 
 ## Scope and correction
 

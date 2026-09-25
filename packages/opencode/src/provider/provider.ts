@@ -1681,9 +1681,12 @@ const layer: Layer.Layer<
                 toolcall: model.tool_call ?? existingModel?.capabilities?.toolcall ?? true,
                 input: {
                   text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities?.input?.text ?? true,
-                  audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities?.input?.audio ?? false,
-                  image: model.modalities?.input?.includes("image") ?? existingModel?.capabilities?.input?.image ?? false,
-                  video: model.modalities?.input?.includes("video") ?? existingModel?.capabilities?.input?.video ?? false,
+                  audio:
+                    model.modalities?.input?.includes("audio") ?? existingModel?.capabilities?.input?.audio ?? false,
+                  image:
+                    model.modalities?.input?.includes("image") ?? existingModel?.capabilities?.input?.image ?? false,
+                  video:
+                    model.modalities?.input?.includes("video") ?? existingModel?.capabilities?.input?.video ?? false,
                   pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities?.input?.pdf ?? false,
                 },
                 output: {

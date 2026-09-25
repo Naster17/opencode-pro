@@ -10,7 +10,16 @@ metadata:
 Use `calculateMetadata` on a `<Composition>` to dynamically set duration, dimensions, and transform props before rendering.
 
 ```tsx
-<Composition id="MyComp" component={MyComponent} durationInFrames={300} fps={30} width={1920} height={1080} defaultProps={{videoSrc: 'https://remotion.media/video.mp4'}} calculateMetadata={calculateMetadata} />
+<Composition
+  id="MyComp"
+  component={MyComponent}
+  durationInFrames={300}
+  fps={30}
+  width={1920}
+  height={1080}
+  defaultProps={{ videoSrc: "https://remotion.media/video.mp4" }}
+  calculateMetadata={calculateMetadata}
+/>
 ```
 
 ## Setting duration based on a video
@@ -18,45 +27,45 @@ Use `calculateMetadata` on a `<Composition>` to dynamically set duration, dimens
 Use the `getMediaMetadata()` function from the mediabunny/metadata skill to get the video duration:
 
 ```tsx
-import {CalculateMetadataFunction} from 'remotion';
-import {getMediaMetadata} from '../get-media-metadata';
+import { CalculateMetadataFunction } from "remotion"
+import { getMediaMetadata } from "../get-media-metadata"
 
-const calculateMetadata: CalculateMetadataFunction<Props> = async ({props}) => {
-  const {durationInSeconds} = await getMediaMetadata(props.videoSrc);
+const calculateMetadata: CalculateMetadataFunction<Props> = async ({ props }) => {
+  const { durationInSeconds } = await getMediaMetadata(props.videoSrc)
 
   return {
     durationInFrames: Math.ceil(durationInSeconds * 30),
-  };
-};
+  }
+}
 ```
 
 ## Matching dimensions of a video
 
 ```tsx
-const calculateMetadata: CalculateMetadataFunction<Props> = async ({props}) => {
-  const {durationInSeconds, dimensions} = await getMediaMetadata(props.videoSrc);
+const calculateMetadata: CalculateMetadataFunction<Props> = async ({ props }) => {
+  const { durationInSeconds, dimensions } = await getMediaMetadata(props.videoSrc)
 
   return {
     durationInFrames: Math.ceil(durationInSeconds * 30),
     width: dimensions?.width ?? 1920,
     height: dimensions?.height ?? 1080,
-  };
-};
+  }
+}
 ```
 
 ## Setting duration based on multiple videos
 
 ```tsx
-const calculateMetadata: CalculateMetadataFunction<Props> = async ({props}) => {
-  const metadataPromises = props.videos.map((video) => getMediaMetadata(video.src));
-  const allMetadata = await Promise.all(metadataPromises);
+const calculateMetadata: CalculateMetadataFunction<Props> = async ({ props }) => {
+  const metadataPromises = props.videos.map((video) => getMediaMetadata(video.src))
+  const allMetadata = await Promise.all(metadataPromises)
 
-  const totalDuration = allMetadata.reduce((sum, meta) => sum + meta.durationInSeconds, 0);
+  const totalDuration = allMetadata.reduce((sum, meta) => sum + meta.durationInSeconds, 0)
 
   return {
     durationInFrames: Math.ceil(totalDuration * 30),
-  };
-};
+  }
+}
 ```
 
 ## Setting a default outName
@@ -64,11 +73,11 @@ const calculateMetadata: CalculateMetadataFunction<Props> = async ({props}) => {
 Set the default output filename based on props:
 
 ```tsx
-const calculateMetadata: CalculateMetadataFunction<Props> = async ({props}) => {
+const calculateMetadata: CalculateMetadataFunction<Props> = async ({ props }) => {
   return {
     defaultOutName: `video-${props.id}.mp4`,
-  };
-};
+  }
+}
 ```
 
 ## Transforming props
@@ -76,17 +85,17 @@ const calculateMetadata: CalculateMetadataFunction<Props> = async ({props}) => {
 Fetch data or transform props before rendering:
 
 ```tsx
-const calculateMetadata: CalculateMetadataFunction<Props> = async ({props, abortSignal}) => {
-  const response = await fetch(props.dataUrl, {signal: abortSignal});
-  const data = await response.json();
+const calculateMetadata: CalculateMetadataFunction<Props> = async ({ props, abortSignal }) => {
+  const response = await fetch(props.dataUrl, { signal: abortSignal })
+  const data = await response.json()
 
   return {
     props: {
       ...props,
       fetchedData: data,
     },
-  };
-};
+  }
+}
 ```
 
 The `abortSignal` cancels stale requests when props change in the Studio.

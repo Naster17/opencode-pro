@@ -21,7 +21,7 @@ engine in [`orch-pipeline`](../orch-pipeline/SKILL.md).
 
 - **Default size floor:** standard — run Research + Plan unless clearly small.
 - **Phase mask:** 0 → 1 → 2 → 4 → 5 → 6 (skip 3 Scaffold; that is MVP-only).
-- **First move (phase 4):** write *new* failing tests for the new behavior, then
+- **First move (phase 4):** write _new_ failing tests for the new behavior, then
   implement to green.
 
 ## How It Works

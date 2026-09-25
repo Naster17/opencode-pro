@@ -31,6 +31,7 @@ Plan and execute launch campaigns that convert — not just campaigns that ship.
 ### Phase 1: Research
 
 Use `market-research` to:
+
 - profile the target audience (jobs-to-be-done, fears, language, alternatives they use)
 - map 3+ direct or adjacent competitors (positioning, gaps, messaging weaknesses)
 - identify 1–3 audience insights the campaign angle will exploit
@@ -40,6 +41,7 @@ Deliverable: a short research brief (audience profile + competitive summary + ke
 ### Phase 2: Positioning
 
 Produce:
+
 - core benefit statement (one sentence, no feature list, no jargon)
 - positioning formula: "[Product] helps [audience] [achieve outcome] by [mechanism]"
 - campaign angle: the specific tension, insight, or moment the whole campaign lives in
@@ -61,6 +63,7 @@ Produce in this order — each layer informs the next:
 ### Phase 4: Review
 
 Gate every deliverable:
+
 - 5-second test on all hero / above-fold copy (clear who it's for, what it does, why act now)
 - CTA audit (one per piece, specific, earned — not demanded)
 - Tone consistency check across all channels

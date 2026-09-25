@@ -1268,9 +1268,7 @@ export function Prompt(props: PromptProps) {
             draft.message[sessionID] = messages
             draft.part[messageID] = [
               { ...commandEcho, messageID, sessionID },
-              ...requestParts
-                .filter((x) => x.type === "file")
-                .map((x) => ({ ...x, messageID, sessionID })),
+              ...requestParts.filter((x) => x.type === "file").map((x) => ({ ...x, messageID, sessionID })),
             ]
             draft.session_status[sessionID] = { type: "busy" }
           }),
@@ -1293,9 +1291,7 @@ export function Prompt(props: PromptProps) {
           if (result.error) {
             sync.set(
               produce((draft) => {
-                draft.message[sessionID] = (draft.message[sessionID] ?? []).filter(
-                  (item) => item.id !== messageID,
-                )
+                draft.message[sessionID] = (draft.message[sessionID] ?? []).filter((item) => item.id !== messageID)
                 delete draft.part[messageID]
                 draft.session_status[sessionID] = { type: "idle" }
               }),

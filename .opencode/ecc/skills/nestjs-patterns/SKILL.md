@@ -56,7 +56,7 @@ src/
 
 ```ts
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create(AppModule, { bufferLogs: true })
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -65,14 +65,14 @@ async function bootstrap() {
       transform: true,
       transformOptions: { enableImplicitConversion: true },
     }),
-  );
+  )
 
-  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
-  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)))
+  app.useGlobalFilters(new HttpExceptionFilter())
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3000)
 }
-bootstrap();
+bootstrap()
 ```
 
 - Always enable `whitelist` and `forbidNonWhitelisted` on public APIs.
@@ -88,18 +88,18 @@ bootstrap();
 })
 export class UsersModule {}
 
-@Controller('users')
+@Controller("users")
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @Get(':id')
-  getById(@Param('id', ParseUUIDPipe) id: string) {
-    return this.usersService.getById(id);
+  @Get(":id")
+  getById(@Param("id", ParseUUIDPipe) id: string) {
+    return this.usersService.getById(id)
   }
 
   @Post()
   create(@Body() dto: CreateUserDto) {
-    return this.usersService.create(dto);
+    return this.usersService.create(dto)
   }
 }
 
@@ -108,7 +108,7 @@ export class UsersService {
   constructor(private readonly usersRepo: UsersRepository) {}
 
   async create(dto: CreateUserDto) {
-    return this.usersRepo.create(dto);
+    return this.usersRepo.create(dto)
   }
 }
 ```
@@ -122,15 +122,15 @@ export class UsersService {
 ```ts
 export class CreateUserDto {
   @IsEmail()
-  email!: string;
+  email!: string
 
   @IsString()
   @Length(2, 80)
-  name!: string;
+  name!: string
 
   @IsOptional()
   @IsEnum(UserRole)
-  role?: UserRole;
+  role?: UserRole
 }
 ```
 
@@ -159,20 +159,20 @@ getAdminReport(@Req() req: AuthenticatedRequest) {
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
-    const response = host.switchToHttp().getResponse<Response>();
-    const request = host.switchToHttp().getRequest<Request>();
+    const response = host.switchToHttp().getResponse<Response>()
+    const request = host.switchToHttp().getRequest<Request>()
 
     if (exception instanceof HttpException) {
       return response.status(exception.getStatus()).json({
         path: request.url,
         error: exception.getResponse(),
-      });
+      })
     }
 
     return response.status(500).json({
       path: request.url,
-      error: 'Internal server error',
-    });
+      error: "Internal server error",
+    })
   }
 }
 ```
@@ -187,7 +187,7 @@ ConfigModule.forRoot({
   isGlobal: true,
   load: [configuration],
   validate: validateEnv,
-});
+})
 ```
 
 - Validate env at boot, not lazily at first request.
@@ -203,19 +203,19 @@ ConfigModule.forRoot({
 ## Testing
 
 ```ts
-describe('UsersController', () => {
-  let app: INestApplication;
+describe("UsersController", () => {
+  let app: INestApplication
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [UsersModule],
-    }).compile();
+    }).compile()
 
-    app = moduleRef.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-    await app.init();
-  });
-});
+    app = moduleRef.createNestApplication()
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }))
+    await app.init()
+  })
+})
 ```
 
 - Unit test providers in isolation with mocked dependencies.

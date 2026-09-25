@@ -53,8 +53,8 @@ Most projects with AI-friendly architecture have a sandbox/mock mode. This is th
 
 ```typescript
 // vitest.config.ts
-import { defineConfig } from "vitest/config";
-import path from "path";
+import { defineConfig } from "vitest/config"
+import path from "path"
 
 export default defineConfig({
   test: {
@@ -68,56 +68,56 @@ export default defineConfig({
       "@": path.resolve(__dirname, "."),
     },
   },
-});
+})
 ```
 
 ```typescript
 // __tests__/setup.ts
 // Force sandbox mode — no database needed
-process.env.SANDBOX_MODE = "true";
-process.env.NEXT_PUBLIC_SUPABASE_URL = "";
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "";
+process.env.SANDBOX_MODE = "true"
+process.env.NEXT_PUBLIC_SUPABASE_URL = ""
+process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = ""
 ```
 
 ### Test Helper for Next.js API Routes
 
 ```typescript
 // __tests__/helpers.ts
-import { NextRequest } from "next/server";
+import { NextRequest } from "next/server"
 
 export function createTestRequest(
   url: string,
   options?: {
-    method?: string;
-    body?: Record<string, unknown>;
-    headers?: Record<string, string>;
-    sandboxUserId?: string;
+    method?: string
+    body?: Record<string, unknown>
+    headers?: Record<string, string>
+    sandboxUserId?: string
   },
 ): NextRequest {
-  const { method = "GET", body, headers = {}, sandboxUserId } = options || {};
-  const fullUrl = url.startsWith("http") ? url : `http://localhost:3000${url}`;
-  const reqHeaders: Record<string, string> = { ...headers };
+  const { method = "GET", body, headers = {}, sandboxUserId } = options || {}
+  const fullUrl = url.startsWith("http") ? url : `http://localhost:3000${url}`
+  const reqHeaders: Record<string, string> = { ...headers }
 
   if (sandboxUserId) {
-    reqHeaders["x-sandbox-user-id"] = sandboxUserId;
+    reqHeaders["x-sandbox-user-id"] = sandboxUserId
   }
 
   const init: { method: string; headers: Record<string, string>; body?: string } = {
     method,
     headers: reqHeaders,
-  };
-
-  if (body) {
-    init.body = JSON.stringify(body);
-    reqHeaders["content-type"] = "application/json";
   }
 
-  return new NextRequest(fullUrl, init);
+  if (body) {
+    init.body = JSON.stringify(body)
+    reqHeaders["content-type"] = "application/json"
+  }
+
+  return new NextRequest(fullUrl, init)
 }
 
 export async function parseResponse(response: Response) {
-  const json = await response.json();
-  return { status: response.status, json };
+  const json = await response.json()
+  return { status: response.status, json }
 }
 ```
 
@@ -127,9 +127,9 @@ The key principle: **write tests for bugs that were found, not for code that wor
 
 ```typescript
 // __tests__/api/user/profile.test.ts
-import { describe, it, expect } from "vitest";
-import { createTestRequest, parseResponse } from "../../helpers";
-import { GET, PATCH } from "@/app/api/user/profile/route";
+import { describe, it, expect } from "vitest"
+import { createTestRequest, parseResponse } from "../../helpers"
+import { GET, PATCH } from "@/app/api/user/profile/route"
 
 // Define the contract — what fields MUST be in the response
 const REQUIRED_FIELDS = [
@@ -140,32 +140,32 @@ const REQUIRED_FIELDS = [
   "role",
   "created_at",
   "avatar_url",
-  "notification_settings",  // ← Added after bug found it missing
-];
+  "notification_settings", // ← Added after bug found it missing
+]
 
 describe("GET /api/user/profile", () => {
   it("returns all required fields", async () => {
-    const req = createTestRequest("/api/user/profile");
-    const res = await GET(req);
-    const { status, json } = await parseResponse(res);
+    const req = createTestRequest("/api/user/profile")
+    const res = await GET(req)
+    const { status, json } = await parseResponse(res)
 
-    expect(status).toBe(200);
+    expect(status).toBe(200)
     for (const field of REQUIRED_FIELDS) {
-      expect(json.data).toHaveProperty(field);
+      expect(json.data).toHaveProperty(field)
     }
-  });
+  })
 
   // Regression test — this exact bug was introduced by AI 4 times
   it("notification_settings is not undefined (BUG-R1 regression)", async () => {
-    const req = createTestRequest("/api/user/profile");
-    const res = await GET(req);
-    const { json } = await parseResponse(res);
+    const req = createTestRequest("/api/user/profile")
+    const res = await GET(req)
+    const { json } = await parseResponse(res)
 
-    expect("notification_settings" in json.data).toBe(true);
-    const ns = json.data.notification_settings;
-    expect(ns === null || typeof ns === "object").toBe(true);
-  });
-});
+    expect("notification_settings" in json.data).toBe(true)
+    const ns = json.data.notification_settings
+    expect(ns === null || typeof ns === "object").toBe(true)
+  })
+})
 ```
 
 ### Testing Sandbox/Production Parity
@@ -178,19 +178,19 @@ describe("GET /api/user/messages (conversation list)", () => {
   it("includes partner_name in sandbox mode", async () => {
     const req = createTestRequest("/api/user/messages", {
       sandboxUserId: "user-001",
-    });
-    const res = await GET(req);
-    const { json } = await parseResponse(res);
+    })
+    const res = await GET(req)
+    const { json } = await parseResponse(res)
 
     // This caught a bug where partner_name was added
     // to production path but not sandbox path
     if (json.data.length > 0) {
       for (const conv of json.data) {
-        expect("partner_name" in conv).toBe(true);
+        expect("partner_name" in conv).toBe(true)
       }
     }
-  });
-});
+  })
+})
 ```
 
 ## Integrating Tests into Bug-Check Workflow
@@ -199,6 +199,7 @@ describe("GET /api/user/messages (conversation list)", () => {
 
 ```markdown
 <!-- .claude/commands/bug-check.md -->
+
 # Bug Check
 
 ## Step 1: Automated Tests (mandatory, cannot skip)
@@ -252,16 +253,16 @@ User: "バグチェックして" (or "/bug-check")
 ```typescript
 // FAIL: AI adds field to production path only
 if (isSandboxMode()) {
-  return { data: { id, email, name } };  // Missing new field
+  return { data: { id, email, name } } // Missing new field
 }
 // Production path
-return { data: { id, email, name, notification_settings } };
+return { data: { id, email, name, notification_settings } }
 
 // PASS: Both paths must return the same shape
 if (isSandboxMode()) {
-  return { data: { id, email, name, notification_settings: null } };
+  return { data: { id, email, name, notification_settings: null } }
 }
-return { data: { id, email, name, notification_settings } };
+return { data: { id, email, name, notification_settings } }
 ```
 
 **Test to catch it**:
@@ -269,13 +270,13 @@ return { data: { id, email, name, notification_settings } };
 ```typescript
 it("sandbox and production return same fields", async () => {
   // In test env, sandbox mode is forced ON
-  const res = await GET(createTestRequest("/api/user/profile"));
-  const { json } = await parseResponse(res);
+  const res = await GET(createTestRequest("/api/user/profile"))
+  const { json } = await parseResponse(res)
 
   for (const field of REQUIRED_FIELDS) {
-    expect(json.data).toHaveProperty(field);
+    expect(json.data).toHaveProperty(field)
   }
-});
+})
 ```
 
 ### Pattern 2: SELECT Clause Omission
@@ -286,17 +287,14 @@ it("sandbox and production return same fields", async () => {
 // FAIL: New column added to response but not to SELECT
 const { data } = await supabase
   .from("users")
-  .select("id, email, name")  // notification_settings not here
-  .single();
+  .select("id, email, name") // notification_settings not here
+  .single()
 
-return { data: { ...data, notification_settings: data.notification_settings } };
+return { data: { ...data, notification_settings: data.notification_settings } }
 // → notification_settings is always undefined
 
 // PASS: Use SELECT * or explicitly include new columns
-const { data } = await supabase
-  .from("users")
-  .select("*")
-  .single();
+const { data } = await supabase.from("users").select("*").single()
 ```
 
 ### Pattern 3: Error State Leakage
@@ -322,23 +320,23 @@ catch (err) {
 ```typescript
 // FAIL: No rollback on failure
 const handleRemove = async (id: string) => {
-  setItems(prev => prev.filter(i => i.id !== id));
-  await fetch(`/api/items/${id}`, { method: "DELETE" });
+  setItems((prev) => prev.filter((i) => i.id !== id))
+  await fetch(`/api/items/${id}`, { method: "DELETE" })
   // If API fails, item is gone from UI but still in DB
-};
+}
 
 // PASS: Capture previous state and rollback on failure
 const handleRemove = async (id: string) => {
-  const prevItems = [...items];
-  setItems(prev => prev.filter(i => i.id !== id));
+  const prevItems = [...items]
+  setItems((prev) => prev.filter((i) => i.id !== id))
   try {
-    const res = await fetch(`/api/items/${id}`, { method: "DELETE" });
-    if (!res.ok) throw new Error("API error");
+    const res = await fetch(`/api/items/${id}`, { method: "DELETE" })
+    if (!res.ok) throw new Error("API error")
   } catch {
-    setItems(prevItems);  // Rollback
-    alert("削除に失敗しました");
+    setItems(prevItems) // Rollback
+    alert("削除に失敗しました")
   }
-};
+}
 ```
 
 ## Strategy: Test Where Bugs Were Found
@@ -361,17 +359,18 @@ No bug in /api/user/notifications  → Don't write test (yet)
 
 ## Quick Reference
 
-| AI Regression Pattern | Test Strategy | Priority |
-|---|---|---|
-| Sandbox/production mismatch | Assert same response shape in sandbox mode |  High |
-| SELECT clause omission | Assert all required fields in response |  High |
-| Error state leakage | Assert state cleanup on error |  Medium |
-| Missing rollback | Assert state restored on API failure |  Medium |
-| Type cast masking null | Assert field is not undefined |  Medium |
+| AI Regression Pattern       | Test Strategy                              | Priority |
+| --------------------------- | ------------------------------------------ | -------- |
+| Sandbox/production mismatch | Assert same response shape in sandbox mode | High     |
+| SELECT clause omission      | Assert all required fields in response     | High     |
+| Error state leakage         | Assert state cleanup on error              | Medium   |
+| Missing rollback            | Assert state restored on API failure       | Medium   |
+| Type cast masking null      | Assert field is not undefined              | Medium   |
 
 ## DO / DON'T
 
 **DO:**
+
 - Write tests immediately after finding a bug (before fixing it if possible)
 - Test the API response shape, not the implementation
 - Run tests as the first step of every bug-check
@@ -379,6 +378,7 @@ No bug in /api/user/notifications  → Don't write test (yet)
 - Name tests after the bug they prevent (e.g., "BUG-R1 regression")
 
 **DON'T:**
+
 - Write tests for code that has never had a bug
 - Trust AI self-review as a substitute for automated tests
 - Skip sandbox path testing because "it's just mock data"

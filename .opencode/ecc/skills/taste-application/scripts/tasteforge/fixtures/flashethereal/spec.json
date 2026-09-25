@@ -6,16 +6,8 @@
   "camera_motion": "dry-run camera_motion: how the camera moves, or that it is locked off",
   "subject_framing": "dry-run subject_framing: how subjects sit in frame; headroom, rule-of-thirds, negative space",
   "grade_description": "dry-run grade_description: the color grade in colorist language",
-  "mood_adjectives": [
-    "dry-run-mood_adjectives-1",
-    "dry-run-mood_adjectives-2",
-    "dry-run-mood_adjectives-3"
-  ],
-  "avoid": [
-    "dry-run-avoid-1",
-    "dry-run-avoid-2",
-    "dry-run-avoid-3"
-  ],
+  "mood_adjectives": ["dry-run-mood_adjectives-1", "dry-run-mood_adjectives-2", "dry-run-mood_adjectives-3"],
+  "avoid": ["dry-run-avoid-1", "dry-run-avoid-2", "dry-run-avoid-3"],
   "source": {
     "pack": "flashethereal",
     "generated": "2026-08-16T07:10:41Z",

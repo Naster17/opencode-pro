@@ -191,12 +191,12 @@ normal calls retain their existing two positional arguments.
 
 `integration` requires:
 
-| Field | Contract |
-|---|---|
-| `baseline` | `project_file`, `snapshot_file`, `project_name`, `timeline_name`, `fps`, `timeline_range` |
-| `source` | `media`, `track`, `clip_index`, `media_frames`, `fps`, `source_range`, `timeline_range` |
-| `audio` | One source-shaped binding for **every** original audio clip, retaining its complete placement and trim |
-| `protected_intervals` | Nonempty list of `{range: [start, end], reason: text}` |
+| Field                 | Contract                                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------------------------ |
+| `baseline`            | `project_file`, `snapshot_file`, `project_name`, `timeline_name`, `fps`, `timeline_range`              |
+| `source`              | `media`, `track`, `clip_index`, `media_frames`, `fps`, `source_range`, `timeline_range`                |
+| `audio`               | One source-shaped binding for **every** original audio clip, retaining its complete placement and trim |
+| `protected_intervals` | Nonempty list of `{range: [start, end], reason: text}`                                                 |
 
 File records are `{path, bytes, sha256}`: canonical absolute path, positive
 integer byte count, lowercase SHA-256 of resident regular bytes. Paths and

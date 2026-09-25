@@ -55,12 +55,12 @@ Encounter Flow (vertical scroll)
 
 ```typescript
 interface ClinicalTemplate {
-  id: string;
-  name: string;             // e.g., "Chest Pain"
-  chips: string[];          // clickable symptom chips
-  requiredFields: string[]; // mandatory data points
-  redFlags: string[];       // triggers non-dismissable alert
-  icdSuggestions: string[]; // pre-mapped diagnosis codes
+  id: string
+  name: string // e.g., "Chest Pain"
+  chips: string[] // clickable symptom chips
+  requiredFields: string[] // mandatory data points
+  redFlags: string[] // triggers non-dismissable alert
+  icdSuggestions: string[] // pre-mapped diagnosis codes
 }
 ```
 
@@ -85,6 +85,7 @@ Critical interactions **block prescribing by default**. The clinician must expli
 ### Locked Encounter Pattern
 
 Once a clinical encounter is signed:
+
 - No edits allowed — only an addendum (a separate linked record)
 - Both original and addendum appear in the patient timeline
 - Audit trail captures who signed, when, and any addendum records
@@ -100,6 +101,7 @@ Once a clinical encounter is signed:
 ### Accessibility for Healthcare
 
 Healthcare UIs have stricter requirements than typical web apps:
+
 - 4.5:1 minimum contrast (WCAG AA) — clinicians work in varied lighting
 - Large touch targets (44x44px minimum) — for gloved/rushed interaction
 - Keyboard navigation — for power users entering data rapidly

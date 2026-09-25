@@ -61,12 +61,7 @@ function getECCVersion(): string {
 
 type ECCHooksPluginFn = (input: PluginInput) => Promise<Record<string, unknown>>
 
-export const ECCHooksPlugin: ECCHooksPluginFn = async ({
-  client,
-  $,
-  directory,
-  worktree,
-}: PluginInput) => {
+export const ECCHooksPlugin: ECCHooksPluginFn = async ({ client, $, directory, worktree }: PluginInput) => {
   type HookProfile = "minimal" | "standard" | "strict"
 
   const worktreePath = worktree || directory
@@ -124,8 +119,8 @@ export const ECCHooksPlugin: ECCHooksPluginFn = async ({
         log(
           "warn",
           "[ECC] changed-files tracking disabled: could not load the changed-files store. " +
-            "Run `ecc repair --target opencode` to restore the missing files. Other ECC hooks are unaffected."
-        )
+            "Run `ecc repair --target opencode` to restore the missing files. Other ECC hooks are unaffected.",
+        ),
       )
       .catch(() => {})
   }
@@ -140,7 +135,7 @@ export const ECCHooksPlugin: ECCHooksPluginFn = async ({
     (process.env.ECC_DISABLED_HOOKS || "")
       .split(",")
       .map((item) => item.trim())
-      .filter(Boolean)
+      .filter(Boolean),
   )
 
   const profileOrder: Record<HookProfile, number> = {
@@ -156,10 +151,7 @@ export const ECCHooksPlugin: ECCHooksPluginFn = async ({
     return profileOrder[currentProfile] >= profileOrder[required]
   }
 
-  const hookEnabled = (
-    hookId: string,
-    requiredProfile: HookProfile | HookProfile[] = "standard"
-  ): boolean => {
+  const hookEnabled = (hookId: string, requiredProfile: HookProfile | HookProfile[] = "standard"): boolean => {
     if (disabledHooks.has(hookId)) return false
     return profileAllowed(requiredProfile)
   }
@@ -186,10 +178,7 @@ export const ECCHooksPlugin: ECCHooksPluginFn = async ({
         const result = await $`grep -n "console\\.log" ${event.path} 2>/dev/null`.text()
         if (result.trim()) {
           const lines = result.trim().split("\n").length
-          log(
-            "warn",
-            `[ECC] console.log found in ${event.path} (${lines} occurrence${lines > 1 ? "s" : ""})`
-          )
+          log("warn", `[ECC] console.log found in ${event.path} (${lines} occurrence${lines > 1 ? "s" : ""})`)
         }
       } catch {
         // No console.log found (grep returns non-zero) - this is good
@@ -233,11 +222,9 @@ export const ECCHooksPlugin: ECCHooksPluginFn = async ({
     if (totalConsoleLogCount > 0) {
       log(
         "warn",
-        `[ECC] Audit: ${totalConsoleLogCount} console.log statement(s) in ${filesWithConsoleLogs.length} file(s)`
+        `[ECC] Audit: ${totalConsoleLogCount} console.log statement(s) in ${filesWithConsoleLogs.length} file(s)`,
       )
-      filesWithConsoleLogs.forEach((f) =>
-        log("warn", `  - ${f}`)
-      )
+      filesWithConsoleLogs.forEach((f) => log("warn", `  - ${f}`))
       log("warn", "[ECC] Remove console.log statements before committing")
     } else {
       log("info", "[ECC] Audit passed: No console.log statements found")
@@ -307,10 +294,7 @@ export const ECCHooksPlugin: ECCHooksPluginFn = async ({
           todos: todos.map((x) => ({ text: x.content, done: x.status === "completed" })),
         })
     },
-    "tool.execute.after": async (
-      input: ToolInput,
-      output: unknown
-    ) => {
+    "tool.execute.after": async (input: ToolInput, output: unknown) => {
       const filePath = getFilePath(input.args)
       if (input.tool === "edit" && filePath) {
         changedFilesStore?.recordChange(filePath, "modified")
@@ -355,9 +339,7 @@ export const ECCHooksPlugin: ECCHooksPluginFn = async ({
         log("info", "[ECC] PR created - check GitHub Actions status")
       }
     },
-    "tool.execute.before": async (
-      input: ToolInput
-    ) => {
+    "tool.execute.before": async (input: ToolInput) => {
       if (input.tool === "write") {
         const filePath = getFilePath(input.args)
         if (filePath) {
@@ -381,10 +363,7 @@ export const ECCHooksPlugin: ECCHooksPluginFn = async ({
         input.tool === "bash" &&
         input.args?.toString().includes("git push")
       ) {
-        log(
-          "info",
-          "[ECC] Remember to review changes before pushing: git diff origin/main...HEAD"
-        )
+        log("info", "[ECC] Remember to review changes before pushing: git diff origin/main...HEAD")
       }
 
       // Block creation of unnecessary documentation files
@@ -402,10 +381,7 @@ export const ECCHooksPlugin: ECCHooksPluginFn = async ({
           !filePath.includes("LICENSE") &&
           !filePath.includes("CONTRIBUTING")
         ) {
-          log(
-            "warn",
-            `[ECC] Creating ${filePath} - consider if this documentation is necessary`
-          )
+          log("warn", `[ECC] Creating ${filePath} - consider if this documentation is necessary`)
         }
       }
 
@@ -417,10 +393,7 @@ export const ECCHooksPlugin: ECCHooksPluginFn = async ({
           cmd.match(/^cargo\s+(build|test|run)/) ||
           cmd.match(/^go\s+(build|test|run)/)
         ) {
-          log(
-            "info",
-            "[ECC] Long-running command detected - consider using background execution"
-          )
+          log("info", "[ECC] Long-running command detected - consider using background execution")
         }
       }
     },

@@ -25,6 +25,7 @@ Retrieve, analyze, and update Jira tickets directly from your AI coding workflow
 Install the `mcp-atlassian` MCP server. This exposes Jira tools directly to your AI agent.
 
 **Requirements:**
+
 - Python 3.10+
 - `uvx` (from `uv`), installed via your package manager or the official `uv` installation documentation
 
@@ -48,6 +49,7 @@ Install the `mcp-atlassian` MCP server. This exposes Jira tools directly to your
 > **Security:** Never hardcode secrets. Prefer setting `JIRA_URL`, `JIRA_EMAIL`, and `JIRA_API_TOKEN` in your system environment (or a secrets manager). Only use the MCP `env` block for local, uncommitted config files.
 
 **To get a Jira API token:**
+
 1. Go to <https://id.atlassian.com/manage-profile/security/api-tokens>
 2. Click **Create API token**
 3. Copy the token — store it in your environment, never in source code
@@ -58,11 +60,11 @@ If MCP is not available, use the Jira REST API v3 directly via `curl` or a helpe
 
 **Required environment variables:**
 
-| Variable | Description |
-|----------|-------------|
-| `JIRA_URL` | Your Jira instance URL (e.g., `https://yourorg.atlassian.net`) |
-| `JIRA_EMAIL` | Your Atlassian account email |
-| `JIRA_API_TOKEN` | API token from id.atlassian.com |
+| Variable         | Description                                                    |
+| ---------------- | -------------------------------------------------------------- |
+| `JIRA_URL`       | Your Jira instance URL (e.g., `https://yourorg.atlassian.net`) |
+| `JIRA_EMAIL`     | Your Atlassian account email                                   |
+| `JIRA_API_TOKEN` | API token from id.atlassian.com                                |
 
 Store these in your shell environment, secrets manager, or an untracked local env file. Do not commit them to the repo.
 
@@ -79,17 +81,17 @@ jira_curl() {
 
 When the `mcp-atlassian` MCP server is configured, these tools are available:
 
-| Tool | Purpose | Example |
-|------|---------|---------|
-| `jira_search` | JQL queries | `project = PROJ AND status = "In Progress"` |
-| `jira_get_issue` | Fetch full issue details by key | `PROJ-1234` |
-| `jira_create_issue` | Create issues (Task, Bug, Story, Epic) | New bug report |
-| `jira_update_issue` | Update fields (summary, description, assignee) | Change assignee |
-| `jira_transition_issue` | Change status | Move to "In Review" |
-| `jira_add_comment` | Add comments | Progress update |
-| `jira_get_sprint_issues` | List issues in a sprint | Active sprint review |
-| `jira_create_issue_link` | Link issues (Blocks, Relates to) | Dependency tracking |
-| `jira_get_issue_development_info` | See linked PRs, branches, commits | Dev context |
+| Tool                              | Purpose                                        | Example                                     |
+| --------------------------------- | ---------------------------------------------- | ------------------------------------------- |
+| `jira_search`                     | JQL queries                                    | `project = PROJ AND status = "In Progress"` |
+| `jira_get_issue`                  | Fetch full issue details by key                | `PROJ-1234`                                 |
+| `jira_create_issue`               | Create issues (Task, Bug, Story, Epic)         | New bug report                              |
+| `jira_update_issue`               | Update fields (summary, description, assignee) | Change assignee                             |
+| `jira_transition_issue`           | Change status                                  | Move to "In Review"                         |
+| `jira_add_comment`                | Add comments                                   | Progress update                             |
+| `jira_get_sprint_issues`          | List issues in a sprint                        | Active sprint review                        |
+| `jira_create_issue_link`          | Link issues (Blocks, Relates to)               | Dependency tracking                         |
+| `jira_get_issue_development_info` | See linked PRs, branches, commits              | Dev context                                 |
 
 > **Tip:** Always call `jira_get_transitions` before transitioning — transition IDs vary per project workflow.
 
@@ -169,6 +171,7 @@ jira_curl -G \
 When retrieving a ticket for development or test automation, extract:
 
 ### 1. Testable Requirements
+
 - **Functional requirements** — What the feature does
 - **Acceptance criteria** — Conditions that must be met
 - **Testable behaviors** — Specific actions and expected outcomes
@@ -177,12 +180,14 @@ When retrieving a ticket for development or test automation, extract:
 - **Integration points** — APIs, services, or systems involved
 
 ### 2. Test Types Needed
+
 - **Unit tests** — Individual functions and utilities
 - **Integration tests** — API endpoints and service interactions
 - **E2E tests** — User-facing UI flows
 - **API tests** — Endpoint contracts and error handling
 
 ### 3. Edge Cases & Error Scenarios
+
 - Invalid inputs (empty, too long, special characters)
 - Unauthorized access
 - Network failures or timeouts
@@ -226,24 +231,26 @@ Dependencies:
 
 ### When to Update
 
-| Workflow Step | Jira Update |
-|---|---|
-| Start work | Transition to "In Progress" |
-| Tests written | Comment with test coverage summary |
-| Branch created | Comment with branch name |
-| PR/MR created | Comment with link, link issue |
-| Tests passing | Comment with results summary |
-| PR/MR merged | Transition to "Done" or "In Review" |
+| Workflow Step  | Jira Update                         |
+| -------------- | ----------------------------------- |
+| Start work     | Transition to "In Progress"         |
+| Tests written  | Comment with test coverage summary  |
+| Branch created | Comment with branch name            |
+| PR/MR created  | Comment with link, link issue       |
+| Tests passing  | Comment with results summary        |
+| PR/MR merged   | Transition to "Done" or "In Review" |
 
 ### Comment Templates
 
 **Starting Work:**
+
 ```
 Starting implementation for this ticket.
 Branch: feat/PROJ-1234-feature-name
 ```
 
 **Tests Implemented:**
+
 ```
 Automated tests implemented:
 
@@ -258,6 +265,7 @@ All tests passing locally. Coverage: XX%
 ```
 
 **PR Created:**
+
 ```
 Pull request created:
 [PR Title](https://github.com/org/repo/pull/XXX)
@@ -266,6 +274,7 @@ Ready for review.
 ```
 
 **Work Complete:**
+
 ```
 Implementation complete.
 
@@ -294,13 +303,13 @@ Summaries, descriptions, and comments are written by anyone with board access, a
 
 ## Troubleshooting
 
-| Error | Cause | Fix |
-|---|---|---|
-| `401 Unauthorized` | Invalid or expired API token | Regenerate at id.atlassian.com |
-| `403 Forbidden` | Token lacks project permissions | Check token scopes and project access |
-| `404 Not Found` | Wrong ticket key or base URL | Verify `JIRA_URL` and ticket key |
-| `spawn uvx ENOENT` | IDE cannot find `uvx` on PATH | Use full path (e.g., `~/.local/bin/uvx`) or set PATH in `~/.zprofile` |
-| Connection timeout | Network/VPN issue | Check VPN connection and firewall rules |
+| Error              | Cause                           | Fix                                                                   |
+| ------------------ | ------------------------------- | --------------------------------------------------------------------- |
+| `401 Unauthorized` | Invalid or expired API token    | Regenerate at id.atlassian.com                                        |
+| `403 Forbidden`    | Token lacks project permissions | Check token scopes and project access                                 |
+| `404 Not Found`    | Wrong ticket key or base URL    | Verify `JIRA_URL` and ticket key                                      |
+| `spawn uvx ENOENT` | IDE cannot find `uvx` on PATH   | Use full path (e.g., `~/.local/bin/uvx`) or set PATH in `~/.zprofile` |
+| Connection timeout | Network/VPN issue               | Check VPN connection and firewall rules                               |
 
 ## Best Practices
 

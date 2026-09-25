@@ -2739,9 +2739,7 @@ function UserMessage(props: { message: UserMessage; parts: Part[]; onMouseUp: ()
   })
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const subtasks = createMemo(() =>
-    props.parts.flatMap((x) =>
-      x.type === "subtask" ? [{ command: x.command, description: x.description }] : [],
-    ),
+    props.parts.flatMap((x) => (x.type === "subtask" ? [{ command: x.command, description: x.description }] : [])),
   )
   const hasEcho = createMemo(() => !!text() || subtasks().length > 0)
   const { theme } = useTheme()
@@ -2806,36 +2804,36 @@ function UserMessage(props: { message: UserMessage; parts: Part[]; onMouseUp: ()
                   </text>
                 )}
               </For>
-            <Show when={files().length}>
-              <box
-                flexDirection="row"
-                paddingBottom={ctx.showTimestamps() ? 1 : 0}
-                paddingTop={1}
-                gap={1}
-                flexWrap="wrap"
-              >
-                <For each={files()}>
-                  {(file) => {
-                    const bg = createMemo(() => {
-                      if (file.mime.startsWith("image/")) return theme.accent
-                      if (file.mime === "application/pdf") return theme.primary
-                      return theme.secondary
-                    })
-                    return (
-                      <text fg={theme.text}>
-                        <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
-                        <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
-                      </text>
-                    )
-                  }}
-                </For>
-              </box>
-            </Show>
-            <Show when={ctx.showTimestamps()}>
-              <text fg={theme.textMuted}>
-                <span style={{ fg: theme.textMuted }}>{Locale.todayTimeOrDateTime(props.message.time.created)}</span>
-              </text>
-            </Show>
+              <Show when={files().length}>
+                <box
+                  flexDirection="row"
+                  paddingBottom={ctx.showTimestamps() ? 1 : 0}
+                  paddingTop={1}
+                  gap={1}
+                  flexWrap="wrap"
+                >
+                  <For each={files()}>
+                    {(file) => {
+                      const bg = createMemo(() => {
+                        if (file.mime.startsWith("image/")) return theme.accent
+                        if (file.mime === "application/pdf") return theme.primary
+                        return theme.secondary
+                      })
+                      return (
+                        <text fg={theme.text}>
+                          <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
+                          <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
+                        </text>
+                      )
+                    }}
+                  </For>
+                </box>
+              </Show>
+              <Show when={ctx.showTimestamps()}>
+                <text fg={theme.textMuted}>
+                  <span style={{ fg: theme.textMuted }}>{Locale.todayTimeOrDateTime(props.message.time.created)}</span>
+                </text>
+              </Show>
             </box>
           </Show>
         </box>

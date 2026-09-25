@@ -76,10 +76,10 @@ Minimum useful database set:
 Keep a search log that makes the review reproducible:
 
 ```markdown
-| Database | Date searched | Query | Filters | Results | Export |
-| --- | --- | --- | --- | ---: | --- |
-| PubMed | 2026-05-11 | `("CRISPR"[tiab] OR "Cas9"[tiab]) AND "sickle cell"[tiab]` | 2020:2026, English | 86 | PMID list |
-| arXiv | 2026-05-11 | `CRISPR sickle cell gene editing` | q-bio, 2020:2026 | 9 | BibTeX |
+| Database | Date searched | Query                                                      | Filters            | Results | Export    |
+| -------- | ------------- | ---------------------------------------------------------- | ------------------ | ------: | --------- |
+| PubMed   | 2026-05-11    | `("CRISPR"[tiab] OR "Cas9"[tiab]) AND "sickle cell"[tiab]` | 2020:2026, English |      86 | PMID list |
+| arXiv    | 2026-05-11    | `CRISPR sickle cell gene editing`                          | q-bio, 2020:2026   |       9 | BibTeX    |
 ```
 
 Save raw IDs, URLs, DOIs, abstracts, and notes separately from the final prose.
@@ -118,9 +118,9 @@ For systematic work, record exclusion reasons:
 Use a structured extraction table:
 
 ```markdown
-| Study | Design | Population/Data | Method | Comparator | Outcome | Key finding | Limitations |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Author Year | RCT/cohort/review/etc. | sample or corpus | method | baseline | measured outcome | result | caveat |
+| Study       | Design                 | Population/Data  | Method | Comparator | Outcome          | Key finding | Limitations |
+| ----------- | ---------------------- | ---------------- | ------ | ---------- | ---------------- | ----------- | ----------- |
+| Author Year | RCT/cohort/review/etc. | sample or corpus | method | baseline   | measured outcome | result      | caveat      |
 ```
 
 For technical papers, include dataset, benchmark, metric, baseline, and

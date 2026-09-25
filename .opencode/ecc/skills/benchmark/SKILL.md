@@ -76,6 +76,7 @@ Run before and after a change to measure impact:
 ```
 
 Output:
+
 ```
 | Metric | Before | After | Delta | Verdict |
 |--------|--------|-------|-------|---------|

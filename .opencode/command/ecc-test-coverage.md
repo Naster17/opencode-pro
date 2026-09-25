@@ -17,17 +17,18 @@ Analyze test coverage and identify gaps: $ARGUMENTS
 
 ## Coverage Targets
 
-| Code Type | Target |
-|-----------|--------|
-| Standard code | 80% |
-| Financial logic | 100% |
-| Auth/security | 100% |
-| Utilities | 90% |
-| UI components | 70% |
+| Code Type       | Target |
+| --------------- | ------ |
+| Standard code   | 80%    |
+| Financial logic | 100%   |
+| Auth/security   | 100%   |
+| Utilities       | 90%    |
+| UI components   | 70%    |
 
 ## Coverage Report Analysis
 
 ### Summary
+
 ```
 File           | % Stmts | % Branch | % Funcs | % Lines
 ---------------|---------|----------|---------|--------
@@ -35,9 +36,11 @@ All files      |   XX    |    XX    |   XX    |   XX
 ```
 
 ### Low Coverage Files
+
 [Files below target, prioritized by criticality]
 
 ### Uncovered Lines
+
 [Specific lines that need tests]
 
 ## Test Generation
@@ -51,13 +54,14 @@ For each uncovered area:
 **Coverage Gap**: [description]
 
 **Suggested Tests**:
+
 ```typescript
-describe('functionName', () => {
-  it('should [expected behavior]', () => {
+describe("functionName", () => {
+  it("should [expected behavior]", () => {
     // Test code
   })
 
-  it('should handle [edge case]', () => {
+  it("should handle [edge case]", () => {
     // Edge case test
   })
 })

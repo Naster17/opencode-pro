@@ -433,7 +433,10 @@ function writableGlobal(info: Info) {
 // Object-form permission patches merge at the pattern level so a per-skill
 // write like `{ skill: { "ecc-tools": "deny" } }` preserves sibling patterns
 // already present in the config. String patches replace the whole key.
-function mergePermissionRule(current: ConfigPermission.Rule | undefined, patch: ConfigPermission.Rule): ConfigPermission.Rule {
+function mergePermissionRule(
+  current: ConfigPermission.Rule | undefined,
+  patch: ConfigPermission.Rule,
+): ConfigPermission.Rule {
   if (typeof patch === "string") return patch
   const base = typeof current === "string" ? { "*": current } : (current ?? {})
   return { ...base, ...patch }
@@ -926,10 +929,7 @@ export const layer = Layer.effect(
     }) {
       const merged = (current: Record<string, ConfigPermission.Rule>) =>
         Object.fromEntries(
-          Object.entries(input.permission).map(([key, value]) => [
-            key,
-            mergePermissionRule(current[key], value),
-          ]),
+          Object.entries(input.permission).map(([key, value]) => [key, mergePermissionRule(current[key], value)]),
         ) as Record<string, ConfigPermission.Rule>
       if (input.scope === "global") {
         const globalPermission = (yield* getGlobal()).permission as Record<string, ConfigPermission.Rule> | undefined
@@ -953,7 +953,9 @@ export const layer = Layer.effect(
       const before = (yield* readConfigFile(file)) ?? "{}"
       const existing = ConfigParse.effectSchema(Info, ConfigParse.jsonc(before, file), file)
       const patch = {
-        permission: merged((existing.permission ?? {}) as Record<string, ConfigPermission.Rule>) as ConfigPermission.Info,
+        permission: merged(
+          (existing.permission ?? {}) as Record<string, ConfigPermission.Rule>,
+        ) as ConfigPermission.Info,
       }
       if (!file.endsWith(".jsonc")) {
         const serialized = JSON.stringify(mergeConfigForWrite(existing, patch), null, 2)

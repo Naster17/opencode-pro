@@ -39,7 +39,12 @@ Use when building or debugging Nuxt 4 apps with SSR, hybrid rendering, route rul
 ```ts
 const route = useRoute()
 
-const { data: article, status, error, refresh } = await useAsyncData(
+const {
+  data: article,
+  status,
+  error,
+  refresh,
+} = await useAsyncData(
   () => `article:${route.params.slug}`,
   () => $fetch(`/api/articles/${route.params.slug}`),
 )
@@ -57,11 +62,11 @@ Prefer `routeRules` in `nuxt.config.ts` for rendering and caching strategy:
 ```ts
 export default defineNuxtConfig({
   routeRules: {
-    '/': { prerender: true },
-    '/products/**': { swr: 3600 },
-    '/blog/**': { isr: true },
-    '/admin/**': { ssr: false },
-    '/api/**': { cache: { maxAge: 60 * 60 } },
+    "/": { prerender: true },
+    "/products/**": { swr: 3600 },
+    "/blog/**": { isr: true },
+    "/admin/**": { ssr: false },
+    "/api/**": { cache: { maxAge: 60 * 60 } },
   },
 })
 ```

@@ -32,13 +32,13 @@ project-root/
 
 ### Layer Responsibilities
 
-| Layer | Purpose | Persistence |
-|---|---|---|
-| Kernel (`CLAUDE.md`) | Identity, routing, model policies, agent registry | Git-tracked |
-| Agents (`agents/`) | Specialist identities with scoped tools and memory | Git-tracked |
-| Commands (`.claude/commands/`) | User-facing slash commands (`/daily-sync`, `/outreach`) | Git-tracked |
-| Scripts (`scripts/`) | Python/JS daemons triggered by cron or webhooks | Git-tracked |
-| State (`data/`) | Append-only logs, project state, decision records | Git-ignored or tracked |
+| Layer                          | Purpose                                                 | Persistence            |
+| ------------------------------ | ------------------------------------------------------- | ---------------------- |
+| Kernel (`CLAUDE.md`)           | Identity, routing, model policies, agent registry       | Git-tracked            |
+| Agents (`agents/`)             | Specialist identities with scoped tools and memory      | Git-tracked            |
+| Commands (`.claude/commands/`) | User-facing slash commands (`/daily-sync`, `/outreach`) | Git-tracked            |
+| Scripts (`scripts/`)           | Python/JS daemons triggered by cron or webhooks         | Git-tracked            |
+| State (`data/`)                | Append-only logs, project state, decision records       | Git-ignored or tracked |
 
 ## The Kernel
 
@@ -50,19 +50,21 @@ project-root/
 # CLAUDE.md - Agentic OS Kernel
 
 ## Identity
+
 You are the COO of [project-name]. You route tasks to specialist agents.
 You never write code directly. You delegate to the right agent and synthesize results.
 
 ## Agent Registry
 
-| Agent | Role | Trigger |
-|---|---|---|
-| @dev | Code, architecture, debugging | User says "build", "fix", "refactor" |
-| @writer | Documentation, content, emails | User says "write", "draft", "blog" |
-| @researcher | Research, analysis, fact-checking | User says "research", "analyze", "compare" |
-| @ops | DevOps, deployment, infrastructure | User says "deploy", "CI", "server" |
+| Agent       | Role                               | Trigger                                    |
+| ----------- | ---------------------------------- | ------------------------------------------ |
+| @dev        | Code, architecture, debugging      | User says "build", "fix", "refactor"       |
+| @writer     | Documentation, content, emails     | User says "write", "draft", "blog"         |
+| @researcher | Research, analysis, fact-checking  | User says "research", "analyze", "compare" |
+| @ops        | DevOps, deployment, infrastructure | User says "deploy", "CI", "server"         |
 
 ## Routing Rules
+
 1. Parse the user request for intent keywords
 2. Match to the Agent Registry trigger column
 3. Load the corresponding agent file from `agents/<name>.md`
@@ -70,6 +72,7 @@ You never write code directly. You delegate to the right agent and synthesize re
 5. Synthesize and present the result back to the user
 
 ## Model Policies
+
 - Default model: use the repository or harness default.
 - @dev tasks: prefer a higher-reasoning model for complex architecture.
 - @researcher tasks: use the configured research-capable model and approved search tools.
@@ -90,21 +93,25 @@ Each agent is a standalone markdown file in `agents/`. Claude loads the relevant
 # @dev - Software Engineer
 
 ## Identity
+
 You are a senior software engineer. You write clean, tested, production-grade code.
 You prefer simple solutions. You ask clarifying questions when requirements are ambiguous.
 
 ## Memory Scope
+
 - Read `data/projects/<current-project>.md` for context
 - Read `data/decisions/` for architectural decisions
 - Append execution logs to `data/logs/<date>-@dev.md`
 
 ## Tool Access
+
 - Full filesystem access within project root
 - Git operations (status, diff, commit, branch)
 - Test runner access
 - MCP servers as configured in `.claude/mcp.json`
 
 ## Constraints
+
 - Always write tests for new features
 - Never commit directly to `main`; use feature branches
 - Prefer editing existing files over creating new ones
@@ -146,15 +153,15 @@ Run the morning briefing:
 
 ### Standard Command Set
 
-| Command | Purpose |
-|---|---|
-| `/daily-sync` | Morning briefing: status, blockers, priorities |
-| `/outreach` | Run outreach workflow (email, LinkedIn, etc.) |
-| `/research <topic>` | Deep research with citation tracking |
-| `/apply-jobs` | Tailor resume + cover letter for a target role |
-| `/analytics` | Pull metrics from Stripe, GitHub, or custom sources |
-| `/interview-prep` | Generate flashcards or mock interview questions |
-| `/decision <topic>` | Log a decision with pros/cons and chosen path |
+| Command             | Purpose                                             |
+| ------------------- | --------------------------------------------------- |
+| `/daily-sync`       | Morning briefing: status, blockers, priorities      |
+| `/outreach`         | Run outreach workflow (email, LinkedIn, etc.)       |
+| `/research <topic>` | Deep research with citation tracking                |
+| `/apply-jobs`       | Tailor resume + cover letter for a target role      |
+| `/analytics`        | Pull metrics from Stripe, GitHub, or custom sources |
+| `/interview-prep`   | Generate flashcards or mock interview questions     |
+| `/decision <topic>` | Log a decision with pros/cons and chosen path       |
 
 ### Activating Commands
 
@@ -182,16 +189,20 @@ data/
 # 2026-04-22 - Daily Log
 
 ## Sessions
+
 - 09:00 - Session 1: Refactored auth module (@dev)
 - 11:30 - Session 2: Drafted investor update (@writer)
 
 ## Decisions
+
 - Switched from JWT to session cookies (see `data/decisions/2026-04-22-auth.md`)
 
 ## Blockers
+
 - Waiting on API key from vendor (follow up 2026-04-24)
 
 ## Next Actions
+
 - [ ] Merge auth refactor PR
 - [ ] Send investor update for review
 ```
@@ -202,6 +213,7 @@ At the end of each session, the kernel appends a reflection:
 
 ```markdown
 ## Reflection - Session 3
+
 - What worked: Parallel agent execution saved 20 minutes
 - What didn't: @researcher hit a paywalled source, need better source ranking
 - What to change: Add `source-tier` field to research notes (A/B/C credibility)
@@ -334,6 +346,7 @@ This keeps historical data readable without migration scripts.
 
 ```markdown
 # BAD - One agent does everything
+
 You are a full-stack developer, writer, researcher, and DevOps engineer.
 ```
 
@@ -343,6 +356,7 @@ Split into specialist agents. The kernel handles routing.
 
 ```markdown
 # BAD - No memory between sessions
+
 Starting fresh every time Claude Code opens.
 ```
 
@@ -352,6 +366,7 @@ Always read `data/` at session start and write back at session end.
 
 ```markdown
 # BAD - API keys in agent files or CLAUDE.md
+
 Your OpenAI API key is sk-xxxxxxxx
 ```
 
@@ -369,6 +384,7 @@ Use JSON/markdown files until you have multiple concurrent users or GBs of data.
 
 ```markdown
 # BAD - Routing logic in code instead of markdown tables
+
 if (intent.includes('deploy')) { agent = opsAgent; }
 ```
 

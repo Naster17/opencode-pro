@@ -20,10 +20,7 @@ const securityAuditTool: ToolDefinition = tool({
       .enum(["all", "dependencies", "secrets", "code"])
       .optional()
       .describe("Type of audit to run (default: all)"),
-    fix: tool.schema
-      .boolean()
-      .optional()
-      .describe("Attempt to auto-fix dependency vulnerabilities (default: false)"),
+    fix: tool.schema.boolean().optional().describe("Attempt to auto-fix dependency vulnerabilities (default: false)"),
     severity: tool.schema
       .enum(["low", "moderate", "high", "critical"])
       .optional()
@@ -129,9 +126,7 @@ interface AuditResults {
   recommendations?: string[]
 }
 
-async function scanForSecrets(
-  cwd: string
-): Promise<Array<{ file: string; issue: string; line?: number }>> {
+async function scanForSecrets(cwd: string): Promise<Array<{ file: string; issue: string; line?: number }>> {
   const findings: Array<{ file: string; issue: string; line?: number }> = []
 
   // Patterns to DETECT potential secrets (security scanning)
@@ -145,14 +140,7 @@ async function scanForSecrets(
     { pattern: /aws[_-]?secret[_-]?access[_-]?key/gi, name: "AWS Secret" },
   ]
 
-  const ignorePatterns = [
-    "node_modules",
-    ".git",
-    "dist",
-    "build",
-    ".env.example",
-    ".env.template",
-  ]
+  const ignorePatterns = ["node_modules", ".git", "dist", "build", ".env.example", ".env.template"]
 
   const srcDir = path.join(cwd, "src")
   if (fs.existsSync(srcDir)) {
@@ -175,7 +163,7 @@ async function scanDirectory(
   dir: string,
   patterns: Array<{ pattern: RegExp; name: string }>,
   ignorePatterns: string[],
-  findings: Array<{ file: string; issue: string; line?: number }>
+  findings: Array<{ file: string; issue: string; line?: number }>,
 ): Promise<void> {
   if (!fs.existsSync(dir)) return
 
@@ -197,7 +185,7 @@ async function scanDirectory(
 async function scanFile(
   filePath: string,
   patterns: Array<{ pattern: RegExp; name: string }>,
-  findings: Array<{ file: string; issue: string; line?: number }>
+  findings: Array<{ file: string; issue: string; line?: number }>,
 ): Promise<void> {
   try {
     const content = fs.readFileSync(filePath, "utf-8")
@@ -222,9 +210,7 @@ async function scanFile(
   }
 }
 
-async function scanCodeSecurity(
-  cwd: string
-): Promise<Array<{ file: string; issue: string; line?: number }>> {
+async function scanCodeSecurity(cwd: string): Promise<Array<{ file: string; issue: string; line?: number }>> {
   const findings: Array<{ file: string; issue: string; line?: number }> = []
 
   // Patterns to DETECT security anti-patterns (this tool scans for issues)
@@ -250,17 +236,13 @@ function generateRecommendations(results: AuditResults): string[] {
 
   for (const check of results.checks) {
     if (check.status === "failed" && check.name === "Secret Detection") {
-      recommendations.push(
-        "CRITICAL: Remove hardcoded secrets and use environment variables instead"
-      )
+      recommendations.push("CRITICAL: Remove hardcoded secrets and use environment variables instead")
       recommendations.push("Add a .env file (gitignored) for local development")
       recommendations.push("Use a secrets manager for production deployments")
     }
 
     if (check.status === "warning" && check.name === "Code Security") {
-      recommendations.push(
-        "Review flagged code patterns for potential security vulnerabilities"
-      )
+      recommendations.push("Review flagged code patterns for potential security vulnerabilities")
       recommendations.push("Consider using DOMPurify for HTML sanitization")
       recommendations.push("Use parameterized queries for database operations")
     }

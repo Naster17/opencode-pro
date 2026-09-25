@@ -74,30 +74,35 @@ First extract structured Blender state, then use viewport screenshots or renders
 ## Blender Motion Inspection
 
 ### Scene Inventory
+
 - Character candidates:
 - Armatures:
 - Helper/proxy objects:
 - Cameras/lights:
 
 ### Orientation
+
 - World up:
 - Character forward:
 - Root heading:
 - Mirrored/backwards risk:
 
 ### Baseline Integrity
+
 - Clean mesh bounds:
 - Animated mesh bounds:
 - Materials/skin preserved:
 - Suspicious non-character meshes:
 
 ### Frame Findings
-| Frame | Finding | Evidence |
-| --- | --- | --- |
-| 1 | Clean baseline pose | hips/spine/feet aligned |
-| 96 | Foot penetrates floor | left_foot min_z = -0.04 |
+
+| Frame | Finding               | Evidence                |
+| ----- | --------------------- | ----------------------- |
+| 1     | Clean baseline pose   | hips/spine/feet aligned |
+| 96    | Foot penetrates floor | left_foot min_z = -0.04 |
 
 ### Verdict
+
 - Pass/fail:
 - Required fix:
 - Render readiness:
@@ -110,6 +115,7 @@ First extract structured Blender state, then use viewport screenshots or renders
 Scenario: a retargeted character appears to skate during a walk cycle, but the front camera angle makes the foot contact hard to judge.
 
 Apply the workflow:
+
 - Inventory the scene: character mesh `HeroBody`, armature `HeroRig`, ground plane `Floor`, no hidden proxy meshes.
 - Identify the skeleton: semantic feet are `foot.L` and `foot.R`; hips are `pelvis`; root bone is `root`.
 - Sample animation frames: inspect frames 1, 18, 24, 30, 42, and 48 around planted-foot moments.
@@ -117,11 +123,11 @@ Apply the workflow:
 
 Extracted facts:
 
-| Frame | Fact | Evidence |
-| --- | --- | --- |
-| 18 | Left foot is planted | `foot.L min_z = 0.004`, toe and heel both near floor |
-| 24 | Left foot slides while planted | `foot.L x = 0.21 -> 0.28` over six frames |
-| 30 | Pelvis keeps moving forward | `pelvis y = 1.14 -> 1.31` |
+| Frame | Fact                           | Evidence                                             |
+| ----- | ------------------------------ | ---------------------------------------------------- |
+| 18    | Left foot is planted           | `foot.L min_z = 0.004`, toe and heel both near floor |
+| 24    | Left foot slides while planted | `foot.L x = 0.21 -> 0.28` over six frames            |
+| 30    | Pelvis keeps moving forward    | `pelvis y = 1.14 -> 1.31`                            |
 
 Verdict: fail for render readiness. The motion needs foot-lock cleanup or retargeting constraint review; the body mesh does not need proportion changes.
 
@@ -130,17 +136,18 @@ Verdict: fail for render readiness. The motion needs foot-lock cleanup or retarg
 Scenario: a character looks correct in a still frame, but the animation moves opposite the expected travel direction.
 
 Apply the workflow:
+
 - Determine forward, up, and side axes: compare head, chest, feet, and root motion.
 - Sample animation frames: inspect frame 1 and the midpoint of the travel path.
 - Report facts before opinions: include the root heading and model-facing direction separately.
 
 Extracted facts:
 
-| Frame | Fact | Evidence |
-| --- | --- | --- |
-| 1 | Character face points toward world `-Y` | head/chest vector from `neck` to `head` resolves to `-Y` |
-| 72 | Root motion travels toward world `+Y` | `root y = 0.0 -> 2.8` |
-| 72 | Feet remain visually forward-facing opposite travel | toe bones point `-Y` while displacement is `+Y` |
+| Frame | Fact                                                | Evidence                                                 |
+| ----- | --------------------------------------------------- | -------------------------------------------------------- |
+| 1     | Character face points toward world `-Y`             | head/chest vector from `neck` to `head` resolves to `-Y` |
+| 72    | Root motion travels toward world `+Y`               | `root y = 0.0 -> 2.8`                                    |
+| 72    | Feet remain visually forward-facing opposite travel | toe bones point `-Y` while displacement is `+Y`          |
 
 Verdict: likely backwards import or retargeting forward-axis mismatch. Fix the import/retarget axis mapping before editing animation curves.
 

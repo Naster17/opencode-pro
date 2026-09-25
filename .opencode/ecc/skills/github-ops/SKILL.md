@@ -155,6 +155,7 @@ gh pr list --label "dependencies" --json number,title
 ## Quality Gate
 
 Before completing any GitHub operations task:
+
 - all issues triaged have appropriate labels
 - no PRs older than 7 days without a review or comment
 - CI failures have been investigated (not just re-run)

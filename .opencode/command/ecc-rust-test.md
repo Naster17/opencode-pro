@@ -20,6 +20,7 @@ Apply test-driven development with Rust idioms:
 ## TDD Cycle for Rust
 
 ### Step 1: Define Interface
+
 ```rust
 pub struct Input {
     // fields
@@ -31,6 +32,7 @@ pub fn process(input: &Input) -> Result<Output, Error> {
 ```
 
 ### Step 2: Write Tests
+
 ```rust
 #[cfg(test)]
 mod tests {
@@ -53,11 +55,13 @@ mod tests {
 ```
 
 ### Step 3: Run Tests (RED)
+
 ```bash
 cargo test
 ```
 
 ### Step 4: Implement (GREEN)
+
 ```rust
 pub fn process(input: &Input) -> Result<Output, Error> {
     // Minimal implementation that handles both paths
@@ -67,6 +71,7 @@ pub fn process(input: &Input) -> Result<Output, Error> {
 ```
 
 ### Step 5: Check Coverage
+
 ```bash
 cargo llvm-cov
 cargo llvm-cov --fail-under-lines 80

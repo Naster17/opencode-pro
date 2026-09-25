@@ -705,11 +705,11 @@ kover {
 
 #### Coverage Targets
 
-| Code Type | Target |
-|-----------|--------|
-| Critical business logic | 100% |
-| Public APIs | 90%+ |
-| General code | 80%+ |
+| Code Type               | Target  |
+| ----------------------- | ------- |
+| Critical business logic | 100%    |
+| Public APIs             | 90%+    |
+| General code            | 80%+    |
 | Generated / config code | Exclude |
 
 ### Ktor testApplication Testing
@@ -780,6 +780,7 @@ class ApiRoutesTest : FunSpec({
 ### Best Practices
 
 **DO:**
+
 - Write tests FIRST (TDD)
 - Use Kotest's spec styles consistently across the project
 - Use MockK's `coEvery`/`coVerify` for suspend functions
@@ -789,6 +790,7 @@ class ApiRoutesTest : FunSpec({
 - Use `data class` test fixtures for clarity
 
 **DON'T:**
+
 - Mix testing frameworks (pick Kotest and stick with it)
 - Mock data classes (use real instances)
 - Use `Thread.sleep()` in coroutine tests (use `advanceTimeBy`)
@@ -806,8 +808,8 @@ test:
     - uses: actions/checkout@v4
     - uses: actions/setup-java@v4
       with:
-        distribution: 'temurin'
-        java-version: '21'
+        distribution: "temurin"
+        java-version: "21"
 
     - name: Run tests with coverage
       run: ./gradlew test koverXmlReport

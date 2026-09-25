@@ -6,7 +6,7 @@ origin: ECC
 
 # Taste
 
-Most AI video advice stops at *how to render frames*. This skill is the layer above
+Most AI video advice stops at _how to render frames_. This skill is the layer above
 that: **what the frames should look like, in what order, cut to what rhythm, so the
 result reads as one intentional thing instead of a pile of generations.**
 
@@ -21,7 +21,7 @@ is opinionated on purpose. Taste is a point of view, not a menu.
 ## When to Activate
 
 - Building a **music video**, lyric video, fancam, or visualizer.
-- Making a short-form **edit / reel** where the *feel* matters more than the information.
+- Making a short-form **edit / reel** where the _feel_ matters more than the information.
 - Driving **AI b-roll generation** (fal.ai, Veo, Kling, etc.) and the prompts need a
   coherent direction instead of one-off vibes.
 - Assembling a **moodboard** or choosing a visual genre before any rendering.
@@ -30,13 +30,13 @@ is opinionated on purpose. Taste is a point of view, not a menu.
 - The current edit works but reads as flat, generic, AI-slop, or stylistically incoherent.
 
 This skill sits **on top of** `video-editing` (the mechanics) and `remotion-video-creation`
-(the renderer). Use those for *how*. Use this for *what and why*.
+(the renderer). Use those for _how_. Use this for _what and why_.
 
 ## Core Thesis
 
 1. **Taste is the last layer, and it must be decided first.** `video-editing` correctly
    says taste is the final human pass. The trap: if you only decide taste at the end, every
-   generation and cut upstream was a guess. Pick the direction *before* the first prompt,
+   generation and cut upstream was a guess. Pick the direction _before_ the first prompt,
    then let it constrain everything.
 2. **Coherence beats novelty.** One look executed across 30 shots beats 30 looks. A named
    genre (below) is a constraint that buys coherence for free.
@@ -47,33 +47,34 @@ This skill sits **on top of** `video-editing` (the mechanics) and `remotion-vide
 
 ## The Aesthetic Vocabulary (distilled)
 
-The reference corpus tours a large library of *named* visual genres. The full list lives in
+The reference corpus tours a large library of _named_ visual genres. The full list lives in
 `references/genre-taxonomy.md`. The useful move is not memorizing 70 names — it is seeing
 that **a genre name is a complete prompt-and-grade preset.** When you pick one, you inherit
 its palette, texture, lighting, and subject matter as a unit.
 
 The genres cluster into families. Pick a **primary** family and at most **one accent**:
 
-| Family | Genres in it | Reads as |
-|--------|-------------|----------|
-| **Ethereal / divine** | spiritualism, glacial folk, beacons, zen core, fairy tale | weightless, holy, glowing, soft |
-| **Hyperpop / Y2K-cyber** | cyberdelia, acid house, acid nora, neo aggressano, new liquid | glossy, chrome, neon, kawaii-cyber |
-| **Dark / occult** | dark academia, smoke nostalgia, communist core, abstract tech | high-contrast, ominous, grain |
-| **Retro / print** | retro surfers, art deco, adventure pulp, classic advertising, magazine collage, bumper stickers | flat, graphic, halftone, nostalgic |
-| **Organic / textural** | microbiology core, weaving patterns, fruitage retro, cozy blanket, pacific punk wave | tactile, macro, woven, wet |
-| **Systemic / data** | numbers, mazes, code web, heatmap, pixel, 8-bit | gridded, generative, schematic |
+| Family                   | Genres in it                                                                                    | Reads as                           |
+| ------------------------ | ----------------------------------------------------------------------------------------------- | ---------------------------------- |
+| **Ethereal / divine**    | spiritualism, glacial folk, beacons, zen core, fairy tale                                       | weightless, holy, glowing, soft    |
+| **Hyperpop / Y2K-cyber** | cyberdelia, acid house, acid nora, neo aggressano, new liquid                                   | glossy, chrome, neon, kawaii-cyber |
+| **Dark / occult**        | dark academia, smoke nostalgia, communist core, abstract tech                                   | high-contrast, ominous, grain      |
+| **Retro / print**        | retro surfers, art deco, adventure pulp, classic advertising, magazine collage, bumper stickers | flat, graphic, halftone, nostalgic |
+| **Organic / textural**   | microbiology core, weaving patterns, fruitage retro, cozy blanket, pacific punk wave            | tactile, macro, woven, wet         |
+| **Systemic / data**      | numbers, mazes, code web, heatmap, pixel, 8-bit                                                 | gridded, generative, schematic     |
 
 **For the current project**, the primary is **Ethereal / divine** with a **Hyperpop / Y2K-cyber**
 accent — i.e. holy light and crystalline bloom, punctuated by chrome and neon. That pairing
-*is* the angelcore × cloud-trance brief.
+_is_ the angelcore × cloud-trance brief.
 
 ## The Mood System — angelcore × cloud-trance
 
 Distilled directly from the strongest reference reels. This is the concrete grade.
 
 ### Palette
+
 - **Base:** near-black void (#05060a) and bone white (#f4f1ea). Most frames are one or the other.
-- **Divine accent:** molten gold / ember orange (#ffb24d → #ff7a18) — the *one warm light* in the dark.
+- **Divine accent:** molten gold / ember orange (#ffb24d → #ff7a18) — the _one warm light_ in the dark.
 - **Crystalline accent:** iridescent violet→cyan→magenta bokeh (#8a6bff, #4fc3ff, #ff6ad5) — the
   hyperpop bloom, used in bright frames.
 - **Danger accent (sparingly):** a single glowing red (#ff2a2a) on monochrome — for one or two
@@ -84,14 +85,16 @@ Rule: **one accent per shot.** Gold lives in dark frames; iridescence lives in l
 never both in one shot.
 
 ### Light & texture
+
 - Darkness pierced by a single warm source (ember bloom, divine shaft). High contrast, deep blacks.
-- Crystalline / glitter bokeh, lens flares, bloom, light leaks — *heavenly*, not dirty.
+- Crystalline / glitter bokeh, lens flares, bloom, light leaks — _heavenly_, not dirty.
 - Film grain + subtle chromatic aberration on the dark frames; clean gloss on the bright frames.
 - Macro detail on negative space: a hero object centered on black (key, eye, gear, petal, water).
 - Subjects: winged figures, clouds, halos, angels, crystalline structures, candy-cyber portraits.
 
 ### Motion
-- Slow, floating, weightless camera (drift, slow push, slow orbit) — *cloud* trance.
+
+- Slow, floating, weightless camera (drift, slow push, slow orbit) — _cloud_ trance.
 - Bursts of speed only at the drop. Otherwise everything breathes.
 - Particles rising (embers, dust, glitter) — upward motion = ascension.
 
@@ -135,30 +138,31 @@ This skill is the conductor. Each ECC skill is an instrument. Do not skip layers
 8. DISTRIBUTE (content-engine) platform-native versions + caption/cover
 ```
 
-| Step | ECC skill to load | What it does here |
-|------|-------------------|-------------------|
-| Structure & cut | `video-editing` | FFmpeg cut/concat/reframe, EDL, scene/silence detection |
-| Generate b-roll | `fal-ai-media` | image/video models per genre preset |
-| Compose & overlay | `remotion-video-creation` | beat-synced `<Sequence>`s, text, blooms, masks |
-| Motion timing | `motion-foundations`, `motion-patterns`, `motion-advanced` | easing, springs, light/particle motion |
-| Server-side video | `videodb` | smart reframe, indexing if footage is large |
-| Distribution | `content-engine` | per-platform cuts, covers, captions |
-| Voice/lyric VO | `video-editing` (ElevenLabs section) | only if a spoken layer is needed |
+| Step              | ECC skill to load                                          | What it does here                                       |
+| ----------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
+| Structure & cut   | `video-editing`                                            | FFmpeg cut/concat/reframe, EDL, scene/silence detection |
+| Generate b-roll   | `fal-ai-media`                                             | image/video models per genre preset                     |
+| Compose & overlay | `remotion-video-creation`                                  | beat-synced `<Sequence>`s, text, blooms, masks          |
+| Motion timing     | `motion-foundations`, `motion-patterns`, `motion-advanced` | easing, springs, light/particle motion                  |
+| Server-side video | `videodb`                                                  | smart reframe, indexing if footage is large             |
+| Distribution      | `content-engine`                                           | per-platform cuts, covers, captions                     |
+| Voice/lyric VO    | `video-editing` (ElevenLabs section)                       | only if a spoken layer is needed                        |
 
 ## Beat Math (lock cuts to the song)
 
 The current track is **138 BPM, B minor**. Constants:
 
 - `seconds_per_beat = 60 / 138 = 0.43478s`
-- `frames_per_beat   = fps × 0.43478`  →  **24fps: 10.43**, **30fps: 13.04**, **60fps: 26.09**
-- `1 bar (4 beats)   = 1.7391s`  →  30fps: **52.17 frames**
-- `8-bar phrase      = 13.913s`  →  the loop length from the track
+- `frames_per_beat   = fps × 0.43478` → **24fps: 10.43**, **30fps: 13.04**, **60fps: 26.09**
+- `1 bar (4 beats)   = 1.7391s` → 30fps: **52.17 frames**
+- `8-bar phrase      = 13.913s` → the loop length from the track
 
 In Remotion, snap every `from={}` to a beat:
+
 ```ts
-const FPS = 30;
-const BPM = 138;
-const beat = (n: number) => Math.round(n * (60 / BPM) * FPS); // beat(n) → frame
+const FPS = 30
+const BPM = 138
+const beat = (n: number) => Math.round(n * (60 / BPM) * FPS) // beat(n) → frame
 // cut on beats 0,4,8,... :  <Sequence from={beat(0)} durationInFrames={beat(4)}> ...
 ```
 
@@ -167,14 +171,14 @@ const beat = (n: number) => Math.round(n * (60 / BPM) * FPS); // beat(n) → fra
 The song arrangement (from the project's own notes) is
 **Intro → Verse → Drop → Bridge → Drop → Outro (~2:05)**. Map taste to each section:
 
-| Section | Genre/mood lean | Grammar | Shot ideas |
-|---------|-----------------|---------|------------|
-| **Intro** | Ethereal/divine, near-black | slow push, no cuts | ember bloom in the void; a single shaft of gold; dust rising |
-| **Verse** | Dark + macro hero-on-black | hard cuts every 2 beats | key, eye, gear, water drop, petal — rhythmic macro montage |
-| **Drop** | Hyperpop bloom + crystalline | speed-ramp in, cut on the one, fast | candy-pink figure, chrome, iridescent bokeh, winged ascension |
-| **Bridge** | Spiritualism, weightless | one long held shot, color-pop | clouds + halo; single red accent punches once |
-| **Drop 2** | as Drop, intensify | add divine-flash blooms on transients | wings open, glitter burst, light leaks maxed |
-| **Outro** | Glacial folk, cold calm | slow fade to black | crystalline structure dissolving; ember dies out |
+| Section    | Genre/mood lean              | Grammar                               | Shot ideas                                                    |
+| ---------- | ---------------------------- | ------------------------------------- | ------------------------------------------------------------- |
+| **Intro**  | Ethereal/divine, near-black  | slow push, no cuts                    | ember bloom in the void; a single shaft of gold; dust rising  |
+| **Verse**  | Dark + macro hero-on-black   | hard cuts every 2 beats               | key, eye, gear, water drop, petal — rhythmic macro montage    |
+| **Drop**   | Hyperpop bloom + crystalline | speed-ramp in, cut on the one, fast   | candy-pink figure, chrome, iridescent bokeh, winged ascension |
+| **Bridge** | Spiritualism, weightless     | one long held shot, color-pop         | clouds + halo; single red accent punches once                 |
+| **Drop 2** | as Drop, intensify           | add divine-flash blooms on transients | wings open, glitter burst, light leaks maxed                  |
+| **Outro**  | Glacial folk, cold calm      | slow fade to black                    | crystalline structure dissolving; ember dies out              |
 
 ## fal.ai Prompt Presets (per mood)
 
@@ -217,29 +221,41 @@ ffmpeg -i reel.mp4 -vf "crop=iw:ih-300:0:150" clean.mp4
 ## Remotion Composition Skeleton (beat-synced)
 
 ```tsx
-import { AbsoluteFill, Sequence, Video, Img, useCurrentFrame, interpolate } from "remotion";
+import { AbsoluteFill, Sequence, Video, Img, useCurrentFrame, interpolate } from "remotion"
 
-const FPS = 30, BPM = 138;
-const beat = (n: number) => Math.round(n * (60 / BPM) * FPS);
+const FPS = 30,
+  BPM = 138
+const beat = (n: number) => Math.round(n * (60 / BPM) * FPS)
 
 const Bloom: React.FC = () => {
-  const f = useCurrentFrame();
-  const o = interpolate(f, [0, 3, 12], [0, 1, 0], { extrapolateRight: "clamp" }); // divine flash on a transient
-  return <AbsoluteFill style={{ background: "radial-gradient(#fff,#ffb24d)", opacity: o, mixBlendMode: "screen" }} />;
-};
+  const f = useCurrentFrame()
+  const o = interpolate(f, [0, 3, 12], [0, 1, 0], { extrapolateRight: "clamp" }) // divine flash on a transient
+  return <AbsoluteFill style={{ background: "radial-gradient(#fff,#ffb24d)", opacity: o, mixBlendMode: "screen" }} />
+}
 
 export const AngelcoreMV: React.FC = () => (
   <AbsoluteFill style={{ background: "#05060a" }}>
     {/* Verse: macro hero-on-black, hard cut every 2 beats */}
-    <Sequence from={beat(0)} durationInFrames={beat(2)}><Video src="/selects/key.mp4" /></Sequence>
-    <Sequence from={beat(2)} durationInFrames={beat(2)}><Video src="/selects/eye.mp4" /></Sequence>
-    <Sequence from={beat(4)} durationInFrames={beat(2)}><Video src="/selects/gear.mp4" /></Sequence>
+    <Sequence from={beat(0)} durationInFrames={beat(2)}>
+      <Video src="/selects/key.mp4" />
+    </Sequence>
+    <Sequence from={beat(2)} durationInFrames={beat(2)}>
+      <Video src="/selects/eye.mp4" />
+    </Sequence>
+    <Sequence from={beat(4)} durationInFrames={beat(2)}>
+      <Video src="/selects/gear.mp4" />
+    </Sequence>
     {/* Drop: crystalline bloom + flash on the one */}
-    <Sequence from={beat(8)} durationInFrames={beat(16)}><Video src="/selects/crystalline.mp4" /></Sequence>
-    <Sequence from={beat(8)} durationInFrames={beat(1)}><Bloom /></Sequence>
+    <Sequence from={beat(8)} durationInFrames={beat(16)}>
+      <Video src="/selects/crystalline.mp4" />
+    </Sequence>
+    <Sequence from={beat(8)} durationInFrames={beat(1)}>
+      <Bloom />
+    </Sequence>
   </AbsoluteFill>
-);
+)
 ```
+
 Render: `npx remotion render src/index.ts AngelcoreMV out.mp4`. See `remotion-video-creation`
 for project setup, audio track binding, and render flags.
 

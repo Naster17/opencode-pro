@@ -21,4 +21,3 @@ If `CLAUDE_PLUGIN_ROOT` is unavailable, use:
 ```bash
 python3 ~/.claude/skills/continuous-learning-v2/scripts/instinct-cli.py promote $ARGUMENTS
 ```
-

@@ -45,12 +45,14 @@ go list -m all
 **Error:** `undefined: SomeFunc`
 
 **Causes:**
+
 - Missing import
 - Typo in function/variable name
 - Unexported identifier (lowercase first letter)
 - Function defined in different file with build constraints
 
 **Fix:**
+
 ```go
 // Add missing import
 import "package/that/defines/SomeFunc"
@@ -67,11 +69,13 @@ import "package/that/defines/SomeFunc"
 **Error:** `cannot use x (type A) as type B`
 
 **Causes:**
+
 - Wrong type conversion
 - Interface not satisfied
 - Pointer vs value mismatch
 
 **Fix:**
+
 ```go
 // Type conversion
 var x int = 42
@@ -91,12 +95,14 @@ var ptr *int = &val
 **Error:** `X does not implement Y (missing method Z)`
 
 **Diagnosis:**
+
 ```bash
 # Find what methods are missing
 go doc package.Interface
 ```
 
 **Fix:**
+
 ```go
 // Implement missing method with correct signature
 func (x *X) Z() error {
@@ -114,11 +120,13 @@ func (x *X) Z() error {
 **Error:** `import cycle not allowed`
 
 **Diagnosis:**
+
 ```bash
 go list -f '{{.ImportPath}} -> {{.Imports}}' ./...
 ```
 
 **Fix:**
+
 - Move shared types to a separate package
 - Use interfaces to break the cycle
 - Restructure package dependencies
@@ -138,6 +146,7 @@ package/b -> package/types
 **Error:** `cannot find package "x"`
 
 **Fix:**
+
 ```bash
 # Add dependency
 go get package/path@version
@@ -155,6 +164,7 @@ go mod tidy
 **Error:** `missing return at end of function`
 
 **Fix:**
+
 ```go
 func Process() (int, error) {
     if condition {
@@ -169,6 +179,7 @@ func Process() (int, error) {
 **Error:** `x declared but not used` or `imported and not used`
 
 **Fix:**
+
 ```go
 // Remove unused variable
 x := getValue()  // Remove if x not used
@@ -185,6 +196,7 @@ import _ "package/for/init/only"
 **Error:** `multiple-value X() in single-value context`
 
 **Fix:**
+
 ```go
 // Wrong
 result := funcReturningTwo()
@@ -292,6 +304,7 @@ x = x  // Remove pointless assignment
 ## Stop Conditions
 
 Stop and report if:
+
 - Same error persists after 3 fix attempts
 - Fix introduces more errors than it resolves
 - Error requires architectural changes beyond scope
@@ -311,6 +324,7 @@ Remaining errors: 3
 ```
 
 Final summary:
+
 ```text
 Build Status: SUCCESS/FAILED
 Errors Fixed: N

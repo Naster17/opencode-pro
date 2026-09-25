@@ -24,17 +24,20 @@ Set up package manager preference for the project or globally.
 ## Configuration Options
 
 ### Option 1: Environment Variable
+
 ```bash
 export CLAUDE_PACKAGE_MANAGER=pnpm
 ```
 
 ### Option 2: Project Config
+
 ```bash
 # Create .claude/package-manager.json
 echo '{"packageManager": "pnpm"}' > .claude/package-manager.json
 ```
 
 ### Option 3: package.json
+
 ```json
 {
   "packageManager": "pnpm@8.0.0"
@@ -42,6 +45,7 @@ echo '{"packageManager": "pnpm"}' > .claude/package-manager.json
 ```
 
 ### Option 4: Global Config
+
 ```bash
 # Create ~/.claude/package-manager.json
 echo '{"packageManager": "yarn"}' > ~/.claude/package-manager.json
@@ -49,16 +53,17 @@ echo '{"packageManager": "yarn"}' > ~/.claude/package-manager.json
 
 ## Supported Package Managers
 
-| Manager | Lock File | Commands |
-|---------|-----------|----------|
-| npm | package-lock.json | `npm install`, `npm run` |
-| pnpm | pnpm-lock.yaml | `pnpm install`, `pnpm run` |
-| yarn | yarn.lock | `yarn install`, `yarn run` |
-| bun | bun.lockb | `bun install`, `bun run` |
+| Manager | Lock File         | Commands                   |
+| ------- | ----------------- | -------------------------- |
+| npm     | package-lock.json | `npm install`, `npm run`   |
+| pnpm    | pnpm-lock.yaml    | `pnpm install`, `pnpm run` |
+| yarn    | yarn.lock         | `yarn install`, `yarn run` |
+| bun     | bun.lockb         | `bun install`, `bun run`   |
 
 ## Verification
 
 Check current setting:
+
 ```bash
 node scripts/setup-package-manager.js --detect
 ```

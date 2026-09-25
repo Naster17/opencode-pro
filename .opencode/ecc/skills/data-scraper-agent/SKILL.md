@@ -37,14 +37,14 @@ schedule   summarises Sheets /
 
 ### Free Stack
 
-| Layer | Tool | Why |
-|---|---|---|
-| **Scraping** | `requests` + `BeautifulSoup` | No cost, covers 80% of public sites |
-| **JS-rendered sites** | `playwright` (free) | When HTML fetching fails |
-| **AI enrichment** | Gemini Flash via REST API | 500 req/day, 1M tokens/day — free |
-| **Storage** | Notion API | Free tier, great UI for review |
-| **Schedule** | GitHub Actions cron | Free for public repos |
-| **Learning** | JSON feedback file in repo | Zero infra, persists in git |
+| Layer                 | Tool                         | Why                                 |
+| --------------------- | ---------------------------- | ----------------------------------- |
+| **Scraping**          | `requests` + `BeautifulSoup` | No cost, covers 80% of public sites |
+| **JS-rendered sites** | `playwright` (free)          | When HTML fetching fails            |
+| **AI enrichment**     | Gemini Flash via REST API    | 500 req/day, 1M tokens/day — free   |
+| **Storage**           | Notion API                   | Free tier, great UI for review      |
+| **Schedule**          | GitHub Actions cron          | Free for public repos               |
+| **Learning**          | JSON feedback file in repo   | Zero infra, persists in git         |
 
 ### AI Model Fallback Chain
 
@@ -97,6 +97,7 @@ Ask the user:
 5. **Frequency:** "How often should it run? Every hour, daily, weekly?"
 
 Common examples to prompt:
+
 - Job boards → score relevance to resume
 - Product prices → alert on drops
 - GitHub repos → summarise new releases
@@ -194,6 +195,7 @@ def _normalise(raw: dict) -> dict:
 ```
 
 **HTML fetch pattern:**
+
 ```python
 soup = BeautifulSoup(resp.text, "lxml")
 for card in soup.select("[class*='listing']"):
@@ -204,6 +206,7 @@ for card in soup.select("[class*='listing']"):
 ```
 
 **RSS feed pattern:**
+
 ```python
 import xml.etree.ElementTree as ET
 root = ET.fromstring(resp.text)
@@ -216,7 +219,7 @@ for item in root.findall(".//item"):
 
 ### Step 4: Build the Gemini AI Client
 
-```python
+````python
 # ai/client.py
 import os, json, time, requests
 
@@ -284,7 +287,7 @@ def _parse(resp) -> dict:
         return json.loads(text)
     except (json.JSONDecodeError, KeyError):
         return {}
-```
+````
 
 ---
 
@@ -555,11 +558,11 @@ name: Data Scraper Agent
 
 on:
   schedule:
-    - cron: "0 */3 * * *"  # every 3 hours — adjust to your needs
-  workflow_dispatch:        # allow manual trigger
+    - cron: "0 */3 * * *" # every 3 hours — adjust to your needs
+  workflow_dispatch: # allow manual trigger
 
 permissions:
-  contents: write   # required for the feedback-history commit step
+  contents: write # required for the feedback-history commit step
 
 jobs:
   scrape:
@@ -605,8 +608,8 @@ jobs:
 
 # What to collect (pre-filter before AI)
 filters:
-  required_keywords: []      # item must contain at least one
-  blocked_keywords: []       # item must not contain any
+  required_keywords: [] # item must contain at least one
+  blocked_keywords: [] # item must not contain any
 
 # Your priorities — AI uses these for scoring
 priorities:
@@ -615,7 +618,7 @@ priorities:
 
 # Storage
 storage:
-  provider: "notion"         # notion | sheets | supabase | sqlite
+  provider: "notion" # notion | sheets | supabase | sqlite
 
 # Feedback learning
 feedback:
@@ -626,9 +629,9 @@ feedback:
 ai:
   enabled: true
   model: "gemini-2.5-flash"
-  min_score: 0               # filter out items below this score
-  rate_limit_seconds: 7      # seconds between API calls
-  batch_size: 5              # items per API call
+  min_score: 0 # filter out items below this score
+  rate_limit_seconds: 7 # seconds between API calls
+  batch_size: 5 # items per API call
 ```
 
 ---
@@ -636,12 +639,14 @@ ai:
 ## Common Scraping Patterns
 
 ### Pattern 1: REST API (easiest)
+
 ```python
 resp = requests.get(url, params={"q": query}, headers=HEADERS, timeout=15)
 items = resp.json().get("results", [])
 ```
 
 ### Pattern 2: HTML Scraping
+
 ```python
 soup = BeautifulSoup(resp.text, "lxml")
 for card in soup.select(".listing-card"):
@@ -650,6 +655,7 @@ for card in soup.select(".listing-card"):
 ```
 
 ### Pattern 3: RSS Feed
+
 ```python
 import xml.etree.ElementTree as ET
 root = ET.fromstring(resp.text)
@@ -660,6 +666,7 @@ for item in root.findall(".//item"):
 ```
 
 ### Pattern 4: Paginated API
+
 ```python
 page = 1
 while True:
@@ -676,6 +683,7 @@ while True:
 ```
 
 ### Pattern 5: JS-Rendered Pages (Playwright)
+
 ```python
 from playwright.sync_api import sync_playwright
 
@@ -694,30 +702,30 @@ soup = BeautifulSoup(html, "lxml")
 
 ## Anti-Patterns to Avoid
 
-| Anti-pattern | Problem | Fix |
-|---|---|---|
-| One LLM call per item | Hits rate limits instantly | Batch 5 items per call |
-| Hardcoded keywords in code | Not reusable | Move all config to `config.yaml` |
-| Scraping without rate limit | IP ban | Add `time.sleep(1)` between requests |
-| Storing secrets in code | Security risk | Always use `.env` + GitHub Secrets |
-| No deduplication | Duplicate rows pile up | Always check URL before pushing |
-| Ignoring `robots.txt` | Legal/ethical risk | Respect crawl rules; use public APIs when available |
-| JS-rendered sites with `requests` | Empty response | Use Playwright or look for the underlying API |
-| `maxOutputTokens` too low | Truncated JSON, parse error | Use 2048+ for batch responses |
+| Anti-pattern                      | Problem                     | Fix                                                 |
+| --------------------------------- | --------------------------- | --------------------------------------------------- |
+| One LLM call per item             | Hits rate limits instantly  | Batch 5 items per call                              |
+| Hardcoded keywords in code        | Not reusable                | Move all config to `config.yaml`                    |
+| Scraping without rate limit       | IP ban                      | Add `time.sleep(1)` between requests                |
+| Storing secrets in code           | Security risk               | Always use `.env` + GitHub Secrets                  |
+| No deduplication                  | Duplicate rows pile up      | Always check URL before pushing                     |
+| Ignoring `robots.txt`             | Legal/ethical risk          | Respect crawl rules; use public APIs when available |
+| JS-rendered sites with `requests` | Empty response              | Use Playwright or look for the underlying API       |
+| `maxOutputTokens` too low         | Truncated JSON, parse error | Use 2048+ for batch responses                       |
 
 ---
 
 ## Free Tier Limits Reference
 
-| Service | Free Limit | Typical Usage |
-|---|---|---|
-| Gemini Flash Lite | 30 RPM, 1500 RPD | ~56 req/day at 3-hr intervals |
-| Gemini 2.0 Flash | 15 RPM, 1500 RPD | Good fallback |
-| Gemini 2.5 Flash | 10 RPM, 500 RPD | Use sparingly |
-| GitHub Actions | Unlimited (public repos) | ~20 min/day |
-| Notion API | Unlimited | ~200 writes/day |
-| Supabase | 500MB DB, 2GB transfer | Fine for most agents |
-| Google Sheets API | 300 req/min | Works for small agents |
+| Service           | Free Limit               | Typical Usage                 |
+| ----------------- | ------------------------ | ----------------------------- |
+| Gemini Flash Lite | 30 RPM, 1500 RPD         | ~56 req/day at 3-hr intervals |
+| Gemini 2.0 Flash  | 15 RPM, 1500 RPD         | Good fallback                 |
+| Gemini 2.5 Flash  | 10 RPM, 500 RPD          | Use sparingly                 |
+| GitHub Actions    | Unlimited (public repos) | ~20 min/day                   |
+| Notion API        | Unlimited                | ~200 writes/day               |
+| Supabase          | 500MB DB, 2GB transfer   | Fine for most agents          |
+| Google Sheets API | 300 req/min              | Works for small agents        |
 
 ---
 

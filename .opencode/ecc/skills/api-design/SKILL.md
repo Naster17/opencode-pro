@@ -60,15 +60,15 @@ POST   /api/v1/auth/refresh
 
 ### Method Semantics
 
-| Method | Idempotent | Safe | Use For |
-|--------|-----------|------|---------|
-| GET | Yes | Yes | Retrieve resources |
-| POST | No | No | Create resources, trigger actions |
-| PUT | Yes | No | Full replacement of a resource |
-| PATCH | No* | No | Partial update of a resource |
-| DELETE | Yes | No | Remove a resource |
+| Method | Idempotent | Safe | Use For                           |
+| ------ | ---------- | ---- | --------------------------------- |
+| GET    | Yes        | Yes  | Retrieve resources                |
+| POST   | No         | No   | Create resources, trigger actions |
+| PUT    | Yes        | No   | Full replacement of a resource    |
+| PATCH  | No\*       | No   | Partial update of a resource      |
+| DELETE | Yes        | No   | Remove a resource                 |
 
-*PATCH can be made idempotent with proper implementation
+\*PATCH can be made idempotent with proper implementation
 
 ### Status Code Reference
 
@@ -177,17 +177,17 @@ Location: /api/v1/users/abc-123
 ```typescript
 // Option A: Envelope with data wrapper (recommended for public APIs)
 interface ApiResponse<T> {
-  data: T;
-  meta?: PaginationMeta;
-  links?: PaginationLinks;
+  data: T
+  meta?: PaginationMeta
+  links?: PaginationLinks
 }
 
 interface ApiError {
   error: {
-    code: string;
-    message: string;
-    details?: FieldError[];
-  };
+    code: string
+    message: string
+    details?: FieldError[]
+  }
 }
 
 // Option B: Flat response (simpler, common for internal APIs)
@@ -239,12 +239,12 @@ LIMIT 21;  -- fetch one extra to determine has_next
 
 ### When to Use Which
 
-| Use Case | Pagination Type |
-|----------|----------------|
-| Admin dashboards, small datasets (<10K) | Offset |
-| Infinite scroll, feeds, large datasets | Cursor |
-| Public APIs | Cursor (default) with offset (optional) |
-| Search results | Offset (users expect page numbers) |
+| Use Case                                | Pagination Type                         |
+| --------------------------------------- | --------------------------------------- |
+| Admin dashboards, small datasets (<10K) | Offset                                  |
+| Infinite scroll, feeds, large datasets  | Cursor                                  |
+| Public APIs                             | Cursor (default) with offset (optional) |
+| Search results                          | Offset (users expect page numbers)      |
 
 ## Filtering, Sorting, and Search
 
@@ -312,17 +312,17 @@ X-API-Key: sk_live_abc123
 ```typescript
 // Resource-level: check ownership
 app.get("/api/v1/orders/:id", async (req, res) => {
-  const order = await Order.findById(req.params.id);
-  if (!order) return res.status(404).json({ error: { code: "not_found" } });
-  if (order.userId !== req.user.id) return res.status(403).json({ error: { code: "forbidden" } });
-  return res.json({ data: order });
-});
+  const order = await Order.findById(req.params.id)
+  if (!order) return res.status(404).json({ error: { code: "not_found" } })
+  if (order.userId !== req.user.id) return res.status(403).json({ error: { code: "forbidden" } })
+  return res.json({ data: order })
+})
 
 // Role-based: check permissions
 app.delete("/api/v1/users/:id", requireRole("admin"), async (req, res) => {
-  await User.delete(req.params.id);
-  return res.status(204).send();
-});
+  await User.delete(req.params.id)
+  return res.status(204).send()
+})
 ```
 
 ## Rate Limiting
@@ -348,12 +348,12 @@ Retry-After: 60
 
 ### Rate Limit Tiers
 
-| Tier | Limit | Window | Use Case |
-|------|-------|--------|----------|
-| Anonymous | 30/min | Per IP | Public endpoints |
-| Authenticated | 100/min | Per user | Standard API access |
-| Premium | 1000/min | Per API key | Paid API plans |
-| Internal | 10000/min | Per service | Service-to-service |
+| Tier          | Limit     | Window      | Use Case            |
+| ------------- | --------- | ----------- | ------------------- |
+| Anonymous     | 30/min    | Per IP      | Public endpoints    |
+| Authenticated | 100/min   | Per user    | Standard API access |
+| Premium       | 1000/min  | Per API key | Paid API plans      |
+| Internal      | 10000/min | Per service | Service-to-service  |
 
 ## Versioning
 
@@ -402,33 +402,36 @@ Accept: application/vnd.myapp.v2+json
 ### TypeScript (Next.js API Route)
 
 ```typescript
-import { z } from "zod";
-import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod"
+import { NextRequest, NextResponse } from "next/server"
 
 const createUserSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(100),
-});
+})
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const parsed = createUserSchema.safeParse(body);
+  const body = await req.json()
+  const parsed = createUserSchema.safeParse(body)
 
   if (!parsed.success) {
-    return NextResponse.json({
-      error: {
-        code: "validation_error",
-        message: "Request validation failed",
-        details: parsed.error.issues.map(i => ({
-          field: i.path.join("."),
-          message: i.message,
-          code: i.code,
-        })),
+    return NextResponse.json(
+      {
+        error: {
+          code: "validation_error",
+          message: "Request validation failed",
+          details: parsed.error.issues.map((i) => ({
+            field: i.path.join("."),
+            message: i.message,
+            code: i.code,
+          })),
+        },
       },
-    }, { status: 422 });
+      { status: 422 },
+    )
   }
 
-  const user = await createUser(parsed.data);
+  const user = await createUser(parsed.data)
 
   return NextResponse.json(
     { data: user },
@@ -436,7 +439,7 @@ export async function POST(req: NextRequest) {
       status: 201,
       headers: { Location: `/api/v1/users/${user.id}` },
     },
-  );
+  )
 }
 ```
 

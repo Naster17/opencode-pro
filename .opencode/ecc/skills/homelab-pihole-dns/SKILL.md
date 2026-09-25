@@ -52,10 +52,10 @@ services:
     ports:
       - "53:53/tcp"
       - "53:53/udp"
-      - "80:80/tcp"          # Web admin
+      - "80:80/tcp" # Web admin
     environment:
       TZ: "America/New_York"
-      WEBPASSWORD: "${PIHOLE_WEBPASSWORD}"   # set via .env file or secret
+      WEBPASSWORD: "${PIHOLE_WEBPASSWORD}" # set via .env file or secret
       PIHOLE_DNS_: "1.1.1.1;1.0.0.1"
       DNSMASQ_LISTENING: "all"
     volumes:
@@ -63,7 +63,7 @@ services:
       - "./etc-dnsmasq.d:/etc/dnsmasq.d"
     restart: unless-stopped
     cap_add:
-      - NET_ADMIN              # only needed if Pi-hole will serve DHCP
+      - NET_ADMIN # only needed if Pi-hole will serve DHCP
 ```
 
 Replace `<pinned-release-tag>` with a current Pi-hole release tag before deploying.

@@ -23,29 +23,35 @@ Create a snapshot of current progress including:
 ### Checkpoint: [Timestamp]
 
 **Tests**
+
 - Total: X
 - Passing: Y
 - Failing: Z
 - Coverage: XX%
 
 **Build**
+
 - Status: PASS: Passing / FAIL: Failing
 - Errors: [if any]
 
 **Changes Since Last Checkpoint**
+
 ```
 git diff --stat [last-checkpoint-commit]
 ```
 
 **Completed Tasks**
+
 - [x] Task 1
 - [x] Task 2
 - [ ] Task 3 (in progress)
 
 **Blocking Issues**
+
 - [Issue description]
 
 **Next Steps**
+
 1. Step 1
 2. Step 2
 
@@ -58,6 +64,7 @@ Checkpoints integrate with the verification loop:
 ```
 
 Use checkpoints to:
+
 - Save state before risky changes
 - Track progress through phases
 - Enable rollback if needed

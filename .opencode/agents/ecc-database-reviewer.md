@@ -19,6 +19,7 @@ You are an expert PostgreSQL database specialist focused on query optimization, 
 6. **Monitoring** - Set up query analysis and performance tracking
 
 ## Database Analysis Commands
+
 ```bash
 # Connect to database
 psql $DATABASE_URL
@@ -57,12 +58,12 @@ CREATE INDEX orders_customer_id_idx ON orders (customer_id);
 
 ### 2. Choose the Right Index Type
 
-| Index Type | Use Case | Operators |
-|------------|----------|-----------|
-| **B-tree** (default) | Equality, range | `=`, `<`, `>`, `BETWEEN`, `IN` |
-| **GIN** | Arrays, JSONB, full-text | `@>`, `?`, `?&`, `?\|`, `@@` |
-| **BRIN** | Large time-series tables | Range queries on sorted data |
-| **Hash** | Equality only | `=` (marginally faster than B-tree) |
+| Index Type           | Use Case                 | Operators                           |
+| -------------------- | ------------------------ | ----------------------------------- |
+| **B-tree** (default) | Equality, range          | `=`, `<`, `>`, `BETWEEN`, `IN`      |
+| **GIN**              | Arrays, JSONB, full-text | `@>`, `?`, `?&`, `?\|`, `@@`        |
+| **BRIN**             | Large time-series tables | Range queries on sorted data        |
+| **Hash**             | Equality only            | `=` (marginally faster than B-tree) |
 
 ### 3. Composite Indexes for Multi-Column Queries
 
@@ -240,6 +241,7 @@ SELECT * FROM products WHERE id > 199980 ORDER BY id LIMIT 20;
 ## Review Checklist
 
 ### Before Approving Database Changes:
+
 - [ ] All WHERE/JOIN columns indexed
 - [ ] Composite indexes in correct column order
 - [ ] Proper data types (bigint, text, timestamptz, numeric)

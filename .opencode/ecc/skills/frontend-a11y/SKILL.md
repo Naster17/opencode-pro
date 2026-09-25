@@ -78,25 +78,25 @@ Missing `htmlFor` / `id` pairing and disconnected error messages are the most co
 
 ```tsx
 interface LoginFormProps {
-  onSubmit: (email: string, password: string) => void;
+  onSubmit: (email: string, password: string) => void
 }
 
 export function LoginForm({ onSubmit }: LoginFormProps) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newErrors: typeof errors = {};
-    if (!email) newErrors.email = 'Email is required';
-    if (!password) newErrors.password = 'Password is required';
+    e.preventDefault()
+    const newErrors: typeof errors = {}
+    if (!email) newErrors.email = "Email is required"
+    if (!password) newErrors.password = "Password is required"
     if (Object.keys(newErrors).length) {
-      setErrors(newErrors);
-      return;
+      setErrors(newErrors)
+      return
     }
-    onSubmit(email, password);
-  };
+    onSubmit(email, password)
+  }
 
   return (
     <form onSubmit={handleSubmit} noValidate>
@@ -108,9 +108,9 @@ export function LoginForm({ onSubmit }: LoginFormProps) {
           id="email"
           type="email"
           value={email}
-          onChange={e => setEmail(e.target.value)}
+          onChange={(e) => setEmail(e.target.value)}
           aria-required="true"
-          aria-describedby={errors.email ? 'email-error' : undefined}
+          aria-describedby={errors.email ? "email-error" : undefined}
           aria-invalid={!!errors.email}
           autoComplete="email"
         />
@@ -129,9 +129,9 @@ export function LoginForm({ onSubmit }: LoginFormProps) {
           id="password"
           type="password"
           value={password}
-          onChange={e => setPassword(e.target.value)}
+          onChange={(e) => setPassword(e.target.value)}
           aria-required="true"
-          aria-describedby={errors.password ? 'password-error' : undefined}
+          aria-describedby={errors.password ? "password-error" : undefined}
           aria-invalid={!!errors.password}
           autoComplete="current-password"
         />
@@ -144,7 +144,7 @@ export function LoginForm({ onSubmit }: LoginFormProps) {
 
       <button type="submit">Log in</button>
     </form>
-  );
+  )
 }
 ```
 
@@ -218,10 +218,10 @@ Use ARIA only when native HTML semantics are insufficient. Wrong ARIA is worse t
 
 export function StatusMessage({ message, isError }: { message: string; isError?: boolean }) {
   return (
-    <div role="status" aria-live={isError ? 'assertive' : 'polite'} aria-atomic="true">
+    <div role="status" aria-live={isError ? "assertive" : "polite"} aria-atomic="true">
       {message}
     </div>
-  );
+  )
 }
 ```
 
@@ -229,19 +229,19 @@ export function StatusMessage({ message, isError }: { message: string; isError?:
 
 ```tsx
 export function Accordion({ title, children }: { title: string; children: React.ReactNode }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const contentId = useId();
+  const [isOpen, setIsOpen] = useState(false)
+  const contentId = useId()
 
   return (
     <div>
-      <button aria-expanded={isOpen} aria-controls={contentId} onClick={() => setIsOpen(prev => !prev)}>
+      <button aria-expanded={isOpen} aria-controls={contentId} onClick={() => setIsOpen((prev) => !prev)}>
         {title}
       </button>
       <div id={contentId} hidden={!isOpen}>
         {children}
       </div>
     </div>
-  );
+  )
 }
 ```
 
@@ -253,33 +253,33 @@ Every interactive element must be reachable and operable by keyboard alone.
 
 ```tsx
 export function Dropdown({ options, onSelect }: { options: string[]; onSelect: (value: string) => void }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const listId = useId();
+  const [isOpen, setIsOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(0)
+  const listId = useId()
 
-  if (!options.length) return null;
+  if (!options.length) return null
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setActiveIndex(i => Math.min(i + 1, options.length - 1));
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        setActiveIndex(i => Math.max(i - 1, 0));
-        break;
-      case 'Enter':
-      case ' ':
-        e.preventDefault();
-        if (isOpen) onSelect(options[activeIndex]);
-        setIsOpen(prev => !prev);
-        break;
-      case 'Escape':
-        setIsOpen(false);
-        break;
+      case "ArrowDown":
+        e.preventDefault()
+        setActiveIndex((i) => Math.min(i + 1, options.length - 1))
+        break
+      case "ArrowUp":
+        e.preventDefault()
+        setActiveIndex((i) => Math.max(i - 1, 0))
+        break
+      case "Enter":
+      case " ":
+        e.preventDefault()
+        if (isOpen) onSelect(options[activeIndex])
+        setIsOpen((prev) => !prev)
+        break
+      case "Escape":
+        setIsOpen(false)
+        break
     }
-  };
+  }
 
   return (
     <div
@@ -289,7 +289,7 @@ export function Dropdown({ options, onSelect }: { options: string[]; onSelect: (
       aria-controls={listId}
       tabIndex={0}
       onKeyDown={handleKeyDown}
-      onClick={() => setIsOpen(prev => !prev)}
+      onClick={() => setIsOpen((prev) => !prev)}
     >
       <span>{options[activeIndex]}</span>
       {isOpen && (
@@ -300,8 +300,8 @@ export function Dropdown({ options, onSelect }: { options: string[]; onSelect: (
               role="option"
               aria-selected={index === activeIndex}
               onClick={() => {
-                onSelect(option);
-                setIsOpen(false);
+                onSelect(option)
+                setIsOpen(false)
               }}
             >
               {option}
@@ -310,7 +310,7 @@ export function Dropdown({ options, onSelect }: { options: string[]; onSelect: (
         </ul>
       )}
     </div>
-  );
+  )
 }
 ```
 
@@ -323,30 +323,47 @@ Focus must move logically when UI state changes — especially for modals and ro
 > This example covers initial focus and restoration. For a full focus trap (Tab/Shift+Tab cycling within the modal), use a library like [`focus-trap-react`](https://github.com/focus-trap/focus-trap-react) which handles edge cases like dynamic content and nested portals.
 
 ```tsx
-export function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
-  const modalRef = useRef<HTMLDivElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
+export function Modal({
+  isOpen,
+  onClose,
+  title,
+  children,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  title: string
+  children: React.ReactNode
+}) {
+  const modalRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (isOpen) {
       // Save currently focused element and move focus into modal
-      previousFocusRef.current = document.activeElement as HTMLElement;
-      modalRef.current?.focus();
+      previousFocusRef.current = document.activeElement as HTMLElement
+      modalRef.current?.focus()
     } else {
       // Restore focus to the element that opened the modal
-      previousFocusRef.current?.focus();
+      previousFocusRef.current?.focus()
     }
-  }, [isOpen]);
+  }, [isOpen])
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   return (
-    <div ref={modalRef} role="dialog" aria-modal="true" aria-labelledby="modal-title" tabIndex={-1} onKeyDown={e => e.key === 'Escape' && onClose()}>
+    <div
+      ref={modalRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+      tabIndex={-1}
+      onKeyDown={(e) => e.key === "Escape" && onClose()}
+    >
       <h2 id="modal-title">{title}</h2>
       {children}
       <button onClick={onClose}>Close</button>
     </div>
-  );
+  )
 }
 ```
 
@@ -374,32 +391,32 @@ Respect users who have requested reduced motion in their OS settings.
 
 ```tsx
 export function useReducedMotion(): boolean {
-  const [prefersReduced, setPrefersReduced] = useState(false);
+  const [prefersReduced, setPrefersReduced] = useState(false)
 
   useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setPrefersReduced(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setPrefersReduced(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)")
+    setPrefersReduced(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setPrefersReduced(e.matches)
+    mq.addEventListener("change", handler)
+    return () => mq.removeEventListener("change", handler)
+  }, [])
 
-  return prefersReduced;
+  return prefersReduced
 }
 
 // Usage
 export function AnimatedCard({ children }: { children: React.ReactNode }) {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useReducedMotion()
 
   return (
     <div
       style={{
-        transition: reduceMotion ? 'none' : 'transform 300ms ease'
+        transition: reduceMotion ? "none" : "transform 300ms ease",
       }}
     >
       {children}
     </div>
-  );
+  )
 }
 ```
 

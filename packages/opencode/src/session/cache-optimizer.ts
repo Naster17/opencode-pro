@@ -274,7 +274,10 @@ export function floorDateToCacheBucket(value = new Date()): Date {
 export function isVolatileTimestampBlock(content: string): boolean {
   const trimmed = content.trim()
   if (!trimmed) return false
-  const lines = trimmed.split("\n").map((l) => l.trim()).filter(Boolean)
+  const lines = trimmed
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
   if (lines.length === 0 || lines.length > 3) return false
   return lines.every((l) => /^Current time: /.test(l) || /^Session started: /.test(l))
 }

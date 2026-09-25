@@ -26,38 +26,38 @@ pnpm exec remotion add @remotion/captions # If project uses pnpm
 Use `staticFile()` to reference an `.srt` file in your `public` folder, then fetch and parse it:
 
 ```tsx
-import {useState, useEffect, useCallback} from 'react';
-import {AbsoluteFill, staticFile, useDelayRender} from 'remotion';
-import {parseSrt} from '@remotion/captions';
-import type {Caption} from '@remotion/captions';
+import { useState, useEffect, useCallback } from "react"
+import { AbsoluteFill, staticFile, useDelayRender } from "remotion"
+import { parseSrt } from "@remotion/captions"
+import type { Caption } from "@remotion/captions"
 
 export const MyComponent: React.FC = () => {
-  const [captions, setCaptions] = useState<Caption[] | null>(null);
-  const {delayRender, continueRender, cancelRender} = useDelayRender();
-  const [handle] = useState(() => delayRender());
+  const [captions, setCaptions] = useState<Caption[] | null>(null)
+  const { delayRender, continueRender, cancelRender } = useDelayRender()
+  const [handle] = useState(() => delayRender())
 
   const fetchCaptions = useCallback(async () => {
     try {
-      const response = await fetch(staticFile('subtitles.srt'));
-      const text = await response.text();
-      const {captions: parsed} = parseSrt({input: text});
-      setCaptions(parsed);
-      continueRender(handle);
+      const response = await fetch(staticFile("subtitles.srt"))
+      const text = await response.text()
+      const { captions: parsed } = parseSrt({ input: text })
+      setCaptions(parsed)
+      continueRender(handle)
     } catch (e) {
-      cancelRender(e);
+      cancelRender(e)
     }
-  }, [continueRender, cancelRender, handle]);
+  }, [continueRender, cancelRender, handle])
 
   useEffect(() => {
-    fetchCaptions();
-  }, [fetchCaptions]);
+    fetchCaptions()
+  }, [fetchCaptions])
 
   if (!captions) {
-    return null;
+    return null
   }
 
-  return <AbsoluteFill>{/* Use captions here */}</AbsoluteFill>;
-};
+  return <AbsoluteFill>{/* Use captions here */}</AbsoluteFill>
+}
 ```
 
 Remote URLs are also supported - you can `fetch()` a remote file via URL instead of using `staticFile()`.

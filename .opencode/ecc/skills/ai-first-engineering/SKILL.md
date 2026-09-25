@@ -18,6 +18,7 @@ Use this skill when designing process, reviews, and architecture for teams shipp
 ## Architecture Requirements
 
 Prefer architectures that are agent-friendly:
+
 - explicit boundaries
 - stable contracts
 - typed interfaces
@@ -28,6 +29,7 @@ Avoid implicit behavior spread across hidden conventions.
 ## Code Review in AI-First Teams
 
 Review for:
+
 - behavior regressions
 - security assumptions
 - data integrity
@@ -39,6 +41,7 @@ Minimize time spent on style issues already covered by automation.
 ## Hiring and Evaluation Signals
 
 Strong AI-first engineers:
+
 - decompose ambiguous work cleanly
 - define measurable acceptance criteria
 - produce high-signal prompts and evals
@@ -47,6 +50,7 @@ Strong AI-first engineers:
 ## Testing Standard
 
 Raise testing bar for generated code:
+
 - required regression coverage for touched domains
 - explicit edge-case assertions
 - integration checks for interface boundaries

@@ -19,15 +19,15 @@ sum across sessions — summing every row multiply-counts.
 
 Row schema:
 
-| Field | Meaning |
-| --- | --- |
-| `timestamp` | ISO timestamp of the snapshot |
-| `session_id` | Claude Code session identifier |
-| `transcript_path` | Path to the session transcript |
-| `model` | Model used |
-| `input_tokens` / `output_tokens` | Token counts |
-| `cache_write_tokens` / `cache_read_tokens` | Prompt-cache token counts |
-| `estimated_cost_usd` | Precomputed cumulative cost in USD for the session |
+| Field                                      | Meaning                                            |
+| ------------------------------------------ | -------------------------------------------------- |
+| `timestamp`                                | ISO timestamp of the snapshot                      |
+| `session_id`                               | Claude Code session identifier                     |
+| `transcript_path`                          | Path to the session transcript                     |
+| `model`                                    | Model used                                         |
+| `input_tokens` / `output_tokens`           | Token counts                                       |
+| `cache_write_tokens` / `cache_read_tokens` | Prompt-cache token counts                          |
+| `estimated_cost_usd`                       | Precomputed cumulative cost in USD for the session |
 
 Prefer `estimated_cost_usd` over hand-calculating pricing — model and cache
 prices change, and the tracker is the source of truth.

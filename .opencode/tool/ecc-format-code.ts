@@ -69,7 +69,7 @@ export default formatCodeTool
 function detectFormatter(cwd: string, ext: string): Formatter | null {
   // Check for formatter config files
   const hasConfig = (configFiles: string[]): boolean => {
-    return configFiles.some(configFile => fs.existsSync(path.join(cwd, configFile)))
+    return configFiles.some((configFile) => fs.existsSync(path.join(cwd, configFile)))
   }
 
   // JavaScript/TypeScript files

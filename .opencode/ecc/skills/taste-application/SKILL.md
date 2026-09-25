@@ -80,7 +80,7 @@ supplies colour and rhythm.** This is measured, not stylistic preference — see
 taste-distillation for the numbers. Practical consequences:
 
 - The generation prompt contains **zero colour language**. Add
-  *"Colour: none. Render neutral. Grading is applied afterwards."*
+  _"Colour: none. Render neutral. Grading is applied afterwards."_
 - Keep **two separate flags**: `--brief` (what HAPPENS: subject, action, place)
   and `--style-steer` (how it LOOKS). Merging them leaks style words into the
   scene ("teal" becomes a teal object) and subject words into the grade.
@@ -143,26 +143,26 @@ workflow inputs, including explicit generated-audio control.
 
 These cost real time to discover. Check them before designing a graph.
 
-| Limit | Detail |
-|---|---|
-| **No 3D renderer at all** | fal has `image-to-3d`, `text-to-3d`, `3d-to-3d` and nothing else. Every `3d-to-3d` endpoint emits another mesh. There is no `3d-to-image`/`3d-to-video` category, so a minted GLB **cannot** re-enter a fal video graph. Render locally, then use `fal-ai/ffmpeg-api/images-to-video`. |
-| **compose cannot overlay** | `fal-ai/ffmpeg-api/compose` rejects a second track with *"Multiple video tracks are not supported"* — and it counts an `image` track as a video track. It sequences one video track only. **Composite locally with ffmpeg.** |
-| **compose keyframes are milliseconds** | Nothing in the response says so. A run submitted in seconds is accepted and returns a video that is 1000x too short. |
-| **extract-frame offers first/middle/last only** | No arbitrary timestamp. Use the three as three distinct conditioning images. |
-| **No loops, no string concat in the DAG** | Per-shot fan-out has to be authored node by node, or kept local. |
-| **Kling 3.0 has no reference-to-video** | The v3 line is text/image/motion-control only; reference-to-video lives on the `o3` line: `fal-ai/kling-video/o3/pro/reference-to-video`. |
-| **Prefixes are not uniform** | `bytedance/*`, `tripo3d/*`, `meshy/*`, `minimax/*`, `openai/*` carry **no** `fal-ai/` prefix. `kling-video`, `veo3.1`, `flux-*`, `hunyuan-3d`, `ffmpeg-api` do. |
+| Limit                                           | Detail                                                                                                                                                                                                                                                                                 |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **No 3D renderer at all**                       | fal has `image-to-3d`, `text-to-3d`, `3d-to-3d` and nothing else. Every `3d-to-3d` endpoint emits another mesh. There is no `3d-to-image`/`3d-to-video` category, so a minted GLB **cannot** re-enter a fal video graph. Render locally, then use `fal-ai/ffmpeg-api/images-to-video`. |
+| **compose cannot overlay**                      | `fal-ai/ffmpeg-api/compose` rejects a second track with _"Multiple video tracks are not supported"_ — and it counts an `image` track as a video track. It sequences one video track only. **Composite locally with ffmpeg.**                                                           |
+| **compose keyframes are milliseconds**          | Nothing in the response says so. A run submitted in seconds is accepted and returns a video that is 1000x too short.                                                                                                                                                                   |
+| **extract-frame offers first/middle/last only** | No arbitrary timestamp. Use the three as three distinct conditioning images.                                                                                                                                                                                                           |
+| **No loops, no string concat in the DAG**       | Per-shot fan-out has to be authored node by node, or kept local.                                                                                                                                                                                                                       |
+| **Kling 3.0 has no reference-to-video**         | The v3 line is text/image/motion-control only; reference-to-video lives on the `o3` line: `fal-ai/kling-video/o3/pro/reference-to-video`.                                                                                                                                              |
+| **Prefixes are not uniform**                    | `bytedance/*`, `tripo3d/*`, `meshy/*`, `minimax/*`, `openai/*` carry **no** `fal-ai/` prefix. `kling-video`, `veo3.1`, `flux-*`, `hunyuan-3d`, `ffmpeg-api` do.                                                                                                                        |
 
 ### Endpoint picks
 
-| Slot | Best | Value alternative |
-|---|---|---|
-| reference→video | `bytedance/seedance-2.5/reference-to-video` (~$0.473/s @720p) | `fal-ai/kling-video/o3/pro/reference-to-video` (~$0.112/s) |
-| image→3D | `fal-ai/hunyuan-3d/v3.1/pro/image-to-3d` ($0.375, up to 8 views) | `tripo3d/h3.1/image-to-3d` ($0.20) |
-| text→3D | `fal-ai/hunyuan-3d/v3.1/pro/text-to-3d` | `tripo3d/h3.1/text-to-3d` |
-| retopology | `fal-ai/hunyuan-3d/v3.1/smart-topology` ($0.75) | `tripo3d/tripo/remesh` (~75x cheaper) |
-| part split | `fal-ai/hunyuan-3d/v3.1/part` (FBX only) | `tripo3d/tripo/segment` |
-| text→image | `fal-ai/nano-banana-pro` ($0.15 flat) | `fal-ai/flux-2-pro` ($0.03/MP) |
+| Slot            | Best                                                             | Value alternative                                          |
+| --------------- | ---------------------------------------------------------------- | ---------------------------------------------------------- |
+| reference→video | `bytedance/seedance-2.5/reference-to-video` (~$0.473/s @720p)    | `fal-ai/kling-video/o3/pro/reference-to-video` (~$0.112/s) |
+| image→3D        | `fal-ai/hunyuan-3d/v3.1/pro/image-to-3d` ($0.375, up to 8 views) | `tripo3d/h3.1/image-to-3d` ($0.20)                         |
+| text→3D         | `fal-ai/hunyuan-3d/v3.1/pro/text-to-3d`                          | `tripo3d/h3.1/text-to-3d`                                  |
+| retopology      | `fal-ai/hunyuan-3d/v3.1/smart-topology` ($0.75)                  | `tripo3d/tripo/remesh` (~75x cheaper)                      |
+| part split      | `fal-ai/hunyuan-3d/v3.1/part` (FBX only)                         | `tripo3d/tripo/segment`                                    |
+| text→image      | `fal-ai/nano-banana-pro` ($0.15 flat)                            | `fal-ai/flux-2-pro` ($0.03/MP)                             |
 
 Seedance is ~4x Kling o3's price for the same 5 seconds. It earns that on
 multi-reference fidelity (up to 50 mixed image/video/audio refs) and does **not**
@@ -218,7 +218,7 @@ not just moments:
   pack's targets were measured; a mean here compares a skew-sensitive statistic
   to a robust one and reports a definition mismatch as an error).
 - `contrast` / `black_point` / `white_point`
-- `banding` — empty L\* histogram bins *between occupied ones*. Counting total
+- `banding` — empty L\* histogram bins _between occupied ones_. Counting total
   empty bins does not work: a legitimately dark clip has empty highlight bins.
 - `cadence` — detected mean shot length vs the reference's.
 
@@ -240,15 +240,15 @@ call: the plan, prompts, track layout and manifest all still get exercised.
 
 ## Anti-Patterns
 
-| Don't | Why |
-|---|---|
-| One generation per shot | 21% efficiency, 12 unrelated clips |
-| Put colour in the prompt | Measured not to work; pushes away from the neutral base the LUT wants |
-| Stream-copy the cuts | Keyframe-only boundaries destroy sub-second rhythm |
-| Cut a base video contiguously | Reassembles the original; every cut invisible |
-| Trust compose to overlay | It cannot; it rejects the second track |
-| Send seconds to compose | Silently 1000x too short |
-| Ship on MAE alone | Add the background-share check |
+| Don't                         | Why                                                                   |
+| ----------------------------- | --------------------------------------------------------------------- |
+| One generation per shot       | 21% efficiency, 12 unrelated clips                                    |
+| Put colour in the prompt      | Measured not to work; pushes away from the neutral base the LUT wants |
+| Stream-copy the cuts          | Keyframe-only boundaries destroy sub-second rhythm                    |
+| Cut a base video contiguously | Reassembles the original; every cut invisible                         |
+| Trust compose to overlay      | It cannot; it rejects the second track                                |
+| Send seconds to compose       | Silently 1000x too short                                              |
+| Ship on MAE alone             | Add the background-share check                                        |
 
 ## Borrowed Footage Carries the Capture App's UI
 
@@ -257,7 +257,7 @@ someone else's like button, view counter and comment bubble, because the base
 footage was a screen recording and nothing cropped them out.
 
 **`content_mask` does not solve this and its bounding box makes it worse.**
-Temporal variance keeps interface chrome, because chrome *animates* - the heart
+Temporal variance keeps interface chrome, because chrome _animates_ - the heart
 pulses, the counter ticks - so the mask marks it as moving content. Measured on
 three references, the mask bbox kept 100% of the width every time while the
 interface sat plainly in the right-hand margin.
@@ -274,7 +274,7 @@ Two implementation details that cost a cycle each:
 - **Trim past the innermost outlier in each outer band, not inward from the
   edge.** Walking in while the current line is hot stops immediately, because
   the outermost lines are letterbox - flat black, zero edge energy - and the
-  chrome sits *inside* that at 90-95% of width. The naive version trimmed 1%
+  chrome sits _inside_ that at 90-95% of width. The naive version trimmed 1%
   of frame while the like button stayed in shot.
 - **Scale to cover, not pad,** when portrait source lands in a landscape cut.
   Padding 9:16 (narrower still after the UI crop) into 16:9 left ~60% of frame
@@ -319,7 +319,7 @@ Two things that silently destroy the work:
 - **Project frame rate must be set before import.** Resolve locks timeline fps on
   first timeline creation and conforms the cadence silently. At a sub-second mean
   shot length that conform is visible.
-- **The delivered shots are already graded.** `look.cube` is a *normalising* LUT
+- **The delivered shots are already graded.** `look.cube` is a _normalising_ LUT
   for new material and for matching — applying it to the supplied shots
   double-grades them. Node 1, nothing before it, corrections after.
 

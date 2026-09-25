@@ -1705,7 +1705,10 @@ describe("session.llm.stream", () => {
         const buildBody = (await first).body as Record<string, any>
         const otherBody = (await second).body as Record<string, any>
         const systemText = (body: Record<string, any>) =>
-          (body.messages as any[]).filter((m) => m.role === "system").map((m) => m.content).join("\n")
+          (body.messages as any[])
+            .filter((m) => m.role === "system")
+            .map((m) => m.content)
+            .join("\n")
 
         expect(systemText(buildBody)).toContain(LLM.ENGLISH_ONLY_RULE)
         expect(systemText(otherBody)).not.toContain(LLM.ENGLISH_ONLY_RULE)

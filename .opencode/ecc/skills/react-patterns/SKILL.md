@@ -27,17 +27,17 @@ Idiomatic React 18/19 patterns for building robust, accessible, performant compo
 ```tsx
 // Good: derive during render
 function Cart({ items }: { items: CartItem[] }) {
-  const total = items.reduce((sum, i) => sum + i.price * i.qty, 0);
-  return <span>{formatMoney(total)}</span>;
+  const total = items.reduce((sum, i) => sum + i.price * i.qty, 0)
+  return <span>{formatMoney(total)}</span>
 }
 
 // Bad: derived state stored separately
 function Cart({ items }: { items: CartItem[] }) {
-  const [total, setTotal] = useState(0);
+  const [total, setTotal] = useState(0)
   useEffect(() => {
-    setTotal(items.reduce((sum, i) => sum + i.price * i.qty, 0));
-  }, [items]);
-  return <span>{formatMoney(total)}</span>;
+    setTotal(items.reduce((sum, i) => sum + i.price * i.qty, 0))
+  }, [items])
+  return <span>{formatMoney(total)}</span>
 }
 ```
 
@@ -87,23 +87,20 @@ Most pages do not need context or a global store. Resist abstraction until dupli
 ```tsx
 // Server Component - default, async, never ships JS for itself
 export default async function ProductPage({ params }: { params: { id: string } }) {
-  const product = await db.product.findUnique({ where: { id: params.id } });
-  if (!product) notFound();
-  return <ProductView product={product} />;
+  const product = await db.product.findUnique({ where: { id: params.id } })
+  if (!product) notFound()
+  return <ProductView product={product} />
 }
 
 // Client Component - opt in with "use client"
-"use client";
+;("use client")
 export function AddToCartButton({ productId }: { productId: string }) {
-  const [pending, startTransition] = useTransition();
+  const [pending, startTransition] = useTransition()
   return (
-    <button
-      disabled={pending}
-      onClick={() => startTransition(() => addToCart(productId))}
-    >
+    <button disabled={pending} onClick={() => startTransition(() => addToCart(productId))}>
       {pending ? "Adding..." : "Add to cart"}
     </button>
-  );
+  )
 }
 ```
 
@@ -132,28 +129,30 @@ Boundaries:
 ### React 19 form actions (preferred for new code)
 
 ```tsx
-"use client";
-import { useActionState } from "react";
+"use client"
+import { useActionState } from "react"
 
-const initial = { error: null as string | null };
+const initial = { error: null as string | null }
 
 async function updateUserAction(_prev: typeof initial, formData: FormData) {
-  "use server";
-  const parsed = UserSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: "Invalid input" };
-  await db.user.update({ where: { id: parsed.data.id }, data: parsed.data });
-  return { error: null };
+  "use server"
+  const parsed = UserSchema.safeParse(Object.fromEntries(formData))
+  if (!parsed.success) return { error: "Invalid input" }
+  await db.user.update({ where: { id: parsed.data.id }, data: parsed.data })
+  return { error: null }
 }
 
 export function UserForm() {
-  const [state, formAction, pending] = useActionState(updateUserAction, initial);
+  const [state, formAction, pending] = useActionState(updateUserAction, initial)
   return (
     <form action={formAction}>
       <input name="name" required />
-      <button type="submit" disabled={pending}>Save</button>
+      <button type="submit" disabled={pending}>
+        Save
+      </button>
       {state.error && <p role="alert">{state.error}</p>}
     </form>
-  );
+  )
 }
 ```
 
@@ -167,13 +166,13 @@ For multi-step forms, dynamic field arrays, or cross-field validation: use a lib
 
 ## Data Fetching Decision Matrix
 
-| Need | Tool |
-|---|---|
-| Per-request data in Next.js App Router | RSC `await fetch()` |
-| Client-side cache + mutations + invalidation | TanStack Query |
-| Lightweight client cache + revalidation | SWR |
-| Real-time subscriptions | Server-Sent Events, WebSockets, or the lib's subscription API |
-| One-off fire-and-forget | `fetch()` in an event handler |
+| Need                                         | Tool                                                          |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| Per-request data in Next.js App Router       | RSC `await fetch()`                                           |
+| Client-side cache + mutations + invalidation | TanStack Query                                                |
+| Lightweight client cache + revalidation      | SWR                                                           |
+| Real-time subscriptions                      | Server-Sent Events, WebSockets, or the lib's subscription API |
+| One-off fire-and-forget                      | `fetch()` in an event handler                                 |
 
 Avoid `useEffect` + `fetch` for application data — race conditions, no cache, no retry, no Suspense integration.
 
@@ -204,8 +203,12 @@ Avoid `useEffect` + `fetch` for application data — race conditions, no cache, 
     <Tabs.Trigger value="profile">Profile</Tabs.Trigger>
     <Tabs.Trigger value="settings">Settings</Tabs.Trigger>
   </Tabs.List>
-  <Tabs.Panel value="profile"><Profile /></Tabs.Panel>
-  <Tabs.Panel value="settings"><Settings /></Tabs.Panel>
+  <Tabs.Panel value="profile">
+    <Profile />
+  </Tabs.Panel>
+  <Tabs.Panel value="settings">
+    <Settings />
+  </Tabs.Panel>
 </Tabs>
 ```
 
@@ -214,9 +217,7 @@ Avoid `useEffect` + `fetch` for application data — race conditions, no cache, 
 Useful when the parent needs to pass parameters to the rendered output:
 
 ```tsx
-<DataLoader id={id}>
-  {({ data, isLoading }) => isLoading ? <Spinner /> : <UserCard user={data} />}
-</DataLoader>
+<DataLoader id={id}>{({ data, isLoading }) => (isLoading ? <Spinner /> : <UserCard user={data} />)}</DataLoader>
 ```
 
 Modern alternative: a hook (`useData(id)`) returning the same shape — usually cleaner.
@@ -276,58 +277,59 @@ This skill is router-agnostic. The patterns above work with React Router, TanSta
 
 ```tsx
 function useDebounce<T>(value: T, delay = 300): T {
-  const [debounced, setDebounced] = useState(value);
+  const [debounced, setDebounced] = useState(value)
   useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(id);
-  }, [value, delay]);
-  return debounced;
+    const id = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(id)
+  }, [value, delay])
+  return debounced
 }
 
 function SearchBox() {
-  const [query, setQuery] = useState("");
-  const debounced = useDebounce(query, 300);
+  const [query, setQuery] = useState("")
+  const debounced = useDebounce(query, 300)
   const { data } = useQuery({
     queryKey: ["search", debounced],
     queryFn: () => searchApi(debounced),
     enabled: debounced.length > 0,
-  });
+  })
   return (
     <>
       <input value={query} onChange={(e) => setQuery(e.target.value)} />
       <Results items={data ?? []} />
     </>
-  );
+  )
 }
 ```
 
 ### Optimistic UI with React 19 `useOptimistic`
 
 ```tsx
-"use client";
-import { useOptimistic } from "react";
+"use client"
+import { useOptimistic } from "react"
 
 export function MessageList({ messages }: { messages: Message[] }) {
-  const [optimistic, addOptimistic] = useOptimistic(
-    messages,
-    (state, newMessage: Message) => [...state, newMessage],
-  );
+  const [optimistic, addOptimistic] = useOptimistic(messages, (state, newMessage: Message) => [...state, newMessage])
 
   async function send(formData: FormData) {
-    const text = String(formData.get("text"));
-    addOptimistic({ id: "pending", text, sender: "me" });
-    await saveMessage(text);
+    const text = String(formData.get("text"))
+    addOptimistic({ id: "pending", text, sender: "me" })
+    await saveMessage(text)
   }
 
   return (
     <>
-      <ul>{optimistic.map((m) => <li key={m.id}>{m.text}</li>)}</ul>
+      <ul>
+        {optimistic.map((m) => (
+          <li key={m.id}>{m.text}</li>
+        ))}
+      </ul>
       <form action={send}>
         <input name="text" />
         <button type="submit">Send</button>
       </form>
     </>
-  );
+  )
 }
 ```
 
@@ -335,8 +337,8 @@ export function MessageList({ messages }: { messages: Message[] }) {
 
 ```tsx
 // Two contexts: one rarely changes, one frequently
-const ThemeContext = createContext<Theme>("light");
-const NotificationsContext = createContext<Notification[]>([]);
+const ThemeContext = createContext<Theme>("light")
+const NotificationsContext = createContext<Notification[]>([])
 
 // A component that only consumes ThemeContext does NOT re-render when notifications change
 ```

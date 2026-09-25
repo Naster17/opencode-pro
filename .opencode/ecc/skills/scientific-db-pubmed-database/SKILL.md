@@ -152,9 +152,9 @@ For each search pass, record:
 Example:
 
 ```markdown
-| Database | Date searched | Query | Filters | Results |
-| --- | --- | --- | --- | ---: |
-| PubMed | 2026-05-11 | `sickle cell disease[mh] AND CRISPR[tiab]` | 2020:2026[dp], English | 42 |
+| Database | Date searched | Query                                      | Filters                | Results |
+| -------- | ------------- | ------------------------------------------ | ---------------------- | ------: |
+| PubMed   | 2026-05-11    | `sickle cell disease[mh] AND CRISPR[tiab]` | 2020:2026[dp], English |      42 |
 ```
 
 ## Review Checklist

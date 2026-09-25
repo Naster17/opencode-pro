@@ -34,6 +34,7 @@ If no voice references are given, default to a sharp operator voice: concrete, u
 ## Banned Patterns
 
 Delete and rewrite any of these:
+
 - "In today's rapidly evolving landscape"
 - "game-changer", "cutting-edge", "revolutionary"
 - "here's why this matters" as a standalone bridge
@@ -73,6 +74,7 @@ Delete and rewrite any of these:
 ## Quality Gate
 
 Before delivering:
+
 - factual claims are backed by provided sources
 - generic AI transitions are gone
 - the voice matches the supplied examples or the agreed `VOICE PROFILE`

@@ -56,15 +56,15 @@ Every PHI access or modification must be logged:
 
 ```typescript
 interface AuditEntry {
-  timestamp: string;
-  user_id: string;
-  patient_id: string;
-  action: 'create' | 'read' | 'update' | 'delete' | 'print' | 'export';
-  resource_type: string;
-  resource_id: string;
-  changes?: { before: object; after: object };
-  ip_address: string;
-  session_id: string;
+  timestamp: string
+  user_id: string
+  patient_id: string
+  action: "create" | "read" | "update" | "delete" | "print" | "export"
+  resource_type: string
+  resource_id: string
+  changes?: { before: object; after: object }
+  ip_address: string
+  session_id: string
 }
 ```
 
@@ -96,6 +96,7 @@ COMMENT ON COLUMN doctor_payouts.amount IS 'PII: financial';
 ### Deployment Checklist
 
 Before every deployment:
+
 - No PHI in error messages or stack traces
 - No PHI in console.log/console.error
 - No PHI in URL parameters
@@ -113,11 +114,11 @@ Before every deployment:
 
 ```typescript
 // BAD — leaks PHI in error
-throw new Error(`Patient ${patient.name} not found in ${patient.facility}`);
+throw new Error(`Patient ${patient.name} not found in ${patient.facility}`)
 
 // GOOD — generic error, details logged server-side with opaque IDs only
-logger.error('Patient lookup failed', { recordId: patient.id, facilityId });
-throw new Error('Record not found');
+logger.error("Patient lookup failed", { recordId: patient.id, facilityId })
+throw new Error("Record not found")
 ```
 
 ### Example 2: RLS Policy for Multi-Facility Isolation
@@ -138,9 +139,9 @@ CREATE POLICY "facility_isolation"
 
 ```typescript
 // BAD — logs identifiable patient data
-console.log('Processing patient:', patient);
+console.log("Processing patient:", patient)
 
 // GOOD — logs only opaque internal record ID
-console.log('Processing record:', patient.id);
+console.log("Processing record:", patient.id)
 // Note: even patient.id should be an opaque UUID, not a medical record number
 ```

@@ -37,12 +37,12 @@ A test should NOT:
 
 ## Library Choice
 
-| Runner | When | Note |
-|---|---|---|
-| **Vitest** | Vite, Remix, modern setups | Faster, native ESM, Jest-compatible API |
-| **Jest** | Next.js, CRA, established repos | Default for many React projects |
-| **Playwright Component Testing** | Real browser engine needed | Use when JSDOM lacks the required feature |
-| **Cypress Component Testing** | Real browser, Cypress already in use | Alternative to Playwright CT |
+| Runner                           | When                                 | Note                                      |
+| -------------------------------- | ------------------------------------ | ----------------------------------------- |
+| **Vitest**                       | Vite, Remix, modern setups           | Faster, native ESM, Jest-compatible API   |
+| **Jest**                         | Next.js, CRA, established repos      | Default for many React projects           |
+| **Playwright Component Testing** | Real browser engine needed           | Use when JSDOM lacks the required feature |
+| **Cypress Component Testing**    | Real browser, Cypress already in use | Alternative to Playwright CT              |
 
 Pick one. Do not run RTL + Vitest AND Playwright CT in the same repo unless you have a clear lane separation.
 
@@ -56,13 +56,13 @@ React Testing Library exposes queries in three tiers — use top-down:
 
 ```tsx
 // Best
-screen.getByRole("button", { name: /save/i });
+screen.getByRole("button", { name: /save/i })
 
 // OK for inputs
-screen.getByLabelText("Email");
+screen.getByLabelText("Email")
 
 // Last resort
-screen.getByTestId("save-btn");
+screen.getByTestId("save-btn")
 ```
 
 Variants:
@@ -74,18 +74,18 @@ Variants:
 ## User Interaction with `userEvent`
 
 ```tsx
-import userEvent from "@testing-library/user-event";
+import userEvent from "@testing-library/user-event"
 
 test("submits the form", async () => {
-  const user = userEvent.setup();
-  const onSubmit = vi.fn();
-  render(<UserForm onSubmit={onSubmit} />);
+  const user = userEvent.setup()
+  const onSubmit = vi.fn()
+  render(<UserForm onSubmit={onSubmit} />)
 
-  await user.type(screen.getByLabelText("Email"), "user@example.com");
-  await user.click(screen.getByRole("button", { name: /save/i }));
+  await user.type(screen.getByLabelText("Email"), "user@example.com")
+  await user.click(screen.getByRole("button", { name: /save/i }))
 
-  expect(onSubmit).toHaveBeenCalledWith({ email: "user@example.com" });
-});
+  expect(onSubmit).toHaveBeenCalledWith({ email: "user@example.com" })
+})
 ```
 
 - Always `await` userEvent calls
@@ -96,13 +96,13 @@ test("submits the form", async () => {
 
 ```tsx
 // Element that appears after async work
-expect(await screen.findByText("Loaded")).toBeInTheDocument();
+expect(await screen.findByText("Loaded")).toBeInTheDocument()
 
 // Side effect assertion
-await waitFor(() => expect(saveSpy).toHaveBeenCalled());
+await waitFor(() => expect(saveSpy).toHaveBeenCalled())
 
 // Element that should disappear
-await waitForElementToBeRemoved(() => screen.queryByText("Loading"));
+await waitForElementToBeRemoved(() => screen.queryByText("Loading"))
 ```
 
 Never `setTimeout` + assertion — flaky. Use the matchers above.
@@ -115,24 +115,22 @@ Mock Service Worker mocks at the network layer. The component, hooks, and fetch 
 
 ```ts
 // test/setup.ts
-import { setupServer } from "msw/node";
-import { http, HttpResponse } from "msw";
+import { setupServer } from "msw/node"
+import { http, HttpResponse } from "msw"
 
 export const handlers = [
-  http.get("/api/users/:id", ({ params }) =>
-    HttpResponse.json({ id: params.id, name: "Alice" }),
-  ),
+  http.get("/api/users/:id", ({ params }) => HttpResponse.json({ id: params.id, name: "Alice" })),
   http.post("/api/users", async ({ request }) => {
-    const body = await request.json();
-    return HttpResponse.json({ id: "new-id", ...body }, { status: 201 });
+    const body = await request.json()
+    return HttpResponse.json({ id: "new-id", ...body }, { status: 201 })
   }),
-];
+]
 
-export const server = setupServer(...handlers);
+export const server = setupServer(...handlers)
 
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }))
+afterEach(() => server.resetHandlers())
+afterAll(() => server.close())
 ```
 
 Configure `onUnhandledRequest: "error"` so any unmocked request fails the test loudly — silent passes are worse than red.
@@ -141,12 +139,10 @@ Configure `onUnhandledRequest: "error"` so any unmocked request fails the test l
 
 ```tsx
 test("renders error on 500", async () => {
-  server.use(
-    http.get("/api/users/:id", () => new HttpResponse(null, { status: 500 })),
-  );
-  render(<UserPage id="1" />);
-  expect(await screen.findByText(/something went wrong/i)).toBeInTheDocument();
-});
+  server.use(http.get("/api/users/:id", () => new HttpResponse(null, { status: 500 })))
+  render(<UserPage id="1" />)
+  expect(await screen.findByText(/something went wrong/i)).toBeInTheDocument()
+})
 ```
 
 ## Provider Wrapping
@@ -155,16 +151,13 @@ Wrap providers once in a `test-utils.tsx`:
 
 ```tsx
 // test-utils.tsx
-import { render, RenderOptions } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, RenderOptions } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
-export function renderWithProviders(
-  ui: React.ReactElement,
-  options?: RenderOptions,
-) {
+export function renderWithProviders(ui: React.ReactElement, options?: RenderOptions) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
-  });
+  })
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -173,10 +166,10 @@ export function renderWithProviders(
       </ThemeProvider>
     </QueryClientProvider>,
     options,
-  );
+  )
 }
 
-export * from "@testing-library/react";
+export * from "@testing-library/react"
 ```
 
 Then `import { renderWithProviders, screen } from "test-utils"` in every test file.
@@ -184,40 +177,40 @@ Then `import { renderWithProviders, screen } from "test-utils"` in every test fi
 ## Custom Hook Testing
 
 ```tsx
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act } from "@testing-library/react"
 
 test("useCounter increments and decrements", () => {
-  const { result } = renderHook(() => useCounter(0));
+  const { result } = renderHook(() => useCounter(0))
 
-  expect(result.current.count).toBe(0);
+  expect(result.current.count).toBe(0)
 
-  act(() => result.current.increment());
-  expect(result.current.count).toBe(1);
+  act(() => result.current.increment())
+  expect(result.current.count).toBe(1)
 
-  act(() => result.current.decrement());
-  expect(result.current.count).toBe(0);
-});
+  act(() => result.current.decrement())
+  expect(result.current.count).toBe(0)
+})
 
 test("useCounter accepts initial value", () => {
-  const { result } = renderHook(() => useCounter(10));
-  expect(result.current.count).toBe(10);
-});
+  const { result } = renderHook(() => useCounter(10))
+  expect(result.current.count).toBe(10)
+})
 
 test("useUser fetches user data", async () => {
   // Instantiate QueryClient ONCE per test outside the wrapper so it survives re-renders.
   // Creating it inside the wrapper closure resets cache state on every render, producing flaky tests.
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
-  });
+  })
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
+  )
 
-  const { result } = renderHook(() => useUser("1"), { wrapper });
+  const { result } = renderHook(() => useUser("1"), { wrapper })
 
-  await waitFor(() => expect(result.current.isSuccess).toBe(true));
-  expect(result.current.data).toEqual({ id: "1", name: "Alice" });
-});
+  await waitFor(() => expect(result.current.isSuccess).toBe(true))
+  expect(result.current.data).toEqual({ id: "1", name: "Alice" })
+})
 ```
 
 - Wrap state-changing calls in `act`
@@ -227,13 +220,13 @@ test("useUser fetches user data", async () => {
 ## Accessibility Assertions
 
 ```tsx
-import { axe, toHaveNoViolations } from "jest-axe"; // or vitest-axe
-expect.extend(toHaveNoViolations);
+import { axe, toHaveNoViolations } from "jest-axe" // or vitest-axe
+expect.extend(toHaveNoViolations)
 
 test("UserCard has no a11y violations", async () => {
-  const { container } = render(<UserCard user={mockUser} />);
-  expect(await axe(container)).toHaveNoViolations();
-});
+  const { container } = render(<UserCard user={mockUser} />)
+  expect(await axe(container)).toHaveNoViolations()
+})
 ```
 
 Run axe in component tests for every interactive component. Catches:
@@ -281,13 +274,13 @@ Decision boundary:
 
 ## Coverage Targets
 
-| Layer | Target |
-|---|---|
-| Pure utilities | >=90% |
-| Custom hooks | >=85% |
-| Presentational components | >=80% — behavior, not lines |
-| Container components | >=70% — golden paths + error states |
-| Pages | E2E covered separately; smoke test minimum |
+| Layer                     | Target                                     |
+| ------------------------- | ------------------------------------------ |
+| Pure utilities            | >=90%                                      |
+| Custom hooks              | >=85%                                      |
+| Presentational components | >=80% — behavior, not lines                |
+| Container components      | >=70% — golden paths + error states        |
+| Pages                     | E2E covered separately; smoke test minimum |
 
 Configure via `vitest.config.ts` / `jest.config.js`:
 
@@ -366,46 +359,42 @@ CI=true vitest run --coverage
 
 ```tsx
 test("submits user form and shows success", async () => {
-  server.use(
-    http.post("/api/users", () =>
-      HttpResponse.json({ id: "1", name: "Alice" }, { status: 201 }),
-    ),
-  );
+  server.use(http.post("/api/users", () => HttpResponse.json({ id: "1", name: "Alice" }, { status: 201 })))
 
-  const user = userEvent.setup();
-  renderWithProviders(<UserForm />);
+  const user = userEvent.setup()
+  renderWithProviders(<UserForm />)
 
-  await user.type(screen.getByLabelText("Name"), "Alice");
-  await user.type(screen.getByLabelText("Email"), "alice@example.com");
-  await user.click(screen.getByRole("button", { name: /save/i }));
+  await user.type(screen.getByLabelText("Name"), "Alice")
+  await user.type(screen.getByLabelText("Email"), "alice@example.com")
+  await user.click(screen.getByRole("button", { name: /save/i }))
 
-  expect(await screen.findByText(/saved successfully/i)).toBeInTheDocument();
-});
+  expect(await screen.findByText(/saved successfully/i)).toBeInTheDocument()
+})
 ```
 
 ### Testing an error boundary
 
 ```tsx
 function Broken() {
-  throw new Error("boom");
+  throw new Error("boom")
 }
 
 test("error boundary renders fallback", () => {
   // Suppress React's console.error noise for the expected throw, then restore so
   // the spy does not leak across tests and hide real errors elsewhere.
-  const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
   try {
     render(
       <ErrorBoundary fallback={<div>Something went wrong</div>}>
         <Broken />
       </ErrorBoundary>,
-    );
+    )
 
-    expect(screen.getByText("Something went wrong")).toBeInTheDocument();
+    expect(screen.getByText("Something went wrong")).toBeInTheDocument()
   } finally {
-    errorSpy.mockRestore();
+    errorSpy.mockRestore()
   }
-});
+})
 ```
 
 ### Testing a Suspense boundary
@@ -416,9 +405,9 @@ test("shows loading then content", async () => {
     <Suspense fallback={<div>Loading...</div>}>
       <UserDetail id="1" />
     </Suspense>,
-  );
+  )
 
-  expect(screen.getByText("Loading...")).toBeInTheDocument();
-  expect(await screen.findByText("Alice")).toBeInTheDocument();
-});
+  expect(screen.getByText("Loading...")).toBeInTheDocument()
+  expect(await screen.findByText("Alice")).toBeInTheDocument()
+})
 ```

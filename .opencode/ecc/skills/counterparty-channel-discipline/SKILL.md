@@ -30,11 +30,11 @@ unsolicited traffic; an explicit inbound request can be answered only if the
 access policy allows it, with external output restrictions. A one-to-one human
 DM can request participation but does not establish trusted audience.
 
-| Audience | Content for an independently authorized response |
-| --- | --- |
-| External or unknown | Useful final business answer or concise safe error |
+| Audience                             | Content for an independently authorized response                         |
+| ------------------------------------ | ------------------------------------------------------------------------ |
+| External or unknown                  | Useful final business answer or concise safe error                       |
 | Trusted internal or private operator | Final answer, safe error, concise operational facts and allowed progress |
-| Muted or deferred | No output |
+| Muted or deferred                    | No output                                                                |
 
 Reasoning, raw exceptions, stack traces, secrets, host paths, system/configuration
 details, test status and internal filing notices are not counterparty content.

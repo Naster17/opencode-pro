@@ -55,23 +55,23 @@ This skill produces:
 
 ### Choosing the right pattern
 
-| Situation | Pattern |
-| ---------------------------------------- | ---------------------- |
-| Element appears / disappears             | `AnimatePresence`      |
-| List of items loading in sequence        | Stagger variants       |
-| Navigating between routes                | Page transition wrapper|
-| Element changes size in place            | `layout` prop          |
-| Same element moves across page contexts  | `layoutId`             |
-| Element enters when scrolled into view   | `whileInView`          |
-| Value tied to scroll position            | `useScroll` + `useTransform` |
+| Situation                               | Pattern                      |
+| --------------------------------------- | ---------------------------- |
+| Element appears / disappears            | `AnimatePresence`            |
+| List of items loading in sequence       | Stagger variants             |
+| Navigating between routes               | Page transition wrapper      |
+| Element changes size in place           | `layout` prop                |
+| Same element moves across page contexts | `layoutId`                   |
+| Element enters when scrolled into view  | `whileInView`                |
+| Value tied to scroll position           | `useScroll` + `useTransform` |
 
 ### When to use `mode="wait"` vs `mode="sync"`
 
-| Mode | Use when |
-| ------- | --------------------------------------- |
-| `wait` | Page transitions, content swaps (one at a time) |
-| `sync` | Stacked notifications, list items (overlap is fine) |
-| `popLayout` | Items removed from a reflow list |
+| Mode        | Use when                                            |
+| ----------- | --------------------------------------------------- |
+| `wait`      | Page transitions, content swaps (one at a time)     |
+| `sync`      | Stacked notifications, list items (overlap is fine) |
+| `popLayout` | Items removed from a reflow list                    |
 
 ## Core Concepts
 
@@ -101,7 +101,7 @@ Use `layout="position"` on text inside an expanding container to prevent text re
 import { motion } from "motion/react"
 import { springs, motionTokens } from "@/lib/motion-tokens"
 
-<motion.button
+;<motion.button
   whileHover={{ scale: motionTokens.scale.pop }}
   whileTap={{ scale: motionTokens.scale.press }}
   transition={springs.snappy}
@@ -190,7 +190,7 @@ export function Modal({ onClose }: { onClose: () => void }) {
 import { motion, AnimatePresence } from "motion/react"
 import { motionTokens, springs } from "@/lib/motion-tokens"
 
-<AnimatePresence mode="sync">
+;<AnimatePresence mode="sync">
   {toasts.map((t) => (
     <motion.div
       key={t.id}
@@ -223,8 +223,8 @@ import { motionTokens } from "@/lib/motion-tokens"
 
 const variants = {
   initial: { opacity: 0, y: motionTokens.distance.sm },
-  enter:   { opacity: 1, y: 0 },
-  exit:    { opacity: 0, y: -motionTokens.distance.sm },
+  enter: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -motionTokens.distance.sm },
 }
 
 export function PageTransition({ children }: { children: React.ReactNode }) {
@@ -256,10 +256,10 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
 import { motion } from "motion/react"
 import { motionTokens, springs } from "@/lib/motion-tokens"
 
-<motion.div
+;<motion.div
   initial={{ opacity: 0, y: motionTokens.distance.lg }}
   whileInView={{ opacity: 1, y: 0 }}
-  viewport={{ once: true, margin: "-80px" }}   // once: true — rule 7
+  viewport={{ once: true, margin: "-80px" }} // once: true — rule 7
   transition={{ duration: motionTokens.duration.slow, ease: motionTokens.easing.smooth }}
 />
 ```
@@ -338,7 +338,9 @@ export function ExpandingCard({ title, body }: { title: string; body: string }) 
     duration: motionTokens.duration.normal,
     ease: motionTokens.easing.smooth,
   }}
-> {children}
+>
+  {" "}
+  {children}
 </motion.div>
 ```
 
@@ -367,7 +369,7 @@ function ListItem({ label, onRemove }: { label: string; onRemove: () => void }) 
   return (
     <motion.li
       variants={{
-        hidden:  safe.initial,
+        hidden: safe.initial,
         visible: safe.animate,
       }}
       exit={safe.exit}
@@ -380,24 +382,18 @@ function ListItem({ label, onRemove }: { label: string; onRemove: () => void }) 
   )
 }
 
-export function AnimatedList({ items, onRemove }: {
+export function AnimatedList({
+  items,
+  onRemove,
+}: {
   items: { id: string; label: string }[]
   onRemove: (id: string) => void
 }) {
   return (
-    <motion.ul
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      className="space-y-2"
-    >
+    <motion.ul variants={containerVariants} initial="hidden" animate="visible" className="space-y-2">
       <AnimatePresence mode="popLayout">
         {items.map((item) => (
-          <ListItem
-            key={item.id}
-            label={item.label}
-            onRemove={() => onRemove(item.id)}
-          />
+          <ListItem key={item.id} label={item.label} onRemove={() => onRemove(item.id)} />
         ))}
       </AnimatePresence>
     </motion.ul>
@@ -418,16 +414,16 @@ This skill does **not** cover:
 
 ## Anti-Patterns
 
-| Anti-pattern | Rule violated | Fix |
-| -------------------------------------------- | ------- | ------------------------------------------ |
-| `AnimatePresence` child missing `key` | Rule 1 | Add stable `key` to the direct child |
-| `initial` + `animate` without `exit` | Rule 2 | Always define all three together |
-| Page transition without `mode="wait"` | Rule 3 | Add `mode="wait"` to `AnimatePresence` |
-| `layout` on a 50-item list | Rule 4 | Use `mode="popLayout"` or explicit transforms |
-| `staggerChildren: 0.2` on a 10-item list | Rule 5 | Cap at `0.08–0.10` |
-| Modal without focus trap | Rule 6 | Add `focus-trap-react` or Radix Dialog |
-| `whileInView` without `viewport={{ once: true }}` | Rule 7 | Repeating entrances distract, not inform |
-| `transition={{ duration: 0.3 }}` inline | Rule 8 | Use `motionTokens.duration.normal` |
+| Anti-pattern                                      | Rule violated | Fix                                           |
+| ------------------------------------------------- | ------------- | --------------------------------------------- |
+| `AnimatePresence` child missing `key`             | Rule 1        | Add stable `key` to the direct child          |
+| `initial` + `animate` without `exit`              | Rule 2        | Always define all three together              |
+| Page transition without `mode="wait"`             | Rule 3        | Add `mode="wait"` to `AnimatePresence`        |
+| `layout` on a 50-item list                        | Rule 4        | Use `mode="popLayout"` or explicit transforms |
+| `staggerChildren: 0.2` on a 10-item list          | Rule 5        | Cap at `0.08–0.10`                            |
+| Modal without focus trap                          | Rule 6        | Add `focus-trap-react` or Radix Dialog        |
+| `whileInView` without `viewport={{ once: true }}` | Rule 7        | Repeating entrances distract, not inform      |
+| `transition={{ duration: 0.3 }}` inline           | Rule 8        | Use `motionTokens.duration.normal`            |
 
 ## Related Skills
 

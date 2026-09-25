@@ -347,7 +347,11 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model, config?: Cach
   const isVolatile = (msg: ModelMessage) => {
     const c = typeof msg.content === "string" ? msg.content : ""
     if (!c) return false
-    const lines = c.trim().split("\n").map((l) => l.trim()).filter(Boolean)
+    const lines = c
+      .trim()
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
     if (lines.length === 0 || lines.length > 3) return false
     return lines.every((l) => l.startsWith("Current time: ") || l.startsWith("Session started: "))
   }

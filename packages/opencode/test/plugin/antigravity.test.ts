@@ -129,10 +129,7 @@ describe("plugin.antigravity", () => {
         },
         {
           role: "model",
-          parts: [
-            { thought: "Internal thinking..." } as any,
-            { text: "Hello! How can I help you today?" },
-          ],
+          parts: [{ thought: "Internal thinking..." } as any, { text: "Hello! How can I help you today?" }],
         },
       ]
 

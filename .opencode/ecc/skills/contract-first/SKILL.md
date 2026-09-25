@@ -132,16 +132,16 @@ npm run generate:api-types
 Back that script with the repository's existing, pinned OpenAPI generator.
 
 ```typescript
-import type { components } from "./generated/api";
+import type { components } from "./generated/api"
 
-type OrderSummary = components["schemas"]["OrderSummary"];
+type OrderSummary = components["schemas"]["OrderSummary"]
 
 export const paidOrderMock = {
   id: "9007199254740993123",
   status: "paid",
   total: 49.9,
   cancellationReason: null,
-} satisfies OrderSummary;
+} satisfies OrderSummary
 ```
 
 The consumer can build against contract-valid mocks while the provider is still
@@ -152,9 +152,9 @@ in progress.
 The provider must prove that real responses satisfy the same artifact:
 
 ```typescript
-import type { components } from "./generated/api";
+import type { components } from "./generated/api"
 
-type OrderSummary = components["schemas"]["OrderSummary"];
+type OrderSummary = components["schemas"]["OrderSummary"]
 
 export function toOrderSummary(row: OrderRow): OrderSummary {
   return {
@@ -164,7 +164,7 @@ export function toOrderSummary(row: OrderRow): OrderSummary {
     status: row.status,
     total: row.total,
     cancellationReason: row.cancellation_reason,
-  };
+  }
 }
 ```
 
@@ -218,7 +218,7 @@ than silently repurposing an existing field.
 
 ```typescript
 // Database shape leaks directly to consumers.
-return database.query("select * from orders");
+return database.query("select * from orders")
 ```
 
 The storage model now controls the public interface, including accidental
@@ -240,7 +240,7 @@ If each copy can change independently, none is authoritative.
 A cast can hide incompatible runtime data:
 
 ```typescript
-return databaseRow as unknown as OrderSummary;
+return databaseRow as unknown as OrderSummary
 ```
 
 Verify serialized responses, not only local type declarations.

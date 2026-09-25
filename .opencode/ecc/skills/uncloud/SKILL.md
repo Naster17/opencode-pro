@@ -12,6 +12,7 @@ Reference for the `uc` CLI — a decentralised self-hosting platform using Docke
 ## When to Activate
 
 Use this skill when working with Uncloud clusters, especially when:
+
 - Bootstrapping or joining machines with `uc machine`
 - Deploying services from Compose files with `uc deploy`
 - Publishing HTTP, HTTPS, TCP, or UDP ports through Uncloud
@@ -44,31 +45,31 @@ uc deploy
 
 ### Machines
 
-| Command | Purpose |
-|---------|---------|
-| `uc machine init user@host` | Bootstrap first machine / new cluster |
-| `uc machine add user@host` | Join machine to existing cluster |
-| `uc machine ls` | List machines |
-| `uc machine update NAME --public-ip IP` | Update public IP for ingress |
-| `uc machine rm NAME` | Remove machine |
+| Command                                 | Purpose                               |
+| --------------------------------------- | ------------------------------------- |
+| `uc machine init user@host`             | Bootstrap first machine / new cluster |
+| `uc machine add user@host`              | Join machine to existing cluster      |
+| `uc machine ls`                         | List machines                         |
+| `uc machine update NAME --public-ip IP` | Update public IP for ingress          |
+| `uc machine rm NAME`                    | Remove machine                        |
 
 Key `init` flags: `--name`, `--network 10.210.0.0/16`, `--no-caddy`, `--no-dns`, `--public-ip auto\|IP\|none`
 
 ### Services
 
-| Command | Purpose |
-|---------|---------|
-| `uc service ls` / `uc ls` | List services |
-| `uc service run IMAGE` | Run a single container service |
-| `uc deploy` | Deploy from `compose.yaml` |
-| `uc deploy --no-build` | Deploy already-pushed images without rebuilding |
-| `uc deploy --recreate` | Force service recreation |
-| `uc scale SERVICE N` | Set replica count |
-| `uc service logs SERVICE` | View logs |
-| `uc service exec SERVICE` | Shell into container |
-| `uc service inspect SERVICE` | Detailed info |
-| `uc service rm SERVICE` | Remove service (keeps named volumes) |
-| `uc ps` | All containers across cluster |
+| Command                      | Purpose                                         |
+| ---------------------------- | ----------------------------------------------- |
+| `uc service ls` / `uc ls`    | List services                                   |
+| `uc service run IMAGE`       | Run a single container service                  |
+| `uc deploy`                  | Deploy from `compose.yaml`                      |
+| `uc deploy --no-build`       | Deploy already-pushed images without rebuilding |
+| `uc deploy --recreate`       | Force service recreation                        |
+| `uc scale SERVICE N`         | Set replica count                               |
+| `uc service logs SERVICE`    | View logs                                       |
+| `uc service exec SERVICE`    | Shell into container                            |
+| `uc service inspect SERVICE` | Detailed info                                   |
+| `uc service rm SERVICE`      | Remove service (keeps named volumes)            |
+| `uc ps`                      | All containers across cluster                   |
 
 ### Images
 
@@ -113,11 +114,11 @@ uc ctx use prod    # Switch context
 -p [hostname:]container_port[/protocol]
 ```
 
-| Example | Meaning |
-|---------|---------|
-| `-p 8080/https` | HTTPS with auto `service-name.cluster-domain` hostname |
-| `-p app.example.com:8080/https` | HTTPS with custom hostname |
-| `-p 8080/http` | HTTP only, no TLS |
+| Example                         | Meaning                                                |
+| ------------------------------- | ------------------------------------------------------ |
+| `-p 8080/https`                 | HTTPS with auto `service-name.cluster-domain` hostname |
+| `-p app.example.com:8080/https` | HTTPS with custom hostname                             |
+| `-p 8080/http`                  | HTTP only, no TLS                                      |
 
 ### TCP/UDP (host-bound, bypasses Caddy)
 
@@ -125,11 +126,11 @@ uc ctx use prod    # Switch context
 -p [host_ip:]host_port:container_port[/protocol]@host
 ```
 
-| Example | Meaning |
-|---------|---------|
-| `-p 5432:5432@host` | TCP 5432 on all interfaces |
-| `-p 127.0.0.1:5432:5432@host` | TCP 5432 loopback only |
-| `-p 53:5353/udp@host` | UDP |
+| Example                       | Meaning                    |
+| ----------------------------- | -------------------------- |
+| `-p 5432:5432@host`           | TCP 5432 on all interfaces |
+| `-p 127.0.0.1:5432:5432@host` | TCP 5432 loopback only     |
+| `-p 53:5353/udp@host`         | UDP                        |
 
 ---
 
@@ -170,6 +171,7 @@ services:
 ```
 
 Template functions available inside `x-caddy`:
+
 - `{{upstreams [service] [port]}}` — healthy container IPs
 - `{{.Name}}` — service name
 - `{{.Upstreams}}` — map of all services → IPs
@@ -180,7 +182,7 @@ Template functions available inside `x-caddy`:
 services:
   db:
     image: postgres:18
-    x-machines: db-machine          # Single machine name
+    x-machines: db-machine # Single machine name
   app:
     image: app:latest
     x-machines:
@@ -267,12 +269,12 @@ uc caddy config   # device.example.com block should appear
 
 Services inside the cluster resolve each other by name:
 
-| DNS name | Resolves to |
-|----------|------------|
-| `service-name` | Any healthy container |
-| `service-name.internal` | Same |
-| `rr.service-name.internal` | Round-robin |
-| `nearest.service-name.internal` | Machine-local first |
+| DNS name                        | Resolves to           |
+| ------------------------------- | --------------------- |
+| `service-name`                  | Any healthy container |
+| `service-name.internal`         | Same                  |
+| `rr.service-name.internal`      | Round-robin           |
+| `nearest.service-name.internal` | Machine-local first   |
 
 ---
 
@@ -287,7 +289,7 @@ uc scale web 1    # Scale down
 services:
   caddy:
     deploy:
-      mode: global   # One container on every machine
+      mode: global # One container on every machine
 ```
 
 ---
@@ -299,23 +301,25 @@ image: myapp:{{gitdate "20060102"}}.{{gitsha 7}}
 image: myapp:{{gitsha 7}}.${GITHUB_RUN_ID:-local}
 ```
 
-| Function | Output |
-|----------|--------|
-| `{{gitsha N}}` | First N chars of commit SHA |
+| Function               | Output                       |
+| ---------------------- | ---------------------------- |
+| `{{gitsha N}}`         | First N chars of commit SHA  |
 | `{{gitdate "format"}}` | Git commit date in Go format |
-| `{{date "format"}}` | Current date |
+| `{{date "format"}}`    | Current date                 |
 
 ---
 
 ## Common Workflows
 
 **Deploy from source:**
+
 ```bash
 uc deploy                          # Build + push + deploy
 uc build --push && uc deploy --no-build   # Separate steps
 ```
 
 **Inspect a service:**
+
 ```bash
 uc inspect web
 uc logs -f web
@@ -327,6 +331,7 @@ uc exec web /bin/sh -c "env"       # Run specific command
 **Zero-downtime deploys** happen automatically; Uncloud waits for health checks before terminating old containers.
 
 **Force recreate:**
+
 ```bash
 uc deploy --recreate
 ```
@@ -335,10 +340,10 @@ uc deploy --recreate
 
 ## Common Mistakes
 
-| Mistake | Fix |
-|---------|-----|
-| Editing the Caddyfile directly | Use `x-caddy` in compose or `--caddyfile` on `uc service run` |
-| Proxying an HTTPS upstream with self-signed cert | Add `transport http { tls_insecure_skip_verify }` |
-| `uc caddy config` shows no user-defined blocks | Caddy admin socket unreachable — check `uc inspect caddy` and `uc logs caddy` |
-| Service can't reach external LAN IP from container | Verify Caddy container's host can route to target network |
-| Volumes lost after `uc service rm` | Named volumes persist; only anonymous volumes are auto-removed |
+| Mistake                                            | Fix                                                                           |
+| -------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Editing the Caddyfile directly                     | Use `x-caddy` in compose or `--caddyfile` on `uc service run`                 |
+| Proxying an HTTPS upstream with self-signed cert   | Add `transport http { tls_insecure_skip_verify }`                             |
+| `uc caddy config` shows no user-defined blocks     | Caddy admin socket unreachable — check `uc inspect caddy` and `uc logs caddy` |
+| Service can't reach external LAN IP from container | Verify Caddy container's host can route to target network                     |
+| Volumes lost after `uc service rm`                 | Named volumes persist; only anonymous volumes are auto-removed                |

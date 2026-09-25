@@ -18,33 +18,43 @@ Fix Rust build, clippy, and dependency errors: $ARGUMENTS
 ## Common Rust Errors
 
 ### Borrow Checker
+
 ```
 cannot borrow `x` as mutable because it is also borrowed as immutable
 ```
+
 **Fix**: Restructure to end immutable borrow first; clone only if justified
 
 ### Type Mismatch
+
 ```
 mismatched types: expected `T`, found `U`
 ```
+
 **Fix**: Add `.into()`, `as`, or explicit type conversion
 
 ### Missing Import
+
 ```
 unresolved import `crate::module`
 ```
+
 **Fix**: Fix the `use` path or declare the module (add Cargo.toml deps only for external crates)
 
 ### Lifetime Errors
+
 ```
 does not live long enough
 ```
+
 **Fix**: Use owned type or add lifetime annotation
 
 ### Trait Not Implemented
+
 ```
 the trait `X` is not implemented for `Y`
 ```
+
 **Fix**: Add `#[derive(Trait)]` or implement manually
 
 ## Fix Order
@@ -66,6 +76,7 @@ cargo test
 ## Verification
 
 After fixes:
+
 ```bash
 cargo check                  # Should succeed
 cargo clippy -- -D warnings  # No warnings allowed

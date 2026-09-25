@@ -49,25 +49,25 @@ export class AppError extends Error {
 
 export class NotFoundError extends AppError {
   constructor(resource: string, id: string) {
-    super(`${resource} not found: ${id}`, 'NOT_FOUND', 404)
+    super(`${resource} not found: ${id}`, "NOT_FOUND", 404)
   }
 }
 
 export class ValidationError extends AppError {
   constructor(message: string, details: { field: string; message: string }[]) {
-    super(message, 'VALIDATION_ERROR', 422, details)
+    super(message, "VALIDATION_ERROR", 422, details)
   }
 }
 
 export class UnauthorizedError extends AppError {
-  constructor(reason = 'Authentication required') {
-    super(reason, 'UNAUTHORIZED', 401)
+  constructor(reason = "Authentication required") {
+    super(reason, "UNAUTHORIZED", 401)
   }
 }
 
 export class RateLimitError extends AppError {
   constructor(public readonly retryAfterMs: number) {
-    super('Rate limit exceeded', 'RATE_LIMITED', 429)
+    super("Rate limit exceeded", "RATE_LIMITED", 429)
   }
 }
 ```
@@ -77,9 +77,7 @@ export class RateLimitError extends AppError {
 For operations where failure is expected and common (parsing, external calls):
 
 ```typescript
-type Result<T, E = AppError> =
-  | { ok: true; value: T }
-  | { ok: false; error: E }
+type Result<T, E = AppError> = { ok: true; value: T } | { ok: false; error: E }
 
 function ok<T>(value: T): Result<T> {
   return { ok: true, value }
@@ -93,17 +91,17 @@ function err<E>(error: E): Result<never, E> {
 async function fetchUser(id: string): Promise<Result<User>> {
   try {
     const user = await db.users.findUnique({ where: { id } })
-    if (!user) return err(new NotFoundError('User', id))
+    if (!user) return err(new NotFoundError("User", id))
     return ok(user)
   } catch (e) {
-    return err(new AppError('Database error', 'DB_ERROR'))
+    return err(new AppError("Database error", "DB_ERROR"))
   }
 }
 
-const result = await fetchUser('abc-123')
+const result = await fetchUser("abc-123")
 if (!result.ok) {
   // TypeScript knows result.error here
-  logger.error('Failed to fetch user', { error: result.error })
+  logger.error("Failed to fetch user", { error: result.error })
   return
 }
 // TypeScript knows result.value here
@@ -113,7 +111,7 @@ console.log(result.value.email)
 ### API Error Handler (Next.js / Express)
 
 ```typescript
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from "next/server"
 
 function handleApiError(error: unknown): NextResponse {
   // Known application error
@@ -135,10 +133,10 @@ function handleApiError(error: unknown): NextResponse {
     return NextResponse.json(
       {
         error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Request validation failed',
-          details: error.issues.map(i => ({
-            field: i.path.join('.'),
+          code: "VALIDATION_ERROR",
+          message: "Request validation failed",
+          details: error.issues.map((i) => ({
+            field: i.path.join("."),
             message: i.message,
           })),
         },
@@ -148,9 +146,9 @@ function handleApiError(error: unknown): NextResponse {
   }
 
   // Unexpected error — log details, return generic message
-  console.error('Unexpected error:', error)
+  console.error("Unexpected error:", error)
   return NextResponse.json(
-    { error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' } },
+    { error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred" } },
     { status: 500 },
   )
 }
@@ -308,16 +306,8 @@ interface RetryOptions {
   retryIf?: (error: unknown) => boolean
 }
 
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  options: RetryOptions = {},
-): Promise<T> {
-  const {
-    maxAttempts = 3,
-    baseDelayMs = 500,
-    maxDelayMs = 10_000,
-    retryIf = () => true,
-  } = options
+async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
+  const { maxAttempts = 3, baseDelayMs = 500, maxDelayMs = 10_000, retryIf = () => true } = options
 
   let lastError: unknown
 
@@ -330,7 +320,7 @@ async function withRetry<T>(
 
       const jitter = Math.random() * baseDelayMs
       const delay = Math.min(baseDelayMs * 2 ** (attempt - 1) + jitter, maxDelayMs)
-      await new Promise(resolve => setTimeout(resolve, delay))
+      await new Promise((resolve) => setTimeout(resolve, delay))
     }
   }
 
@@ -338,7 +328,7 @@ async function withRetry<T>(
 }
 
 // Usage: retry transient network errors, not 4xx
-const data = await withRetry(() => fetch('/api/data').then(r => r.json()), {
+const data = await withRetry(() => fetch("/api/data").then((r) => r.json()), {
   maxAttempts: 3,
   retryIf: (error) => !(error instanceof AppError && error.statusCode < 500),
 })
@@ -350,12 +340,12 @@ Map error codes to human-readable messages. Keep technical details out of user-v
 
 ```typescript
 const USER_ERROR_MESSAGES: Record<string, string> = {
-  NOT_FOUND: 'The requested item could not be found.',
-  UNAUTHORIZED: 'Please sign in to continue.',
+  NOT_FOUND: "The requested item could not be found.",
+  UNAUTHORIZED: "Please sign in to continue.",
   FORBIDDEN: "You don't have permission to do that.",
-  VALIDATION_ERROR: 'Please check your input and try again.',
-  RATE_LIMITED: 'Too many requests. Please wait a moment and try again.',
-  INTERNAL_ERROR: 'Something went wrong on our end. Please try again later.',
+  VALIDATION_ERROR: "Please check your input and try again.",
+  RATE_LIMITED: "Too many requests. Please wait a moment and try again.",
+  INTERNAL_ERROR: "Something went wrong on our end. Please try again later.",
 }
 
 export function getUserMessage(code: string): string {

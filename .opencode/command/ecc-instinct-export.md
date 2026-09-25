@@ -15,21 +15,25 @@ Export instincts from the continuous-learning-v2 system.
 ## Export Options
 
 ### Export All
+
 ```
 /instinct-export
 ```
 
 ### Export High Confidence Only
+
 ```
 /instinct-export --min-confidence 0.8
 ```
 
 ### Export by Category
+
 ```
 /instinct-export --category coding
 ```
 
 ### Export to Specific Path
+
 ```
 /instinct-export --output ./my-instincts.json
 ```
@@ -85,6 +89,7 @@ Top Instincts (by confidence):
 ## Sharing
 
 After export:
+
 - Share JSON file directly
 - Upload to team repository
 - Publish to instinct registry

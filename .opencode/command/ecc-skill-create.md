@@ -18,6 +18,7 @@ Analyze git history to generate Claude Code skills: $ARGUMENTS
 ## Analysis Process
 
 ### Step 1: Gather Commit Data
+
 ```bash
 # Recent commits
 git log --oneline -100
@@ -32,36 +33,42 @@ git log --pretty=format: --name-only | sort | uniq -c | sort -rn | head -20
 ### Step 2: Identify Patterns
 
 **Commit Message Patterns**:
+
 - Common prefixes (feat, fix, refactor)
 - Naming conventions
 - Co-author patterns
 
 **Code Patterns**:
+
 - File structure conventions
 - Import organization
 - Error handling approaches
 
 **Review Patterns**:
+
 - Common review feedback
 - Recurring fix types
 - Quality gates
 
 ### Step 3: Generate SKILL.md
 
-```markdown
+````markdown
 # [Skill Name]
 
 ## Overview
+
 [What this skill teaches]
 
 ## Patterns
 
 ### Pattern 1: [Name]
+
 - When to use
 - Implementation
 - Example
 
 ### Pattern 2: [Name]
+
 - When to use
 - Implementation
 - Example
@@ -80,15 +87,19 @@ git log --pretty=format: --name-only | sort | uniq -c | sort -rn | head -20
 ## Examples
 
 ### Good Example
+
 ```[language]
 // Code example
 ```
+````
 
 ### Anti-pattern
+
 ```[language]
 // What not to do
 ```
-```
+
+````
 
 ### Step 4: Generate Instincts
 
@@ -105,11 +116,12 @@ For continuous-learning-v2:
     }
   ]
 }
-```
+````
 
 ## Output
 
 Creates:
+
 - `skills/[name]/SKILL.md` - Skill documentation
 - `skills/[name]/instincts.json` - Instinct collection
 

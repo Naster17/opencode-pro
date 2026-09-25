@@ -36,11 +36,11 @@ No competitor does all three. Most stop at deny.
 
 Two independent A/B tests, identical agents, same task:
 
-| Task | Gated | Ungated | Gap |
-| --- | --- | --- | --- |
-| Analytics module | 8.0/10 | 6.5/10 | +1.5 |
-| Webhook validator | 10.0/10 | 7.0/10 | +3.0 |
-| **Average** | **9.0** | **6.75** | **+2.25** |
+| Task              | Gated   | Ungated  | Gap       |
+| ----------------- | ------- | -------- | --------- |
+| Analytics module  | 8.0/10  | 6.5/10   | +1.5      |
+| Webhook validator | 10.0/10 | 7.0/10   | +3.0      |
+| **Average**       | **9.0** | **6.75** | **+2.25** |
 
 Both agents produce code that runs and passes tests. The difference is design depth.
 
@@ -112,13 +112,13 @@ command after presenting facts never re-triggers the gate.
 The variables in this table do **not** — each narrows one behaviour while the
 load-bearing destructive-Bash checks keep running:
 
-| Variable | Default | Effect |
-|---|---|---|
-| `GATEGUARD_BASH_ROUTINE_DISABLED` | unset (gate on) | Disables the **routine-Bash** gate only. The destructive-Bash gate (`rm -rf`, `git reset --hard`, `drop table`, `dd if=`, …) is unaffected. |
-| `GATEGUARD_EXEMPT_GLOBS` | unset (no exemptions) | Comma-separated globs; a matching Edit/Write/MultiEdit target skips first-touch fact-forcing. Intended for low-import-value trees (tests, generated artifacts, scratch dirs) where "who imports this / what schema" carries no signal. |
-| `GATEGUARD_FACT_FORCE_FULL_DENIALS` | `3` | How many denials emit the full four-fact block before later ones condense to a single line. `0` condenses from the very first denial. |
-| `GATEGUARD_BASH_EXTRA_DESTRUCTIVE` | unset | Extra destructive-command patterns, as regex source, added to the built-in set. A malformed regex is treated as unset (built-ins still apply) and logged once to stderr. |
-| `GATEGUARD_STATE_DIR` | `~/.gateguard` | Where per-session gate state is kept. If state cannot be persisted the gate allows the operation rather than looping, and names this variable in the warning. |
+| Variable                            | Default               | Effect                                                                                                                                                                                                                                 |
+| ----------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GATEGUARD_BASH_ROUTINE_DISABLED`   | unset (gate on)       | Disables the **routine-Bash** gate only. The destructive-Bash gate (`rm -rf`, `git reset --hard`, `drop table`, `dd if=`, …) is unaffected.                                                                                            |
+| `GATEGUARD_EXEMPT_GLOBS`            | unset (no exemptions) | Comma-separated globs; a matching Edit/Write/MultiEdit target skips first-touch fact-forcing. Intended for low-import-value trees (tests, generated artifacts, scratch dirs) where "who imports this / what schema" carries no signal. |
+| `GATEGUARD_FACT_FORCE_FULL_DENIALS` | `3`                   | How many denials emit the full four-fact block before later ones condense to a single line. `0` condenses from the very first denial.                                                                                                  |
+| `GATEGUARD_BASH_EXTRA_DESTRUCTIVE`  | unset                 | Extra destructive-command patterns, as regex source, added to the built-in set. A malformed regex is treated as unset (built-ins still apply) and logged once to stderr.                                                               |
+| `GATEGUARD_STATE_DIR`               | `~/.gateguard`        | Where per-session gate state is kept. If state cannot be persisted the gate allows the operation rather than looping, and names this variable in the warning.                                                                          |
 
 `GATEGUARD_BASH_ROUTINE_DISABLED` accepts `1`, `true`, `on`, `enabled`,
 `enable`, or `yes` (case- and whitespace-insensitive); any other value
@@ -126,10 +126,10 @@ leaves the gate on.
 
 #### Turning the gate off completely
 
-| Variable | Effect |
-|---|---|
-| `ECC_GATEGUARD=off` | Disables GateGuard for the session. Accepts `0`, `false`, `off`, `disabled`, or `disable`. |
-| `GATEGUARD_DISABLED=1` | Same effect. Recognises `1` only — the spellings above do **not** apply here. |
+| Variable               | Effect                                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------------ |
+| `ECC_GATEGUARD=off`    | Disables GateGuard for the session. Accepts `0`, `false`, `off`, `disabled`, or `disable`. |
+| `GATEGUARD_DISABLED=1` | Same effect. Recognises `1` only — the spellings above do **not** apply here.              |
 
 For hook-level control, keep using `ECC_DISABLED_HOOKS` with the GateGuard hook ID.
 

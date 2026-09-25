@@ -19,6 +19,7 @@ You are an expert end-to-end testing specialist. Your mission is to ensure criti
 ## Playwright Testing Framework
 
 ### Test Commands
+
 ```bash
 # Run all E2E tests
 npx playwright test
@@ -53,6 +54,7 @@ npx playwright test --project=webkit
 ## E2E Testing Workflow
 
 ### 1. Test Planning Phase
+
 ```
 a) Identify critical user journeys
    - Authentication flows (login, logout, registration)
@@ -72,6 +74,7 @@ c) Prioritize by risk
 ```
 
 ### 2. Test Creation Phase
+
 ```
 For each user journey:
 
@@ -98,7 +101,7 @@ For each user journey:
 
 ```typescript
 // pages/MarketsPage.ts
-import { Page, Locator } from '@playwright/test'
+import { Page, Locator } from "@playwright/test"
 
 export class MarketsPage {
   readonly page: Page
@@ -116,14 +119,14 @@ export class MarketsPage {
   }
 
   async goto() {
-    await this.page.goto('/markets')
-    await this.page.waitForLoadState('networkidle')
+    await this.page.goto("/markets")
+    await this.page.waitForLoadState("networkidle")
   }
 
   async searchMarkets(query: string) {
     await this.searchInput.fill(query)
-    await this.page.waitForResponse(resp => resp.url().includes('/api/markets/search'))
-    await this.page.waitForLoadState('networkidle')
+    await this.page.waitForResponse((resp) => resp.url().includes("/api/markets/search"))
+    await this.page.waitForLoadState("networkidle")
   }
 
   async getMarketCount() {
@@ -136,7 +139,7 @@ export class MarketsPage {
 
   async filterByStatus(status: string) {
     await this.filterDropdown.selectOption(status)
-    await this.page.waitForLoadState('networkidle')
+    await this.page.waitForLoadState("networkidle")
   }
 }
 ```
@@ -145,10 +148,10 @@ export class MarketsPage {
 
 ```typescript
 // tests/e2e/markets/search.spec.ts
-import { test, expect } from '@playwright/test'
-import { MarketsPage } from '../../pages/MarketsPage'
+import { test, expect } from "@playwright/test"
+import { MarketsPage } from "../../pages/MarketsPage"
 
-test.describe('Market Search', () => {
+test.describe("Market Search", () => {
   let marketsPage: MarketsPage
 
   test.beforeEach(async ({ page }) => {
@@ -156,12 +159,12 @@ test.describe('Market Search', () => {
     await marketsPage.goto()
   })
 
-  test('should search markets by keyword', async ({ page }) => {
+  test("should search markets by keyword", async ({ page }) => {
     // Arrange
     await expect(page).toHaveTitle(/Markets/)
 
     // Act
-    await marketsPage.searchMarkets('trump')
+    await marketsPage.searchMarkets("trump")
 
     // Assert
     const marketCount = await marketsPage.getMarketCount()
@@ -172,12 +175,12 @@ test.describe('Market Search', () => {
     await expect(firstMarket).toContainText(/trump/i)
 
     // Take screenshot for verification
-    await page.screenshot({ path: 'artifacts/search-results.png' })
+    await page.screenshot({ path: "artifacts/search-results.png" })
   })
 
-  test('should handle no results gracefully', async ({ page }) => {
+  test("should handle no results gracefully", async ({ page }) => {
     // Act
-    await marketsPage.searchMarkets('xyznonexistentmarket123')
+    await marketsPage.searchMarkets("xyznonexistentmarket123")
 
     // Assert
     await expect(page.locator('[data-testid="no-results"]')).toBeVisible()
@@ -190,6 +193,7 @@ test.describe('Market Search', () => {
 ## Flaky Test Management
 
 ### Identifying Flaky Tests
+
 ```bash
 # Run test multiple times to check stability
 npx playwright test tests/markets/search.spec.ts --repeat-each=10
@@ -199,17 +203,18 @@ npx playwright test tests/markets/search.spec.ts --retries=3
 ```
 
 ### Quarantine Pattern
+
 ```typescript
 // Mark flaky test for quarantine
-test('flaky: market search with complex query', async ({ page }) => {
-  test.fixme(true, 'Test is flaky - Issue #123')
+test("flaky: market search with complex query", async ({ page }) => {
+  test.fixme(true, "Test is flaky - Issue #123")
 
   // Test code here...
 })
 
 // Or use conditional skip
-test('market search with complex query', async ({ page }) => {
-  test.skip(process.env.CI, 'Test is flaky in CI - Issue #123')
+test("market search with complex query", async ({ page }) => {
+  test.skip(process.env.CI, "Test is flaky in CI - Issue #123")
 
   // Test code here...
 })
@@ -218,6 +223,7 @@ test('market search with complex query', async ({ page }) => {
 ### Common Flakiness Causes & Fixes
 
 **1. Race Conditions**
+
 ```typescript
 // FLAKY: Don't assume element is ready
 await page.click('[data-testid="button"]')
@@ -227,38 +233,41 @@ await page.locator('[data-testid="button"]').click() // Built-in auto-wait
 ```
 
 **2. Network Timing**
+
 ```typescript
 // FLAKY: Arbitrary timeout
 await page.waitForTimeout(5000)
 
 // STABLE: Wait for specific condition
-await page.waitForResponse(resp => resp.url().includes('/api/markets'))
+await page.waitForResponse((resp) => resp.url().includes("/api/markets"))
 ```
 
 **3. Animation Timing**
+
 ```typescript
 // FLAKY: Click during animation
 await page.click('[data-testid="menu-item"]')
 
 // STABLE: Wait for animation to complete
-await page.locator('[data-testid="menu-item"]').waitFor({ state: 'visible' })
-await page.waitForLoadState('networkidle')
+await page.locator('[data-testid="menu-item"]').waitFor({ state: "visible" })
+await page.waitForLoadState("networkidle")
 await page.click('[data-testid="menu-item"]')
 ```
 
 ## Artifact Management
 
 ### Screenshot Strategy
+
 ```typescript
 // Take screenshot at key points
-await page.screenshot({ path: 'artifacts/after-login.png' })
+await page.screenshot({ path: "artifacts/after-login.png" })
 
 // Full page screenshot
-await page.screenshot({ path: 'artifacts/full-page.png', fullPage: true })
+await page.screenshot({ path: "artifacts/full-page.png", fullPage: true })
 
 // Element screenshot
 await page.locator('[data-testid="chart"]').screenshot({
-  path: 'artifacts/chart.png'
+  path: "artifacts/chart.png",
 })
 ```
 
@@ -282,6 +291,7 @@ await page.locator('[data-testid="chart"]').screenshot({
 ## Failed Tests
 
 ### 1. search with special characters
+
 **File:** `tests/e2e/markets/search.spec.ts:45`
 **Error:** Expected element to be visible, but was not found
 **Screenshot:** artifacts/search-special-chars-failed.png
@@ -291,14 +301,15 @@ await page.locator('[data-testid="chart"]').screenshot({
 ## Artifacts
 
 - HTML Report: playwright-report/index.html
-- Screenshots: artifacts/*.png
-- Videos: artifacts/videos/*.webm
-- Traces: artifacts/*.zip
+- Screenshots: artifacts/\*.png
+- Videos: artifacts/videos/\*.webm
+- Traces: artifacts/\*.zip
 ```
 
 ## Success Metrics
 
 After E2E test run:
+
 - All critical journeys passing (100%)
 - Pass rate > 95% overall
 - Flaky rate < 5%

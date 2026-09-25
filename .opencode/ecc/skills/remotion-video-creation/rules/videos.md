@@ -22,12 +22,12 @@ pnpm exec remotion add @remotion/media # If project uses pnpm
 Use `<Video>` from `@remotion/media` to embed videos into your composition.
 
 ```tsx
-import { Video } from "@remotion/media";
-import { staticFile } from "remotion";
+import { Video } from "@remotion/media"
+import { staticFile } from "remotion"
 
 export const MyComposition = () => {
-  return <Video src={staticFile("video.mp4")} />;
-};
+  return <Video src={staticFile("video.mp4")} />
+}
 ```
 
 Remote URLs are also supported:
@@ -41,7 +41,7 @@ Remote URLs are also supported:
 Use `trimBefore` and `trimAfter` to remove portions of the video. Values are in seconds.
 
 ```tsx
-const { fps } = useVideoConfig();
+const { fps } = useVideoConfig()
 
 return (
   <Video
@@ -49,7 +49,7 @@ return (
     trimBefore={2 * fps} // Skip the first 2 seconds
     trimAfter={10 * fps} // End at the 10 second mark
   />
-);
+)
 ```
 
 ## Delaying
@@ -57,16 +57,16 @@ return (
 Wrap the video in a `<Sequence>` to delay when it appears:
 
 ```tsx
-import { Sequence, staticFile } from "remotion";
-import { Video } from "@remotion/media";
+import { Sequence, staticFile } from "remotion"
+import { Video } from "@remotion/media"
 
-const { fps } = useVideoConfig();
+const { fps } = useVideoConfig()
 
 return (
   <Sequence from={1 * fps}>
     <Video src={staticFile("video.mp4")} />
   </Sequence>
-);
+)
 ```
 
 The video will appear after 1 second.
@@ -100,18 +100,16 @@ Set a static volume (0 to 1):
 Or use a callback for dynamic volume based on the current frame:
 
 ```tsx
-import { interpolate } from "remotion";
+import { interpolate } from "remotion"
 
-const { fps } = useVideoConfig();
+const { fps } = useVideoConfig()
 
 return (
   <Video
     src={staticFile("video.mp4")}
-    volume={(f) =>
-      interpolate(f, [0, 1 * fps], [0, 1], { extrapolateRight: "clamp" })
-    }
+    volume={(f) => interpolate(f, [0, 1 * fps], [0, 1], { extrapolateRight: "clamp" })}
   />
-);
+)
 ```
 
 Use `muted` to silence the video entirely:

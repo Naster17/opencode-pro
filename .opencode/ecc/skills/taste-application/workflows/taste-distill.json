@@ -7,9 +7,7 @@
       "output": {
         "type": "display",
         "id": "output",
-        "depends": [
-          "node-vision"
-        ],
+        "depends": ["node-vision"],
         "input": {},
         "metadata": {
           "position": {
@@ -24,9 +22,7 @@
       "node-reference1": {
         "type": "run",
         "id": "node-reference1",
-        "depends": [
-          "input"
-        ],
+        "depends": ["input"],
         "metadata": {
           "position": {
             "x": 1000,
@@ -42,12 +38,7 @@
       "node-vision": {
         "type": "run",
         "id": "node-vision",
-        "depends": [
-          "node-reference1",
-          "node-reference2",
-          "node-reference3",
-          "input"
-        ],
+        "depends": ["node-reference1", "node-reference2", "node-reference3", "input"],
         "metadata": {
           "position": {
             "x": 1900,
@@ -69,9 +60,7 @@
       "node-reference3": {
         "type": "run",
         "id": "node-reference3",
-        "depends": [
-          "input"
-        ],
+        "depends": ["input"],
         "metadata": {
           "position": {
             "x": 1000,
@@ -87,9 +76,7 @@
       "node-reference2": {
         "type": "run",
         "id": "node-reference2",
-        "depends": [
-          "input"
-        ],
+        "depends": ["input"],
         "metadata": {
           "position": {
             "x": 1000,

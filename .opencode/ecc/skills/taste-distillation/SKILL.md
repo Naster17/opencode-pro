@@ -42,8 +42,8 @@ for free.
 So the split is: **the model supplies content, motion and lighting structure; the
 pack supplies the look.** Colour words in a generation prompt are worse than
 useless — they cost money and push the render away from the neutral base the LUT
-wants. Say so explicitly in the prompt: *"Colour: none. Render neutral. Grading
-is applied afterwards."*
+wants. Say so explicitly in the prompt: _"Colour: none. Render neutral. Grading
+is applied afterwards."_
 
 ## What a Pack Contains
 
@@ -161,7 +161,7 @@ it is no longer an independent check on them.
 
 - A LUT can only encode a **per-pixel RGB function**. Anything
   distribution-dependent (histogram matching, percentile anchors) must be reduced
-  to a constant *before* baking, or it silently measures the uniform LUT grid
+  to a constant _before_ baking, or it silently measures the uniform LUT grid
   instead of the footage.
 - `cv2.cvtColor(LAB2RGB)` **clamps internally**, so an out-of-gamut test using it
   reports 0%. Convert Lab→linear sRGB by hand; a real measurement was 83.3% OOG.
@@ -172,13 +172,13 @@ it is no longer an independent check on them.
 
 ## Anti-Patterns
 
-| Don't | Why |
-|---|---|
+| Don't                               | Why                                                                                    |
+| ----------------------------------- | -------------------------------------------------------------------------------------- |
 | Tune against synthetic test footage | Cost four separate wrong conclusions on one project; real footage overturned every one |
-| Trust MAE alone | 1.88 MAE looked like success on a visibly broken frame |
-| Use mean/std for chroma | Right-skewed; pushes ~3x too hard |
-| Compare only endpoint zones | Both ends are near-neutral by construction |
-| Describe the look and stop | The spec is for content and structure; the pack is for colour |
+| Trust MAE alone                     | 1.88 MAE looked like success on a visibly broken frame                                 |
+| Use mean/std for chroma             | Right-skewed; pushes ~3x too hard                                                      |
+| Compare only endpoint zones         | Both ends are near-neutral by construction                                             |
+| Describe the look and stop          | The spec is for content and structure; the pack is for colour                          |
 
 ## Handoff
 

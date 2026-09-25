@@ -81,6 +81,7 @@ key or token in arguments, tracked files, MCP results, logs, or chat.
 
    This routes the ticket to the desk for human review. It does not move funds
    or reserve capacity. Do not accept without explicit buyer authority.
+
 7. Run `ecc ito logout` when the user explicitly asks to revoke this device.
    The canonical CLI keeps the local credential when remote revocation fails so
    the operator can retry; never delete the token manually as a substitute.
@@ -124,9 +125,7 @@ path:
   "mcpServers": {
     "ito-compute": {
       "command": "node",
-      "args": [
-        "/absolute/path/to/ito-cloud-runtime/cli/ito-compute-cli/dist/bin/ito-mcp.js"
-      ]
+      "args": ["/absolute/path/to/ito-cloud-runtime/cli/ito-compute-cli/dist/bin/ito-mcp.js"]
     }
   }
 }

@@ -10,6 +10,7 @@ metadata:
 Use this skill when the real problem is not a missing ping. The real problem is a fragmented notification system.
 
 The job is to turn scattered events into one operator surface with:
+
 - clear severity
 - clear ownership
 - clear routing
@@ -26,6 +27,7 @@ The job is to turn scattered events into one operator surface with:
 ## Preferred Surface
 
 Start from what already exists:
+
 - GitHub issues, PRs, reviews, comments, and CI
 - Linear issue/project movement
 - local hook events and session lifecycle signals
@@ -60,12 +62,12 @@ The goal is fewer, better notifications.
 
 ## Default Severity Model
 
-| Class | Examples | Default handling |
-| --- | --- | --- |
-| Critical | broken default-branch CI, security issue, blocked release, failed deploy | interrupt now |
-| High | review requested, failing PR, owner-blocking handoff | same-day alert |
-| Medium | issue state changes, notable comments, backlog movement | digest or queue |
-| Low | repeat successes, routine churn, redundant lifecycle markers | suppress or fold |
+| Class    | Examples                                                                 | Default handling |
+| -------- | ------------------------------------------------------------------------ | ---------------- |
+| Critical | broken default-branch CI, security issue, blocked release, failed deploy | interrupt now    |
+| High     | review requested, failing PR, owner-blocking handoff                     | same-day alert   |
+| Medium   | issue state changes, notable comments, backlog movement                  | digest or queue  |
+| Low      | repeat successes, routine churn, redundant lifecycle markers             | suppress or fold |
 
 If the workspace has no severity model, build one before proposing automation.
 
@@ -74,6 +76,7 @@ If the workspace has no severity model, build one before proposing automation.
 ### 1. Inventory the current surface
 
 List:
+
 - event sources
 - current channels
 - existing hooks/scripts that emit alerts
@@ -85,11 +88,13 @@ Call out what ECC already owns.
 ### 2. Decide what deserves interruption
 
 For each event family, answer:
+
 - who needs to know?
 - how fast do they need to know?
 - should this interrupt, batch, or just log?
 
 Use these defaults:
+
 - interrupt for release, CI, security, and owner-blocking events
 - digest for medium-signal updates
 - log-only for telemetry and low-signal lifecycle markers
@@ -97,12 +102,14 @@ Use these defaults:
 ### 3. Collapse duplicates before adding channels
 
 Look for:
+
 - the same PR event appearing in GitHub, Linear, and local logs
 - repeated hook notifications for the same failure
 - comments or status churn that should be summarized instead of forwarded raw
 - channels that duplicate each other without adding a better action path
 
 Prefer:
+
 - one canonical summary
 - one owner
 - one primary channel
@@ -111,6 +118,7 @@ Prefer:
 ### 4. Design the ECC-native workflow
 
 For each real notification need, define:
+
 - **source**
 - **gate**
 - **shape**: immediate alert, digest, queue, or dashboard-only
@@ -118,6 +126,7 @@ For each real notification need, define:
 - **action**
 
 If ECC already has the primitive, prefer:
+
 - a skill for operator triage
 - a hook for automatic emission/enforcement
 - an agent for delegated classification
@@ -126,6 +135,7 @@ If ECC already has the primitive, prefer:
 ### 5. Return an action-biased design
 
 End with:
+
 - what to keep
 - what to suppress
 - what to merge

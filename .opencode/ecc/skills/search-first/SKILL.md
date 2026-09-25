@@ -12,6 +12,7 @@ Systematizes the "search for existing solutions before implementing" workflow.
 ## Trigger
 
 Use this skill when:
+
 - Starting a new feature that likely has existing solutions
 - Adding a dependency or integration
 - The user asks "add X functionality" and you're about to write code
@@ -53,12 +54,12 @@ Use this skill when:
 
 ## Decision Matrix
 
-| Signal | Action |
-|--------|--------|
-| Exact match, well-maintained, MIT/Apache | **Adopt** — install and use directly |
-| Partial match, good foundation | **Extend** — install + write thin wrapper |
-| Multiple weak matches | **Compose** — combine 2-3 small packages |
-| Nothing suitable found | **Build** — write custom, but informed by research |
+| Signal                                   | Action                                             |
+| ---------------------------------------- | -------------------------------------------------- |
+| Exact match, well-maintained, MIT/Apache | **Adopt** — install and use directly               |
+| Partial match, good foundation           | **Extend** — install + write thin wrapper          |
+| Multiple weak matches                    | **Compose** — combine 2-3 small packages           |
+| Nothing suitable found                   | **Build** — write custom, but informed by research |
 
 ## How to Use
 
@@ -67,13 +68,13 @@ Use this skill when:
 This is agent guidance, not an executable setup script. Check only the channels
 that are relevant to the task and project in front of you.
 
-| Channel | Check | If missing |
-|---------|-------|------------|
-| Repository search | `rg --files` and targeted `rg` queries | State that only visible files were inspected |
-| Package registry | `npm --version`, `python -m pip --version`, or project package manager | Use web/docs search and avoid claiming registry coverage |
-| GitHub CLI | `gh auth status` | Use public web or local git history only |
-| MCP/docs tools | Available tool list or local MCP config | Fall back to official docs/web search |
-| Skills directory | `ls ~/.claude/skills ~/.codex/skills` where applicable | Say no local skill catalog was available |
+| Channel           | Check                                                                  | If missing                                               |
+| ----------------- | ---------------------------------------------------------------------- | -------------------------------------------------------- |
+| Repository search | `rg --files` and targeted `rg` queries                                 | State that only visible files were inspected             |
+| Package registry  | `npm --version`, `python -m pip --version`, or project package manager | Use web/docs search and avoid claiming registry coverage |
+| GitHub CLI        | `gh auth status`                                                       | Use public web or local git history only                 |
+| MCP/docs tools    | Available tool list or local MCP config                                | Fall back to official docs/web search                    |
+| Skills directory  | `ls ~/.claude/skills ~/.codex/skills` where applicable                 | Say no local skill catalog was available                 |
 
 ### Quick Mode (inline)
 
@@ -106,41 +107,51 @@ tool name exposed by the active harness.
 ## Search Shortcuts by Category
 
 ### Development Tooling
+
 - Linting → `eslint`, `ruff`, `textlint`, `markdownlint`
 - Formatting → `prettier`, `black`, `gofmt`
 - Testing → `jest`, `pytest`, `go test`
 - Pre-commit → `husky`, `lint-staged`, `pre-commit`
 
 ### AI/LLM Integration
+
 - Claude SDK → Context7 for latest docs
 - Prompt management → Check MCP servers
 - Document processing → `unstructured`, `pdfplumber`, `mammoth`
 
 ### Data & APIs
+
 - HTTP clients → `httpx` (Python), `ky`/`undici` (Node)
 - Validation → `zod` (TS), `pydantic` (Python)
 - Database → Check for MCP servers first
 
 ### Content & Publishing
+
 - Markdown processing → `remark`, `unified`, `markdown-it`
 - Image optimization → `sharp`, `imagemin`
 
 ## Integration Points
 
 ### With planner agent
+
 The planner should invoke researcher before Phase 1 (Architecture Review):
+
 - Researcher identifies available tools
 - Planner incorporates them into the implementation plan
 - Avoids "reinventing the wheel" in the plan
 
 ### With architect agent
+
 The architect should consult researcher for:
+
 - Technology stack decisions
 - Integration pattern discovery
 - Existing reference architectures
 
 ### With iterative-retrieval skill
+
 Combine for progressive discovery:
+
 - Cycle 1: Broad search (npm, PyPI, MCP)
 - Cycle 2: Evaluate top candidates in detail
 - Cycle 3: Test compatibility with project constraints
@@ -148,6 +159,7 @@ Combine for progressive discovery:
 ## Examples
 
 ### Example 1: "Add dead link checking"
+
 ```
 Need: Check markdown files for broken links
 Search: npm "markdown dead link checker"
@@ -157,6 +169,7 @@ Result: Zero custom code, battle-tested solution
 ```
 
 ### Example 2: "Add HTTP client wrapper"
+
 ```
 Need: Resilient HTTP client with retries and timeout handling
 Search: npm "http client retry", PyPI "httpx retry"
@@ -166,6 +179,7 @@ Result: Zero custom code, production-proven libraries
 ```
 
 ### Example 3: "Add config file linter"
+
 ```
 Need: Validate project config files against a schema
 Search: npm "config linter schema", "json schema validator cli"

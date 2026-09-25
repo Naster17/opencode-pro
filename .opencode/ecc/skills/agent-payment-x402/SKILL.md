@@ -17,15 +17,15 @@ Use when: your agent needs to pay for an API call, purchase a service, settle wi
 
 Choose the integration path based on whether your agent is buying access to a paid API or charging others for one:
 
-| Need | Recommended path |
-|------|------------------|
-| Agent pays a 402-gated API on Base or another agentwallet-supported chain | Use `agentwallet-sdk` as an MCP payment server with strict spending policy |
-| Agent pays a 402-gated API on X Layer | Use OKX Agent Payments Protocol from `okx/onchainos-skills`; `okx-x402-payment` is a deprecated legacy alias |
-| TypeScript API charges agents | Use OKX Payments TypeScript seller SDK docs for Express, Hono, Fastify, or Next.js |
-| Go API charges agents | Use OKX Payments Go seller SDK docs for Gin, Echo, or `net/http` |
-| Rust API charges agents | Use OKX Payments Rust seller SDK docs for Axum |
-| Java API charges agents | Use OKX Payments Java seller SDK docs for Spring Boot 2/3, Java EE, or Jakarta |
-| Python API charges agents | Check the current OKX Payments repository before implementation; a Python seller guide may not be available |
+| Need                                                                      | Recommended path                                                                                             |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Agent pays a 402-gated API on Base or another agentwallet-supported chain | Use `agentwallet-sdk` as an MCP payment server with strict spending policy                                   |
+| Agent pays a 402-gated API on X Layer                                     | Use OKX Agent Payments Protocol from `okx/onchainos-skills`; `okx-x402-payment` is a deprecated legacy alias |
+| TypeScript API charges agents                                             | Use OKX Payments TypeScript seller SDK docs for Express, Hono, Fastify, or Next.js                           |
+| Go API charges agents                                                     | Use OKX Payments Go seller SDK docs for Gin, Echo, or `net/http`                                             |
+| Rust API charges agents                                                   | Use OKX Payments Rust seller SDK docs for Axum                                                               |
+| Java API charges agents                                                   | Use OKX Payments Java seller SDK docs for Spring Boot 2/3, Java EE, or Jakarta                               |
+| Python API charges agents                                                 | Check the current OKX Payments repository before implementation; a Python seller guide may not be available  |
 
 ## Supported Networks
 
@@ -35,16 +35,20 @@ Choose the integration path based on whether your agent is buying access to a pa
 ## How It Works
 
 ### x402 Protocol
+
 x402 extends HTTP 402 (Payment Required) into a machine-negotiable flow. When a server returns `402`, the agent's payment tool negotiates price, checks budget, signs a transaction, and retries only inside the policy and confirmation boundary set by the orchestrator.
 
 ### Spending Controls
+
 Every payment tool call enforces a `SpendingPolicy`:
+
 - **Per-task budget** — max spend for a single agent action
 - **Per-session budget** — cumulative limit across an entire session
 - **Allowlisted recipients** — restrict which addresses/services the agent can pay
 - **Rate limits** — max transactions per minute/hour
 
 ### Non-Custodial Wallets
+
 Agents hold their own keys via ERC-4337 smart accounts. The orchestrator sets policy before delegation; the agent can only spend within bounds. No pooled funds, no custodial risk.
 
 ## MCP Integration
@@ -68,12 +72,12 @@ The payment layer exposes standard MCP tools that slot into any Claude Code or a
 
 ### Available Tools (agent-callable)
 
-| Tool | Purpose |
-|------|---------|
-| `get_balance` | Check agent wallet balance |
-| `send_payment` | Send payment to address or ENS |
-| `check_spending` | Query remaining budget |
-| `list_transactions` | Audit trail of all payments |
+| Tool                | Purpose                        |
+| ------------------- | ------------------------------ |
+| `get_balance`       | Check agent wallet balance     |
+| `send_payment`      | Send payment to address or ENS |
+| `check_spending`    | Query remaining budget         |
+| `list_transactions` | Audit trail of all payments    |
 
 > **Note**: Spending policy is set by the **orchestrator** before delegating to the agent — not by the agent itself. This prevents agents from escalating their own spending limits. Configure policy via `set_policy` in your orchestration layer or pre-task hook, never as an agent-callable tool.
 
@@ -90,12 +94,12 @@ For buyer-side agent flows:
 
 For seller-side API flows, fetch the latest language-specific guide before generating code:
 
-| Runtime | Current guide |
-|---------|---------------|
+| Runtime    | Current guide                                                              |
+| ---------- | -------------------------------------------------------------------------- |
 | TypeScript | `https://raw.githubusercontent.com/okx/payments/main/typescript/SELLER.md` |
-| Go | `https://raw.githubusercontent.com/okx/payments/main/go/x402/SELLER.md` |
-| Rust | `https://raw.githubusercontent.com/okx/payments/main/rust/x402/SELLER.md` |
-| Java | `https://raw.githubusercontent.com/okx/payments/main/java/SELLER.md` |
+| Go         | `https://raw.githubusercontent.com/okx/payments/main/go/x402/SELLER.md`    |
+| Rust       | `https://raw.githubusercontent.com/okx/payments/main/rust/x402/SELLER.md`  |
+| Java       | `https://raw.githubusercontent.com/okx/payments/main/java/SELLER.md`       |
 
 Do not copy examples from older docs without checking the current OKX repository. Current OKX guidance uses `okx-agent-payments-protocol` as the dispatcher, and Java seller docs are now available.
 
@@ -108,15 +112,15 @@ When building an orchestrator that calls the agentpay MCP server, enforce budget
 > **Prerequisites**: Install the package before adding the MCP config — `npx` without `-y` will prompt for confirmation in non-interactive environments, causing the server to hang: `npm install -g agentwallet-sdk@6.0.0`
 
 ```typescript
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 async function main() {
   // 1. Validate credentials before constructing the transport.
   //    A missing key must fail immediately — never let the subprocess start without auth.
-  const walletKey = process.env.WALLET_PRIVATE_KEY;
+  const walletKey = process.env.WALLET_PRIVATE_KEY
   if (!walletKey) {
-    throw new Error("WALLET_PRIVATE_KEY is not set — refusing to start payment server");
+    throw new Error("WALLET_PRIVATE_KEY is not set — refusing to start payment server")
   }
 
   // Connect to the agentpay MCP server via stdio transport.
@@ -130,80 +134,70 @@ async function main() {
       NODE_ENV: process.env.NODE_ENV ?? "production",
       WALLET_PRIVATE_KEY: walletKey,
     },
-  });
-  const agentpay = new Client({ name: "orchestrator", version: "1.0.0" });
-  await agentpay.connect(transport);
+  })
+  const agentpay = new Client({ name: "orchestrator", version: "1.0.0" })
+  await agentpay.connect(transport)
 
   // 2. Set spending policy before delegating to the agent.
   //    Always verify success — a silent failure means no controls are active.
   const policyResult = await agentpay.callTool({
     name: "set_policy",
     arguments: {
-      per_task_budget: 0.50,
-      per_session_budget: 5.00,
+      per_task_budget: 0.5,
+      per_session_budget: 5.0,
       allowlisted_recipients: ["api.example.com"],
     },
-  });
+  })
   if (policyResult.isError) {
-    throw new Error(
-      `Failed to set spending policy — do not delegate: ${JSON.stringify(policyResult.content)}`
-    );
+    throw new Error(`Failed to set spending policy — do not delegate: ${JSON.stringify(policyResult.content)}`)
   }
 
   // 3. Use preToolCheck before any paid action
-  await preToolCheck(agentpay, 0.01);
+  await preToolCheck(agentpay, 0.01)
 }
 
 // Pre-tool hook: fail-closed budget enforcement with four distinct error paths.
 async function preToolCheck(agentpay: Client, apiCost: number): Promise<void> {
   // Path 1: Reject invalid input (NaN/Infinity bypass the < comparison)
   if (!Number.isFinite(apiCost) || apiCost < 0) {
-    throw new Error(`Invalid apiCost: ${apiCost} — action blocked`);
+    throw new Error(`Invalid apiCost: ${apiCost} — action blocked`)
   }
 
   // Path 2: Transport/connectivity failure
-  let result;
+  let result
   try {
-    result = await agentpay.callTool({ name: "check_spending" });
+    result = await agentpay.callTool({ name: "check_spending" })
   } catch (err) {
-    throw new Error(`Payment service unreachable — action blocked: ${err}`);
+    throw new Error(`Payment service unreachable — action blocked: ${err}`)
   }
 
   // Path 3: Tool returned an error (e.g., auth failure, wallet not initialised)
   if (result.isError) {
-    throw new Error(
-      `check_spending failed — action blocked: ${JSON.stringify(result.content)}`
-    );
+    throw new Error(`check_spending failed — action blocked: ${JSON.stringify(result.content)}`)
   }
 
   // Path 4: Parse and validate the response shape
-  let remaining: number;
+  let remaining: number
   try {
-    const parsed = JSON.parse(
-      (result.content as Array<{ text: string }>)[0].text
-    );
+    const parsed = JSON.parse((result.content as Array<{ text: string }>)[0].text)
     if (!Number.isFinite(parsed?.remaining)) {
-      throw new TypeError("missing or non-finite 'remaining' field");
+      throw new TypeError("missing or non-finite 'remaining' field")
     }
-    remaining = parsed.remaining;
+    remaining = parsed.remaining
   } catch (err) {
-    throw new Error(
-      `check_spending returned unexpected format — action blocked: ${err}`
-    );
+    throw new Error(`check_spending returned unexpected format — action blocked: ${err}`)
   }
 
   // Path 5: Budget exceeded
   if (remaining < apiCost) {
-    throw new Error(
-      `Budget exceeded: need $${apiCost} but only $${remaining} remaining`
-    );
+    throw new Error(`Budget exceeded: need $${apiCost} but only $${remaining} remaining`)
   }
 }
 
 main().catch((err) => {
-  console.error(err);
-  process.exitCode = 1;
-});
+  console.error(err)
+  process.exitCode = 1
+})
 ```
 
 ## Best Practices

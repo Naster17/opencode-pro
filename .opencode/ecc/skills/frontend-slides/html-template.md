@@ -118,13 +118,13 @@ Reference architecture for generating slide presentations. Every presentation fo
            =========================================== */
       class SlidePresentation {
         constructor() {
-          this.slides = document.querySelectorAll(".slide");
-          this.currentSlide = 0;
-          this.setupIntersectionObserver();
-          this.setupKeyboardNav();
-          this.setupTouchNav();
-          this.setupProgressBar();
-          this.setupNavDots();
+          this.slides = document.querySelectorAll(".slide")
+          this.currentSlide = 0
+          this.setupIntersectionObserver()
+          this.setupKeyboardNav()
+          this.setupTouchNav()
+          this.setupProgressBar()
+          this.setupNavDots()
         }
 
         setupIntersectionObserver() {
@@ -148,12 +148,12 @@ Reference architecture for generating slide presentations. Every presentation fo
           // IMPORTANT: Always clear before building — if outerHTML was
           // captured while dots were rendered, re-opening the file would
           // append a duplicate set on top of the existing ones.
-          this.navDotsContainer.innerHTML = "";
+          this.navDotsContainer.innerHTML = ""
           // Generate and manage navigation dots
         }
       }
 
-      new SlidePresentation();
+      new SlidePresentation()
     </script>
   </body>
 </html>
@@ -236,46 +236,43 @@ JS (three interaction methods):
 ```javascript
 // 1. Click handler on the toggle button
 document.getElementById("editToggle").addEventListener("click", () => {
-  editor.toggleEditMode();
-});
+  editor.toggleEditMode()
+})
 
 // 2. Hotzone hover with 400ms grace period
-const hotzone = document.querySelector(".edit-hotzone");
-const editToggle = document.getElementById("editToggle");
-let hideTimeout = null;
+const hotzone = document.querySelector(".edit-hotzone")
+const editToggle = document.getElementById("editToggle")
+let hideTimeout = null
 
 hotzone.addEventListener("mouseenter", () => {
-  clearTimeout(hideTimeout);
-  editToggle.classList.add("show");
-});
+  clearTimeout(hideTimeout)
+  editToggle.classList.add("show")
+})
 hotzone.addEventListener("mouseleave", () => {
   hideTimeout = setTimeout(() => {
-    if (!editor.isActive) editToggle.classList.remove("show");
-  }, 400);
-});
+    if (!editor.isActive) editToggle.classList.remove("show")
+  }, 400)
+})
 editToggle.addEventListener("mouseenter", () => {
-  clearTimeout(hideTimeout);
-});
+  clearTimeout(hideTimeout)
+})
 editToggle.addEventListener("mouseleave", () => {
   hideTimeout = setTimeout(() => {
-    if (!editor.isActive) editToggle.classList.remove("show");
-  }, 400);
-});
+    if (!editor.isActive) editToggle.classList.remove("show")
+  }, 400)
+})
 
 // 3. Hotzone direct click
 hotzone.addEventListener("click", () => {
-  editor.toggleEditMode();
-});
+  editor.toggleEditMode()
+})
 
 // 4. Keyboard shortcut (E key, skip when editing text)
 document.addEventListener("keydown", (e) => {
-  if (
-    (e.key === "e" || e.key === "E") &&
-    !e.target.getAttribute("contenteditable")
-  ) {
-    editor.toggleEditMode();
+  if ((e.key === "e" || e.key === "E") && !e.target.getAttribute("contenteditable")) {
+    editor.toggleEditMode()
   }
-});
+})
 ```
 
 **CRITICAL: `exportFile()` must strip edit state before capturing outerHTML.**
@@ -361,11 +358,7 @@ Save processed images with `_processed` suffix. Never overwrite originals.
 
 ```html
 <img src="assets/logo_round.png" alt="Logo" class="slide-image logo" />
-<img
-  src="assets/screenshot.png"
-  alt="Screenshot"
-  class="slide-image screenshot"
-/>
+<img src="assets/screenshot.png" alt="Screenshot" class="slide-image screenshot" />
 ```
 
 ```css

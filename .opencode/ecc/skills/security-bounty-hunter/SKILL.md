@@ -24,15 +24,15 @@ Bias toward remotely reachable, user-controlled attack paths and throw away patt
 
 These are the kinds of issues that consistently matter:
 
-| Pattern | CWE | Typical impact |
-| --- | --- | --- |
-| SSRF through user-controlled URLs | CWE-918 | internal network access, cloud metadata theft |
-| Auth bypass in middleware or API guards | CWE-287 | unauthorized account or data access |
-| Remote deserialization or upload-to-RCE paths | CWE-502 | code execution |
-| SQL injection in reachable endpoints | CWE-89 | data exfiltration, auth bypass, data destruction |
-| Command injection in request handlers | CWE-78 | code execution |
-| Path traversal in file-serving paths | CWE-22 | arbitrary file read or write |
-| Auto-triggered XSS | CWE-79 | session theft, admin compromise |
+| Pattern                                       | CWE     | Typical impact                                   |
+| --------------------------------------------- | ------- | ------------------------------------------------ |
+| SSRF through user-controlled URLs             | CWE-918 | internal network access, cloud metadata theft    |
+| Auth bypass in middleware or API guards       | CWE-287 | unauthorized account or data access              |
+| Remote deserialization or upload-to-RCE paths | CWE-502 | code execution                                   |
+| SQL injection in reachable endpoints          | CWE-89  | data exfiltration, auth bypass, data destruction |
+| Command injection in request handlers         | CWE-78  | code execution                                   |
+| Path traversal in file-serving paths          | CWE-22  | arbitrary file read or write                     |
+| Auto-triggered XSS                            | CWE-79  | session theft, admin compromise                  |
 
 ## Skip These
 
@@ -73,18 +73,23 @@ Then manually filter:
 
 ```markdown
 ## Description
+
 [What the vulnerability is and why it matters]
 
 ## Vulnerable Code
+
 [File path, line range, and a small snippet]
 
 ## Proof of Concept
+
 [Minimal working request or script]
 
 ## Impact
+
 [What the attacker can achieve]
 
 ## Affected Version
+
 [Version, commit, or deployment target tested]
 ```
 

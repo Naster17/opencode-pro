@@ -337,16 +337,19 @@ int maxPageSize;
 ## Testing Expectations
 
 ### Shared
+
 - JUnit 5 + AssertJ for fluent assertions
 - Mockito for mocking; avoid partial mocks where possible
 - Favor deterministic tests; no hidden sleeps
 
 ### [SPRING]
+
 - `@WebMvcTest` for controller slices, `@DataJpaTest` for repository slices
 - `@SpringBootTest` reserved for full integration tests
 - `@MockBean` for replacing beans in Spring context
 
 ### [QUARKUS]
+
 - Plain JUnit 5 + Mockito for unit tests (no `@QuarkusTest`)
 - `@QuarkusTest` reserved for CDI integration tests
 - `@InjectMock` for replacing CDI beans in integration tests

@@ -19,6 +19,7 @@ Fix build and TypeScript errors with minimal changes: $ARGUMENTS
 ## Approach
 
 ### DO:
+
 - PASS: Fix type errors with correct types
 - PASS: Add missing imports
 - PASS: Fix syntax errors
@@ -27,6 +28,7 @@ Fix build and TypeScript errors with minimal changes: $ARGUMENTS
 - PASS: Run `tsc --noEmit` after each change
 
 ### DON'T:
+
 - FAIL: Refactor code
 - FAIL: Add new features
 - FAIL: Change architecture
@@ -36,17 +38,18 @@ Fix build and TypeScript errors with minimal changes: $ARGUMENTS
 
 ## Common Error Fixes
 
-| Error | Fix |
-|-------|-----|
-| Type 'X' is not assignable to type 'Y' | Add correct type annotation |
-| Property 'X' does not exist | Add property to interface or fix property name |
-| Cannot find module 'X' | Install package or fix import path |
-| Argument of type 'X' is not assignable | Cast or fix function signature |
-| Object is possibly 'undefined' | Add null check or optional chaining |
+| Error                                  | Fix                                            |
+| -------------------------------------- | ---------------------------------------------- |
+| Type 'X' is not assignable to type 'Y' | Add correct type annotation                    |
+| Property 'X' does not exist            | Add property to interface or fix property name |
+| Cannot find module 'X'                 | Install package or fix import path             |
+| Argument of type 'X' is not assignable | Cast or fix function signature                 |
+| Object is possibly 'undefined'         | Add null check or optional chaining            |
 
 ## Verification Steps
 
 After fixes:
+
 1. `npx tsc --noEmit` - should show 0 errors
 2. `npm run build` - should succeed
 3. `npm test` - tests should still pass

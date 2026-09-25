@@ -50,6 +50,7 @@ public class ProtectedResource {
 ```
 
 Configuration (application.properties):
+
 ```properties
 mp.jwt.verify.publickey.location=publicKey.pem
 mp.jwt.verify.issuer=https://auth.example.com

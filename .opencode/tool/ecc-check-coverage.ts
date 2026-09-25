@@ -13,18 +13,9 @@ const checkCoverageTool: ToolDefinition = tool({
   description:
     "Check test coverage against a threshold and identify files with low coverage. Reads coverage reports from common locations.",
   args: {
-    threshold: tool.schema
-      .number()
-      .optional()
-      .describe("Minimum coverage percentage required (default: 80)"),
-    showUncovered: tool.schema
-      .boolean()
-      .optional()
-      .describe("Show list of uncovered files (default: true)"),
-    format: tool.schema
-      .enum(["summary", "detailed", "json"])
-      .optional()
-      .describe("Output format (default: summary)"),
+    threshold: tool.schema.number().optional().describe("Minimum coverage percentage required (default: 80)"),
+    showUncovered: tool.schema.boolean().optional().describe("Show list of uncovered files (default: true)"),
+    format: tool.schema.enum(["summary", "detailed", "json"]).optional().describe("Output format (default: summary)"),
   },
   async execute(args, context) {
     const threshold = args.threshold ?? 80
@@ -61,16 +52,13 @@ const checkCoverageTool: ToolDefinition = tool({
       return JSON.stringify({
         success: false,
         error: "No coverage report found",
-        suggestion:
-          "Run tests with coverage first: npm test -- --coverage",
+        suggestion: "Run tests with coverage first: npm test -- --coverage",
         searchedPaths: coveragePaths,
       })
     }
 
     const passed = coverageData.total.percentage >= threshold
-    const uncoveredFiles = coverageData.files.filter(
-      (f) => f.percentage < threshold
-    )
+    const uncoveredFiles = coverageData.files.filter((f) => f.percentage < threshold)
 
     const result: CoverageResult = {
       success: passed,
@@ -144,9 +132,7 @@ function parseCoverageData(data: unknown): CoverageSummary {
             file: key,
             lines: fileData.lines.total,
             covered: fileData.lines.covered,
-            percentage: fileData.lines.total > 0
-              ? (fileData.lines.covered / fileData.lines.total) * 100
-              : 100,
+            percentage: fileData.lines.total > 0 ? (fileData.lines.covered / fileData.lines.total) * 100 : 100,
           })
         }
       }
@@ -156,9 +142,7 @@ function parseCoverageData(data: unknown): CoverageSummary {
       total: {
         lines: total.lines?.total || 0,
         covered: total.lines?.covered || 0,
-        percentage: total.lines?.total
-          ? (total.lines.covered / total.lines.total) * 100
-          : 0,
+        percentage: total.lines?.total ? (total.lines.covered / total.lines.total) * 100 : 0,
       },
       files,
     }

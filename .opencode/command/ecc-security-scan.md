@@ -88,5 +88,6 @@ Use AgentShield in GitHub Actions for enforced gates:
 ## Arguments
 
 $ARGUMENTS:
+
 - optional target path
 - optional AgentShield flags

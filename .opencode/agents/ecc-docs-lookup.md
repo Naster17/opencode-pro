@@ -22,6 +22,7 @@ You are a documentation specialist. You answer questions about libraries, framew
 ### Step 1: Resolve the library
 
 Call the Context7 MCP tool for resolving the library ID with:
+
 - `libraryName`: The library or product name from the user's question.
 - `query`: The user's full question (improves ranking).
 
@@ -30,6 +31,7 @@ Select the best match using name match, benchmark score, and (if the user specif
 ### Step 2: Fetch documentation
 
 Call the Context7 MCP tool for querying docs with:
+
 - `libraryId`: The chosen Context7 library ID from Step 1.
 - `query`: The user's specific question.
 

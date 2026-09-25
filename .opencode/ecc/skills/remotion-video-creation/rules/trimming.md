@@ -12,11 +12,11 @@ Use `<Sequence>` with a negative `from` value to trim the start of an animation.
 A negative `from` value shifts time backwards, making the animation start partway through:
 
 ```tsx
-import { Sequence, useVideoConfig } from "remotion";
+import { Sequence, useVideoConfig } from "remotion"
 
-const fps = useVideoConfig();
+const fps = useVideoConfig()
 
-<Sequence from={-0.5 * fps}>
+;<Sequence from={-0.5 * fps}>
   <MyAnimation />
 </Sequence>
 ```
@@ -29,7 +29,6 @@ Inside `<MyAnimation>`, `useCurrentFrame()` starts at 15 instead of 0.
 Use `durationInFrames` to unmount content after a specified duration:
 
 ```tsx
-
 <Sequence durationInFrames={1.5 * fps}>
   <MyAnimation />
 </Sequence>

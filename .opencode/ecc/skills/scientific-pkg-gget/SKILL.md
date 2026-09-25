@@ -136,9 +136,9 @@ sequence = gget.seq("ENSG00000012048")
 For scientific outputs, include enough metadata to replay the query.
 
 ```markdown
-| Date | gget version | Module | Query | Species/assembly | Output | Notes |
-| --- | --- | --- | --- | --- | --- | --- |
-| 2026-05-11 | `gget --version` | search | `BRCA1 DNA repair` | human | `brca1-search.json` | Docs checked before run |
+| Date       | gget version     | Module | Query              | Species/assembly | Output              | Notes                   |
+| ---------- | ---------------- | ------ | ------------------ | ---------------- | ------------------- | ----------------------- |
+| 2026-05-11 | `gget --version` | search | `BRCA1 DNA repair` | human            | `brca1-search.json` | Docs checked before run |
 ```
 
 Also record:

@@ -20,25 +20,31 @@ Generate or update codemaps in `docs/CODEMAPS/` directory:
 ## Codemap Types
 
 ### Architecture Map
+
 ```
 docs/CODEMAPS/ARCHITECTURE.md
 ```
+
 - High-level system overview
 - Component relationships
 - Data flow diagrams
 
 ### Module Map
+
 ```
 docs/CODEMAPS/MODULES.md
 ```
+
 - Module descriptions
 - Public APIs
 - Dependencies
 
 ### File Map
+
 ```
 docs/CODEMAPS/FILES.md
 ```
+
 - Directory structure
 - File purposes
 - Key files
@@ -52,20 +58,24 @@ docs/CODEMAPS/FILES.md
 **Location**: `src/[path]/`
 
 **Key Files**:
+
 - `file1.ts` - [purpose]
 - `file2.ts` - [purpose]
 
 **Dependencies**:
+
 - [Module A]
 - [Module B]
 
 **Exports**:
+
 - `functionName()` - [description]
 - `ClassName` - [description]
 
 **Usage Example**:
+
 ```typescript
-import { functionName } from '@/module'
+import { functionName } from "@/module"
 ```
 
 ## Generation Process

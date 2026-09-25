@@ -76,12 +76,15 @@ Analyze the specified code for security vulnerabilities following OWASP guidelin
 ## Report Format
 
 ### Critical Issues
+
 [Issues that must be fixed immediately]
 
 ### High Priority
+
 [Issues that should be fixed before release]
 
 ### Recommendations
+
 [Security improvements to consider]
 
 ---

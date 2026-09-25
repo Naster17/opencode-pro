@@ -1,13 +1,7 @@
 import { Keybind } from "@/util/keybind"
 import { Wildcard } from "@/util/wildcard"
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
-import type {
-  Agent,
-  McpToolDefinition,
-  PermissionRuleset,
-  Session,
-  ToolListItem,
-} from "@opencode-ai/sdk/v2"
+import type { Agent, McpToolDefinition, PermissionRuleset, Session, ToolListItem } from "@opencode-ai/sdk/v2"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { useSync } from "@tui/context/sync"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
@@ -78,9 +72,7 @@ function evaluateAction(permission: string, rulesets: PermissionRuleset[]): Tool
   const target = normalize(permission)
   const match = rulesets
     .flat()
-    .findLast(
-      (rule) => rule.pattern === "*" && Wildcard.match(target, normalize(rule.permission)),
-    )
+    .findLast((rule) => rule.pattern === "*" && Wildcard.match(target, normalize(rule.permission)))
   if (match?.action === "deny") return "deny"
   if (match?.action === "allow" || match?.action === "ask") return "allow"
   return
@@ -166,8 +158,7 @@ function configSource(api: TuiPluginApi, keys: string[], action: ToolAction) {
   if (!permission) return
   for (const key of keys) {
     const value = (permission as Record<string, unknown>)[normalize(key)]
-    if (typeof value === "string" && (value === action || (action === "allow" && value === "ask")))
-      return "config"
+    if (typeof value === "string" && (value === action || (action === "allow" && value === "ask"))) return "config"
     if (value && typeof value === "object" && (value as Record<string, unknown>)["*"] === action) return "config"
   }
   return
@@ -375,11 +366,11 @@ function View(props: { api: TuiPluginApi }) {
       footerLeft={
         <>
           <span style={{ fg: props.api.theme.current.text }}>{"↑↓"}</span> navigate
-    <span style={{ fg: props.api.theme.current.textMuted }}>
-      {" "}
-      · scope: {global() ? "global" : "local"} ({Keybind.toString(scopeKey)} toggle) · disabled = removed from
-      LLM context
-    </span>
+          <span style={{ fg: props.api.theme.current.textMuted }}>
+            {" "}
+            · scope: {global() ? "global" : "local"} ({Keybind.toString(scopeKey)} toggle) · disabled = removed from LLM
+            context
+          </span>
         </>
       }
       current={cur()}

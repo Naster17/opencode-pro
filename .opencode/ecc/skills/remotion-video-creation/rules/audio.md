@@ -24,12 +24,12 @@ pnpm exec remotion add @remotion/media # If project uses pnpm
 Use `<Audio>` from `@remotion/media` to add audio to your composition.
 
 ```tsx
-import { Audio } from "@remotion/media";
-import { staticFile } from "remotion";
+import { Audio } from "@remotion/media"
+import { staticFile } from "remotion"
 
 export const MyComposition = () => {
-  return <Audio src={staticFile("audio.mp3")} />;
-};
+  return <Audio src={staticFile("audio.mp3")} />
+}
 ```
 
 Remote URLs are also supported:
@@ -46,7 +46,7 @@ Multiple audio tracks can be layered by adding multiple `<Audio>` components.
 Use `trimBefore` and `trimAfter` to remove portions of the audio. Values are in frames.
 
 ```tsx
-const { fps } = useVideoConfig();
+const { fps } = useVideoConfig()
 
 return (
   <Audio
@@ -54,7 +54,7 @@ return (
     trimBefore={2 * fps} // Skip the first 2 seconds
     trimAfter={10 * fps} // End at the 10 second mark
   />
-);
+)
 ```
 
 The audio still starts playing at the beginning of the composition - only the specified portion is played.
@@ -64,16 +64,16 @@ The audio still starts playing at the beginning of the composition - only the sp
 Wrap the audio in a `<Sequence>` to delay when it starts:
 
 ```tsx
-import { Sequence, staticFile } from "remotion";
-import { Audio } from "@remotion/media";
+import { Sequence, staticFile } from "remotion"
+import { Audio } from "@remotion/media"
 
-const { fps } = useVideoConfig();
+const { fps } = useVideoConfig()
 
 return (
   <Sequence from={1 * fps}>
     <Audio src={staticFile("audio.mp3")} />
   </Sequence>
-);
+)
 ```
 
 The audio will start playing after 1 second.
@@ -89,18 +89,16 @@ Set a static volume (0 to 1):
 Or use a callback for dynamic volume based on the current frame:
 
 ```tsx
-import { interpolate } from "remotion";
+import { interpolate } from "remotion"
 
-const { fps } = useVideoConfig();
+const { fps } = useVideoConfig()
 
 return (
   <Audio
     src={staticFile("audio.mp3")}
-    volume={(f) =>
-      interpolate(f, [0, 1 * fps], [0, 1], { extrapolateRight: "clamp" })
-    }
+    volume={(f) => interpolate(f, [0, 1 * fps], [0, 1], { extrapolateRight: "clamp" })}
   />
-);
+)
 ```
 
 The value of `f` starts at 0 when the audio begins to play, not the composition frame.
@@ -110,15 +108,15 @@ The value of `f` starts at 0 when the audio begins to play, not the composition 
 Use `muted` to silence the audio. It can be set dynamically:
 
 ```tsx
-const frame = useCurrentFrame();
-const { fps } = useVideoConfig();
+const frame = useCurrentFrame()
+const { fps } = useVideoConfig()
 
 return (
   <Audio
     src={staticFile("audio.mp3")}
     muted={frame >= 2 * fps && frame <= 4 * fps} // Mute between 2s and 4s
   />
-);
+)
 ```
 
 ## Speed

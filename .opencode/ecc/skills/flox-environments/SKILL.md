@@ -28,6 +28,7 @@ If the user just needs a single language runtime with no system dependencies, st
 Flox environments are defined in `.flox/env/manifest.toml` and activated with `flox activate`. The manifest declares packages, environment variables, setup hooks, and shell configuration — everything needed to reproduce the environment anywhere.
 
 **Key paths:**
+
 - `.flox/env/manifest.toml` — Environment definition (commit this)
 - `$FLOX_ENV` — Runtime path to installed packages (like `/usr` — contains `bin/`, `lib/`, `include/`)
 - `$FLOX_ENV_CACHE` — Persistent local storage for caches, venvs, data (survives rebuilds)
@@ -444,6 +445,7 @@ fastapi.pkg-path = "python311Packages.fastapi"
 Flox is ideal for AI-assisted development and vibe coding workflows. When an AI agent needs a tool that isn't available in the current environment — a compiler, a database, a linter, a CLI utility — it can add it to the project's Flox manifest without requiring sudo access, polluting system packages, or hitting sandbox restrictions.
 
 **Why this matters for agents:**
+
 - **No sudo required** — `flox install` works entirely in user space, so agents can add packages without elevated permissions
 - **Project-scoped** — packages are installed into the project environment only, not globally, so different projects can have different versions without conflict
 - **Sandbox-friendly** — agents running in sandboxed or restricted environments can still install the tools they need through Flox
@@ -479,6 +481,7 @@ flox search <package> --all       # Broader package search (case-sensitive)
 ```
 
 **Common issues:**
+
 - **Package not found:** Search is case-sensitive — try `flox search --all`
 - **File conflicts between packages:** Add `priority` to the package that should win
 - **Hook failures:** Use `return` not `exit`; guard with `${FLOX_ENV_CACHE:-}`
