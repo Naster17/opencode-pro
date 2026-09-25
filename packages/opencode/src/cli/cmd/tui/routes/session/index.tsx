@@ -1138,10 +1138,33 @@ export function Session() {
     }
   }
 
+  // Smart follow: pin the viewport to the bottom while new output streams,
+  // but release the moment the user scrolls up to read. Re-engages when they
+  // return to the bottom. Driven by scroll geometry (works for wheel, keys,
+  // scrollbar drag alike) instead of the library sticky flag, which resticks
+  // on edge transitions and yanks the viewport mid-read.
+  const [followOutput, setFollowOutput] = createSignal(true)
+  let followPoll: ReturnType<typeof setInterval> | undefined
+
   createEffect(
     on(
       () => route.sessionID,
       () => {
+        setFollowOutput(true)
+        if (followPoll) clearInterval(followPoll)
+        followPoll = setInterval(() => {
+          if (!scroll || scroll.isDestroyed) return
+          const max = Math.max(0, scroll.scrollHeight - scroll.viewport.height)
+          if (scroll.scrollTop >= max - 8) {
+            if (!followOutput()) setFollowOutput(true)
+            if (max > 0) scroll.scrollTo(max)
+          } else if (followOutput()) {
+            setFollowOutput(false)
+          }
+        }, 150)
+        onCleanup(() => {
+          if (followPoll) clearInterval(followPoll)
+        })
         if (historyPoll) clearInterval(historyPoll)
         historyArmed = false
         historyPoll = setInterval(() => {
@@ -1174,6 +1197,7 @@ export function Session() {
 
   onCleanup(() => {
     if (historyPoll) clearInterval(historyPoll)
+    if (followPoll) clearInterval(followPoll)
   })
 
   const local = useLocal()
